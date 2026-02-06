@@ -1,5 +1,13 @@
 # @modular-prompt/driver
 
+## 0.5.1
+
+### Patch Changes
+
+- 84ac5c8: mlx-lm の最低バージョンを 0.30.4 に引き上げ
+
+  GLM-4.7-Flash 等の`glm4_moe_lite`モデルタイプのサポートが mlx-lm 0.30.4 で追加されたため、pyproject.toml の依存バージョン制約を`>=0.28.3`から`>=0.30.4`に更新しました。
+
 ## 0.5.0
 
 ### Minor Changes

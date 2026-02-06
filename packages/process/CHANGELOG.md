@@ -1,5 +1,12 @@
 # @modular-prompt/process
 
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [84ac5c8]
+  - @modular-prompt/driver@0.5.1
+
 ## 0.1.14
 
 ### Patch Changes
