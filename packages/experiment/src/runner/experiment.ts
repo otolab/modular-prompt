@@ -72,7 +72,7 @@ export class ExperimentRunner {
             return { name, spec };
           }).filter(Boolean) as Array<{ name: string; spec: ModelSpec }>
         : Object.entries(this.models)
-            .filter(([_, spec]) => spec.enabled !== false)
+            .filter(([_, spec]) => !spec.disabled)
             .map(([name, spec]) => ({ name, spec }));
 
       if (modelsToTest.length === 0) {

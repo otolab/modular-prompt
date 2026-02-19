@@ -71,9 +71,9 @@ export class AIService {
     capabilities: DriverCapability[],
     options?: SelectionOptions
   ): ModelSpec[] {
-    // capability フィルタ
+    // disabled + capability フィルタ
     let models = this.config.models?.filter(m =>
-      capabilities.every(cap => m.capabilities.includes(cap))
+      !m.disabled && capabilities.every(cap => m.capabilities.includes(cap))
     ) || [];
 
     // プロバイダー除外

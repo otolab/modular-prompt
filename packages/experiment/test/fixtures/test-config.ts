@@ -8,7 +8,6 @@ export default {
       model: 'test-model-ts',
       provider: 'test',
       capabilities: ['test'],
-      enabled: true,
     },
   },
   drivers: {

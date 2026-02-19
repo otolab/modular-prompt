@@ -73,7 +73,7 @@ const models = serverConfig.models;
 
 // Display available models for logging
 const modelEntries = Object.entries(models).filter(([_, spec]: [string, any]) =>
-  spec.enabled !== false && (!spec.role || spec.role === 'test')
+  !spec.disabled && (!spec.role || spec.role === 'test')
 );
 
 if (options.modelFilter) {
@@ -166,7 +166,7 @@ if (options.enableEvaluation) {
   const modelName = evaluationConfig.model;
   const modelSpec = serverConfig.models[modelName];
 
-  if (!modelSpec || modelSpec.enabled === false) {
+  if (!modelSpec || modelSpec.disabled) {
     console.error(`❌ Evaluator model not found or disabled: ${modelName}`);
     console.error('   Please ensure the model is defined in the models section and enabled');
     process.exit(1);

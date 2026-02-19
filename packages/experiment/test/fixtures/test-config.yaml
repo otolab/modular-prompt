@@ -5,7 +5,6 @@ models:
     model: "test-model"
     provider: "test"
     capabilities: ["test"]
-    enabled: true
 
 drivers:
   test: {}

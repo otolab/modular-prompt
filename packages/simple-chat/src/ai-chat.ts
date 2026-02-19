@@ -109,7 +109,6 @@ function initializeRegistry(): DriverRegistry {
     model: 'mlx-community/gemma-3-270m-it-qat-4bit',
     provider: 'mlx',
     capabilities: ['local', 'streaming', 'chat'],
-    enabled: true,
     priority: 10
   });
 

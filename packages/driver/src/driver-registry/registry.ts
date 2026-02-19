@@ -79,9 +79,6 @@ export class DriverRegistry implements IDriverRegistry {
    */
   registerModel(spec: ModelSpec): void {
     // デフォルト値を設定
-    if (spec.enabled === undefined) {
-      spec.enabled = true;
-    }
     if (spec.priority === undefined) {
       spec.priority = 0;
     }
@@ -99,7 +96,7 @@ export class DriverRegistry implements IDriverRegistry {
 
     for (const [, spec] of this.models) {
       // 無効なモデルはスキップ
-      if (!spec.enabled) {
+      if (spec.disabled) {
         continue;
       }
 

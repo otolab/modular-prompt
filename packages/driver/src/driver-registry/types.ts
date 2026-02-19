@@ -76,8 +76,8 @@ export interface ModelSpec {
   /** 優先度（高いほど優先される） */
   priority?: number;
 
-  /** このモデルが有効かどうか */
-  enabled?: boolean;
+  /** このモデルを無効化する */
+  disabled?: boolean;
 
   /** カスタムメタデータ */
   metadata?: Record<string, unknown>;

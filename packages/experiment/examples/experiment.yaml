@@ -7,7 +7,6 @@ models:
     provider: "mlx"
     capabilities: ["local", "fast", "tools"]
     priority: 20
-    enabled: true
 
   # Vertex AI Gemini - for testing with structuredOutput support
   gemini-vertexai:
@@ -15,7 +14,6 @@ models:
     provider: "vertexai"
     capabilities: ["tools", "fast", "japanese"]
     priority: 10
-    enabled: true
 
   # GoogleGenAI Gemini - alternative for testing
   gemini-googlegenai:
@@ -23,7 +21,7 @@ models:
     provider: "googlegenai"
     capabilities: ["tools", "fast", "japanese"]
     priority: 15
-    enabled: false  # Disabled by default
+    disabled: true  # Disabled by default
 
 drivers:
   mlx: {}
