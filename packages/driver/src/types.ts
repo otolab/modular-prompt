@@ -1,19 +1,60 @@
 import type { FormatterOptions } from './formatter/types.js';
+import type { ToolCall } from '@modular-prompt/core';
 
 // Re-export from core for convenience
-export type { CompiledPrompt } from '@modular-prompt/core';
+export type { CompiledPrompt, ToolCall } from '@modular-prompt/core';
 
 /**
  * Chat message role
  */
-export type Role = 'system' | 'assistant' | 'user';
+export type Role = 'system' | 'assistant' | 'user' | 'tool';
 
 /**
- * Chat message
+ * Standard chat message (system / user / assistant without tool calls)
  */
-export interface ChatMessage {
-  role: Role;
+export interface StandardChatMessage {
+  role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+/**
+ * Assistant message with tool calls
+ */
+export interface AssistantToolCallMessage {
+  role: 'assistant';
+  content: string;
+  toolCalls: ToolCall[];
+}
+
+/**
+ * Tool result message (response to a tool call)
+ */
+export interface ToolResultMessage {
+  role: 'tool';
+  content: string;
+  /** ID of the tool call this result is for */
+  toolCallId: string;
+  /** Function name (required for GoogleGenAI/VertexAI) */
+  name?: string;
+}
+
+/**
+ * Chat message - union of all message variants
+ */
+export type ChatMessage = StandardChatMessage | AssistantToolCallMessage | ToolResultMessage;
+
+/**
+ * Check if a message contains tool calls
+ */
+export function hasToolCalls(message: ChatMessage): message is AssistantToolCallMessage {
+  return message.role === 'assistant' && 'toolCalls' in message && Array.isArray((message as AssistantToolCallMessage).toolCalls);
+}
+
+/**
+ * Check if a message is a tool result
+ */
+export function isToolResult(message: ChatMessage): message is ToolResultMessage {
+  return message.role === 'tool';
 }
 
 /**
@@ -47,20 +88,6 @@ export type ToolChoice =
   | 'required'  // Must use at least one tool
   | { type: 'function'; function: { name: string } };  // Force specific tool
 
-/**
- * Tool call result from the model
- */
-export interface ToolCall {
-  /** Unique ID for this tool call (used when returning results) */
-  id: string;
-  type: 'function';
-  function: {
-    /** Function name to call */
-    name: string;
-    /** Arguments as JSON string */
-    arguments: string;
-  };
-}
 
 /**
  * Query result from AI model

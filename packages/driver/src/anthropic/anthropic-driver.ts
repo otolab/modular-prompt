@@ -1,8 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageCreateParamsStreaming } from '@anthropic-ai/sdk/resources/messages';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition, ChatMessage } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
+import { hasToolCalls, isToolResult } from '../types.js';
 
 /**
  * Anthropic driver configuration
@@ -81,14 +82,54 @@ export class AnthropicDriver implements AIDriver {
   }
 
   /**
+   * Convert ChatMessage to Anthropic message format
+   */
+  private chatMessageToAnthropic(message: ChatMessage): { role: 'user' | 'assistant'; content: unknown } {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      const blocks: unknown[] = [];
+      if (message.content) {
+        blocks.push({ type: 'text', text: message.content });
+      }
+      for (const tc of message.toolCalls) {
+        blocks.push({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.function.name,
+          input: JSON.parse(tc.function.arguments)
+        });
+      }
+      return { role: 'assistant', content: blocks };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: message.toolCallId,
+          content: message.content
+        }]
+      };
+    } else {
+      // StandardChatMessage (system role is not expected in options.messages)
+      return {
+        role: message.role as 'user' | 'assistant',
+        content: message.content
+      };
+    }
+  }
+
+  /**
    * Convert CompiledPrompt to Anthropic messages
    */
   private compiledPromptToAnthropic(prompt: CompiledPrompt): {
     system?: string;
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    messages: Array<{ role: 'user' | 'assistant'; content: any }>;
   } {
     let system: string | undefined;
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [];
 
     // Helper to process elements
     const processElements = (elements: unknown[]): string => {
@@ -104,13 +145,27 @@ export class AnthropicDriver implements AIDriver {
             content.push(el.content);
           } else if (el.type === 'message') {
             // Handle message elements separately
-            const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
             const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
 
-            if (role === 'system') {
-              system = system ? `${system}\n\n${messageContent}` : messageContent;
+            if (el.role === 'tool') {
+              messages.push({
+                role: 'user',
+                content: [{ type: 'tool_result', tool_use_id: el.toolCallId, content: el.content }]
+              });
+            } else if ('toolCalls' in el && el.toolCalls) {
+              const blocks: unknown[] = [];
+              if (messageContent) blocks.push({ type: 'text', text: messageContent });
+              for (const tc of el.toolCalls) {
+                blocks.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input: JSON.parse(tc.function.arguments) });
+              }
+              messages.push({ role: 'assistant', content: blocks });
             } else {
-              messages.push({ role: role as 'user' | 'assistant', content: messageContent });
+              const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
+              if (role === 'system') {
+                system = system ? `${system}\n\n${messageContent}` : messageContent;
+              } else {
+                messages.push({ role: role as 'user' | 'assistant', content: messageContent });
+              }
             }
           } else if (el.type === 'section' || el.type === 'subsection') {
             // Process section content

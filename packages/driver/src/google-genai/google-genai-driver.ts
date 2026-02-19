@@ -1,7 +1,8 @@
 import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
 import type { Part, Content, FunctionDeclaration, FunctionCallingConfig } from '@google/genai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall, ChatMessage } from '../types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
 
 /**
  * GoogleGenAI driver configuration
@@ -158,22 +159,76 @@ export class GoogleGenAIDriver implements AIDriver {
     }
 
     if (element.type === 'message') {
-      // Role conversion:
-      // - assistant → model
-      // - system → user (Gemini API doesn't support system role in contents)
-      // - user → user
-      const role = element.role === 'assistant' ? 'model' : 'user';
-      const messageContent = this.contentToString(element.content);
-      return {
-        role,
-        parts: [{ text: messageContent }]
-      };
+      if (element.role === 'tool') {
+        return {
+          role: 'user',
+          parts: [{ functionResponse: { name: element.name || element.toolCallId, response: JSON.parse(element.content) } }]
+        };
+      } else if ('toolCalls' in element && element.toolCalls) {
+        const parts: Part[] = [];
+        const content = this.contentToString(element.content);
+        if (content) parts.push({ text: content });
+        for (const tc of element.toolCalls) {
+          parts.push({ functionCall: { name: tc.function.name, args: JSON.parse(tc.function.arguments) } });
+        }
+        return { role: 'model', parts };
+      } else {
+        // Role conversion:
+        // - assistant → model
+        // - system → user (Gemini API doesn't support system role in contents)
+        // - user → user
+        const role = element.role === 'assistant' ? 'model' : 'user';
+        const messageContent = this.contentToString(element.content);
+        return {
+          role,
+          parts: [{ text: messageContent }]
+        };
+      }
     }
 
     // Non-message elements: convert to Part and wrap in Content without role
     return {
       parts: [this.elementToPart(element)]
     };
+  }
+
+  /**
+   * Convert ChatMessage to GoogleGenAI Content format
+   */
+  private chatMessageToContent(message: ChatMessage): Content {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      const parts: Part[] = [];
+      if (message.content) {
+        parts.push({ text: message.content });
+      }
+      for (const tc of message.toolCalls) {
+        parts.push({
+          functionCall: {
+            name: tc.function.name,
+            args: JSON.parse(tc.function.arguments)
+          }
+        });
+      }
+      return { role: 'model', parts };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name: message.name || message.toolCallId,
+            response: JSON.parse(message.content)
+          }
+        }]
+      };
+    } else {
+      // StandardChatMessage
+      return {
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }]
+      };
+    }
   }
 
 

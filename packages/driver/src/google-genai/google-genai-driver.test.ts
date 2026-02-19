@@ -49,6 +49,7 @@ describe('GoogleGenAIDriver', () => {
   let driver: GoogleGenAIDriver;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     driver = new GoogleGenAIDriver({
       apiKey: 'test-api-key',
       model: 'gemma-3-27b'
@@ -583,4 +584,70 @@ describe('GoogleGenAIDriver', () => {
       }
     });
   });
+
+  describe('tool message elements', () => {
+    it('should convert tool call and tool result messages to GoogleGenAI API format', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          // アシスタントのtool call付きメッセージ
+          {
+            type: 'message',
+            role: 'assistant',
+            content: 'Let me check the weather',
+            toolCalls: [{
+              id: 'call_123',
+              type: 'function',
+              function: { name: 'get_weather', arguments: '{"city":"Tokyo"}' }
+            }]
+          },
+          // ツール実行結果
+          {
+            type: 'message',
+            role: 'tool',
+            content: '{"temp":25}',
+            toolCallId: 'call_123',
+            name: 'get_weather'
+          }
+        ],
+        output: []
+      };
+
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(prompt);
+
+      // APIに渡されたcontentsを検証
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+
+      // model message: role: 'model', partsにfunctionCallを含む
+      const modelMsg = callArgs.contents.find((c: { role: string }) => c.role === 'model');
+      expect(modelMsg).toBeDefined();
+      expect(modelMsg.parts).toContainEqual(
+        expect.objectContaining({ text: 'Let me check the weather' })
+      );
+      expect(modelMsg.parts).toContainEqual(
+        expect.objectContaining({
+          functionCall: expect.objectContaining({
+            name: 'get_weather',
+            args: { city: 'Tokyo' }
+          })
+        })
+      );
+
+      // user message (tool result): role: 'user', parts[0].functionResponseを含む
+      const userMsgs = callArgs.contents.filter((c: { role: string }) => c.role === 'user');
+      const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
+        m.parts.some((p: { functionResponse?: unknown }) => p.functionResponse)
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.parts[0]).toMatchObject({
+        functionResponse: expect.objectContaining({
+          name: 'get_weather',
+          response: { temp: 25 }
+        })
+      });
+    });
+  });
+
 });

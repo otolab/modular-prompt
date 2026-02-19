@@ -14,13 +14,28 @@ export interface TextElement {
   content: string;
 }
 
-// メッセージ要素
-export interface MessageElement {
+// 標準メッセージ要素
+export interface StandardMessageElement {
   type: 'message';
-  content: string | Attachment[];
   role: 'system' | 'assistant' | 'user';
+  content: string | Attachment[];
+  name?: string;
+  /** tool call付きassistantメッセージ用 */
+  toolCalls?: ToolCall[];
+}
+
+// ツール結果メッセージ要素
+export interface ToolResultMessageElement {
+  type: 'message';
+  role: 'tool';
+  content: string;
+  toolCallId: string;
+  /** GoogleGenAI/VertexAIのfunctionResponseで必要 */
   name?: string;
 }
+
+// メッセージ要素（Union型）
+export type MessageElement = StandardMessageElement | ToolResultMessageElement;
 
 // 資料要素
 export interface MaterialElement {
@@ -55,6 +70,19 @@ export interface SubSectionElement<TContext = any> {
   type: 'subsection';
   title: string;
   items: (string | SimpleDynamicContent<TContext>)[];
+}
+
+// ツール呼び出し結果
+export interface ToolCall {
+  /** ツール呼び出しの一意ID */
+  id: string;
+  type: 'function';
+  function: {
+    /** 関数名 */
+    name: string;
+    /** 引数のJSON文字列 */
+    arguments: string;
+  };
 }
 
 // JSON スキーマ要素

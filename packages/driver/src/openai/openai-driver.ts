@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
 import type {
   ChatCompletionCreateParams,
   ChatCompletionMessageParam
@@ -65,6 +66,40 @@ export class OpenAIDriver implements AIDriver {
   }
 
   /**
+   * Convert ChatMessage to OpenAI message format
+   */
+  private chatMessageToOpenAI(message: ChatMessage): ChatCompletionMessageParam {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      return {
+        role: 'assistant',
+        content: message.content || null,
+        tool_calls: message.toolCalls.map(tc => ({
+          id: tc.id,
+          type: tc.type,
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments
+          }
+        }))
+      };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'tool',
+        content: message.content,
+        tool_call_id: message.toolCallId
+      };
+    } else {
+      // StandardChatMessage
+      return {
+        role: message.role,
+        content: message.content
+      };
+    }
+  }
+
+  /**
    * Convert CompiledPrompt to OpenAI messages
    */
   private compiledPromptToMessages(prompt: CompiledPrompt): ChatCompletionMessageParam[] {
@@ -84,10 +119,28 @@ export class OpenAIDriver implements AIDriver {
             content.push(el.content);
           } else if (el.type === 'message') {
             // Handle message elements separately
-            messages.push({
-              role: el.role as 'system' | 'user' | 'assistant',
-              content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content)
-            });
+            if (el.role === 'tool') {
+              messages.push({
+                role: 'tool',
+                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
+                tool_call_id: el.toolCallId
+              });
+            } else if ('toolCalls' in el && el.toolCalls) {
+              messages.push({
+                role: 'assistant',
+                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
+                tool_calls: el.toolCalls.map((tc: ToolCall) => ({
+                  id: tc.id,
+                  type: tc.type,
+                  function: { name: tc.function.name, arguments: tc.function.arguments }
+                }))
+              });
+            } else {
+              messages.push({
+                role: el.role as 'system' | 'user' | 'assistant',
+                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content)
+              });
+            }
           } else if (el.type === 'section' || el.type === 'subsection') {
             // Process section content
             if (el.title) content.push(`## ${el.title}`);

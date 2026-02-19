@@ -709,4 +709,63 @@ describe('OpenAIDriver', () => {
     expect(result.content).toBe('');
     expect(result.finishReason).toBe('error');
   });
+
+  describe('tool message elements', () => {
+    it('should convert tool call and tool result messages to API format', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          // アシスタントのtool call付きメッセージ
+          {
+            type: 'message',
+            role: 'assistant',
+            content: 'Let me check the weather',
+            toolCalls: [{
+              id: 'call_123',
+              type: 'function',
+              function: { name: 'get_weather', arguments: '{"city":"Tokyo"}' }
+            }]
+          },
+          // ツール実行結果
+          {
+            type: 'message',
+            role: 'tool',
+            content: '{"temp":25}',
+            toolCallId: 'call_123',
+            name: 'get_weather'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      // APIに渡されたmessagesを検証
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      expect(calledParams.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'assistant',
+          content: 'Let me check the weather',
+          tool_calls: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'call_123',
+              type: 'function',
+              function: expect.objectContaining({
+                name: 'get_weather',
+                arguments: '{"city":"Tokyo"}'
+              })
+            })
+          ])
+        })
+      );
+      expect(calledParams.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'tool',
+          content: '{"temp":25}',
+          tool_call_id: 'call_123'
+        })
+      );
+    });
+  });
+
 });
