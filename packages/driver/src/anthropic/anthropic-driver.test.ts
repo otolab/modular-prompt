@@ -576,4 +576,77 @@ describe('AnthropicDriver', () => {
       expect(result.finishReason).toBe('length');
     });
   });
+
+  describe('options.messages', () => {
+    const basicPrompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'You are helpful' }],
+      data: [],
+      output: []
+    };
+
+    it('should append tool result messages to API params', async () => {
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'The weather is sunny' } };
+          yield { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 5 } };
+        }
+      };
+      mockCreate.mockResolvedValue(mockStream);
+
+      await driver.query(basicPrompt, {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Let me check',
+            toolCalls: [{
+              id: 'toolu_abc',
+              type: 'function',
+              function: { name: 'get_weather', arguments: '{"location":"Tokyo"}' }
+            }]
+          },
+          {
+            role: 'tool',
+            content: '{"temp":15}',
+            toolCallId: 'toolu_abc'
+          }
+        ]
+      });
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      expect(calledParams.messages).toHaveLength(3); // user (from prompt) + assistant + user (tool result)
+
+      // Check assistant message with tool use
+      const assistantMsg = calledParams.messages[1];
+      expect(assistantMsg.role).toBe('assistant');
+      expect(assistantMsg.content).toHaveLength(2);
+      expect(assistantMsg.content[0]).toEqual({ type: 'text', text: 'Let me check' });
+      expect(assistantMsg.content[1].type).toBe('tool_use');
+      expect(assistantMsg.content[1].id).toBe('toolu_abc');
+      expect(assistantMsg.content[1].name).toBe('get_weather');
+
+      // Check tool result message
+      const toolResultMsg = calledParams.messages[2];
+      expect(toolResultMsg.role).toBe('user');
+      expect(toolResultMsg.content).toHaveLength(1);
+      expect(toolResultMsg.content[0].type).toBe('tool_result');
+      expect(toolResultMsg.content[0].tool_use_id).toBe('toolu_abc');
+      expect(toolResultMsg.content[0].content).toBe('{"temp":15}');
+    });
+
+    it('should work correctly when messages is not specified', async () => {
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } };
+          yield { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 1 } };
+        }
+      };
+      mockCreate.mockResolvedValue(mockStream);
+
+      await driver.query(basicPrompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      // Should only have the message from prompt
+      expect(calledParams.messages).toHaveLength(1);
+    });
+  });
 });

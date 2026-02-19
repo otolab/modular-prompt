@@ -2,6 +2,9 @@
 export type {
   AIDriver,
   ChatMessage,
+  StandardChatMessage,
+  AssistantToolCallMessage,
+  ToolResultMessage,
   QueryResult,
   QueryOptions,
   DriverConfig,
@@ -12,6 +15,8 @@ export type {
   ToolCall,
   FinishReason
 } from './types.js';
+
+export { hasToolCalls, isToolResult } from './types.js';
 
 // Test driver
 export {
@@ -78,8 +83,7 @@ export {
 // Formatter exports (moved from utils to avoid circular dependency)
 export type {
   FormatterOptions,
-  ElementFormatter,
-  ChatMessage as FormatterChatMessage
+  ElementFormatter
 } from './formatter/types.js';
 
 export {

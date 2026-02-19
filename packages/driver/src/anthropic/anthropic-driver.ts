@@ -1,8 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageCreateParamsStreaming } from '@anthropic-ai/sdk/resources/messages';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition, ChatMessage } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
+import { hasToolCalls, isToolResult } from '../types.js';
 
 /**
  * Anthropic driver configuration
@@ -78,6 +79,44 @@ export class AnthropicDriver implements AIDriver {
 
     this.defaultModel = config.model || 'claude-3-5-sonnet-20241022';
     this._defaultOptions = config.defaultOptions || {};
+  }
+
+  /**
+   * Convert ChatMessage to Anthropic message format
+   */
+  private chatMessageToAnthropic(message: ChatMessage): { role: 'user' | 'assistant'; content: unknown } {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      const blocks: unknown[] = [];
+      if (message.content) {
+        blocks.push({ type: 'text', text: message.content });
+      }
+      for (const tc of message.toolCalls) {
+        blocks.push({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.function.name,
+          input: JSON.parse(tc.function.arguments)
+        });
+      }
+      return { role: 'assistant', content: blocks };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: message.toolCallId,
+          content: message.content
+        }]
+      };
+    } else {
+      // StandardChatMessage (system role is not expected in options.messages)
+      return {
+        role: message.role as 'user' | 'assistant',
+        content: message.content
+      };
+    }
   }
 
   /**
@@ -203,7 +242,15 @@ export class AnthropicDriver implements AIDriver {
     const mergedOptions = { ...this.defaultOptions, ...anthropicOptions };
 
     // Convert prompt
-    const { system, messages } = this.compiledPromptToAnthropic(prompt);
+    const { system, messages: promptMessages } = this.compiledPromptToAnthropic(prompt);
+
+    // Append options.messages if provided
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let messages: any[] = promptMessages;
+    if (options?.messages && options.messages.length > 0) {
+      const additionalMessages = options.messages.map(msg => this.chatMessageToAnthropic(msg));
+      messages = [...promptMessages, ...additionalMessages];
+    }
 
     // Build API params
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

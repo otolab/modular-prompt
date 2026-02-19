@@ -88,6 +88,38 @@ interface ToolCall {
 }
 ```
 
+### ChatMessage型
+
+会話ループでtool callとtool resultを表現するためのUnion型。
+
+```typescript
+// 標準メッセージ（既存互換）
+interface StandardChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+// アシスタントのtool call付きメッセージ
+interface AssistantToolCallMessage {
+  role: 'assistant';
+  content: string;
+  toolCalls: ToolCall[];
+}
+
+// ツール実行結果メッセージ
+interface ToolResultMessage {
+  role: 'tool';
+  content: string;
+  toolCallId: string;
+  /** GoogleGenAI/VertexAIのfunctionResponseで必要 */
+  name?: string;
+}
+
+type ChatMessage = StandardChatMessage | AssistantToolCallMessage | ToolResultMessage;
+```
+
+型ガード関数: `hasToolCalls()`, `isToolResult()`
+
 ### QueryOptions（拡張）
 
 ```typescript
@@ -97,6 +129,8 @@ interface QueryOptions {
   tools?: ToolDefinition[];
   /** ツール使用戦略 */
   toolChoice?: ToolChoice;
+  /** 会話ループ用の追加メッセージ（tool result等） */
+  messages?: ChatMessage[];
 }
 ```
 
@@ -216,14 +250,66 @@ QueryResult.toolCalls = [
 
 ## 会話ループについて
 
-ツール呼び出し結果をモデルに返す会話ループの実装は**利用者側の責務**とする。ドライバーは単一のリクエスト・レスポンスの処理のみを担当する。
+ツール呼び出し結果をモデルに返す会話ループの実装は**利用者側の責務**とする。ドライバーは単一のリクエスト・レスポンスの処理のみを担当する。`QueryOptions.messages`にtool callとtool resultのメッセージを渡すことで会話ループを実現する。
 
+### 使用例
+
+```typescript
+// 1. 初回クエリ（ツール定義付き）
+const result1 = await driver.query(prompt, {
+  tools: [{
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: '指定都市の天気を取得',
+      parameters: {
+        type: 'object',
+        properties: { city: { type: 'string' } },
+        required: ['city']
+      }
+    }
+  }]
+});
+
+// 2. tool callsがあれば実行
+if (result1.toolCalls) {
+  const toolResults = await Promise.all(
+    result1.toolCalls.map(async tc => {
+      const args = JSON.parse(tc.function.arguments);
+      const result = await executeFunction(tc.function.name, args);
+      return {
+        role: 'tool' as const,
+        content: JSON.stringify(result),
+        toolCallId: tc.id,
+        name: tc.function.name  // GoogleGenAI/VertexAI用
+      };
+    })
+  );
+
+  // 3. tool結果を含めて再クエリ
+  const result2 = await driver.query(prompt, {
+    tools: myTools,
+    messages: [
+      // アシスタントのtool call付きメッセージ
+      {
+        role: 'assistant',
+        content: result1.content,
+        toolCalls: result1.toolCalls
+      },
+      // ツール実行結果
+      ...toolResults
+    ]
+  });
+}
 ```
-利用者コード:
-  1. query(prompt, { tools }) → QueryResult { toolCalls }
-  2. toolCallsの各関数を実行
-  3. 結果をメッセージとして構成
-  4. 再度query() を呼び出し
-```
+
+### 各ドライバーでのメッセージ変換
+
+`options.messages`はCompiledPromptから生成されたメッセージの末尾に追加され、各ドライバーがSDK固有の形式に変換する。
+
+| 共通型 | OpenAI | Anthropic | GoogleGenAI/VertexAI |
+|---|---|---|---|
+| `AssistantToolCallMessage` | `{ role:'assistant', tool_calls }` | `{ role:'assistant', content:[text, tool_use] }` | `{ role:'model', parts:[functionCall] }` |
+| `ToolResultMessage` | `{ role:'tool', tool_call_id }` | `{ role:'user', content:[tool_result] }` | `{ role:'user', parts:[functionResponse] }` |
 
 この設計により、ツール実行の制御（並列実行、エラーハンドリング、再試行等）を利用者が柔軟に行える。

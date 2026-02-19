@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
 import type {
   ChatCompletionCreateParams,
   ChatCompletionMessageParam
@@ -62,6 +63,40 @@ export class OpenAIDriver implements AIDriver {
 
     this.defaultModel = config.model || 'gpt-4o-mini';
     this._defaultOptions = config.defaultOptions || {};
+  }
+
+  /**
+   * Convert ChatMessage to OpenAI message format
+   */
+  private chatMessageToOpenAI(message: ChatMessage): ChatCompletionMessageParam {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      return {
+        role: 'assistant',
+        content: message.content || null,
+        tool_calls: message.toolCalls.map(tc => ({
+          id: tc.id,
+          type: tc.type,
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments
+          }
+        }))
+      };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'tool',
+        content: message.content,
+        tool_call_id: message.toolCallId
+      };
+    } else {
+      // StandardChatMessage
+      return {
+        role: message.role,
+        content: message.content
+      };
+    }
   }
 
   /**
@@ -161,7 +196,13 @@ export class OpenAIDriver implements AIDriver {
     try {
       const openaiOptions = options as OpenAIQueryOptions || {};
       const mergedOptions = { ...this.defaultOptions, ...openaiOptions };
-      const messages = this.compiledPromptToMessages(prompt);
+      let messages = this.compiledPromptToMessages(prompt);
+
+      // Append options.messages if provided
+      if (options?.messages && options.messages.length > 0) {
+        const additionalMessages = options.messages.map(msg => this.chatMessageToOpenAI(msg));
+        messages = [...messages, ...additionalMessages];
+      }
 
       const params: ChatCompletionCreateParams = {
         model: mergedOptions.model || this.defaultModel,

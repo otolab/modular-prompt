@@ -1,7 +1,8 @@
 import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
 import type { Part, Content, FunctionDeclaration, FunctionCallingConfig } from '@google/genai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall, ChatMessage } from '../types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
 
 /**
  * GoogleGenAI driver configuration
@@ -176,6 +177,45 @@ export class GoogleGenAIDriver implements AIDriver {
     };
   }
 
+  /**
+   * Convert ChatMessage to GoogleGenAI Content format
+   */
+  private chatMessageToContent(message: ChatMessage): Content {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      const parts: Part[] = [];
+      if (message.content) {
+        parts.push({ text: message.content });
+      }
+      for (const tc of message.toolCalls) {
+        parts.push({
+          functionCall: {
+            name: tc.function.name,
+            args: JSON.parse(tc.function.arguments)
+          }
+        });
+      }
+      return { role: 'model', parts };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name: message.name || message.toolCallId,
+            response: JSON.parse(message.content)
+          }
+        }]
+      };
+    } else {
+      // StandardChatMessage
+      return {
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }]
+      };
+    }
+  }
+
 
   /**
    * Convert JSON Schema to GoogleGenAI Schema format
@@ -259,9 +299,15 @@ export class GoogleGenAIDriver implements AIDriver {
 
       // Data + Output → contents (Content[])
       const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
-      const contents = allDataElements.length > 0
+      let contents = allDataElements.length > 0
         ? allDataElements.map(el => this.elementToContent(el))
         : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+
+      // Append options.messages if provided
+      if (options?.messages && options.messages.length > 0) {
+        const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
+        contents = [...contents, ...additionalContents];
+      }
 
       // Create generation config
       const config: Record<string, unknown> = {
@@ -379,9 +425,15 @@ export class GoogleGenAIDriver implements AIDriver {
 
     // Data + Output → contents (Content[])
     const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
-    const contents = allDataElements.length > 0
+    let contents = allDataElements.length > 0
       ? allDataElements.map(el => this.elementToContent(el))
       : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+
+    // Append options.messages if provided
+    if (options?.messages && options.messages.length > 0) {
+      const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
+      contents = [...contents, ...additionalContents];
+    }
 
     // Create generation config
     const config: Record<string, unknown> = {

@@ -11,7 +11,8 @@ import {
 } from '@google-cloud/vertexai';
 import type { Part } from '@google-cloud/vertexai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
 
 /**
  * VertexAI driver configuration
@@ -120,6 +121,45 @@ export class VertexAIDriver implements AIDriver {
     }
 
     return this.convertMessages(messages);
+  }
+
+  /**
+   * Convert ChatMessage to VertexAI Content format
+   */
+  private chatMessageToContent(message: ChatMessage): { role: 'user' | 'model'; parts: Part[] } {
+    if (hasToolCalls(message)) {
+      // AssistantToolCallMessage
+      const parts: Part[] = [];
+      if (message.content) {
+        parts.push({ text: message.content });
+      }
+      for (const tc of message.toolCalls) {
+        parts.push({
+          functionCall: {
+            name: tc.function.name,
+            args: JSON.parse(tc.function.arguments)
+          }
+        });
+      }
+      return { role: 'model', parts };
+    } else if (isToolResult(message)) {
+      // ToolResultMessage
+      return {
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name: message.name || message.toolCallId,
+            response: JSON.parse(message.content)
+          }
+        }]
+      };
+    } else {
+      // StandardChatMessage
+      return {
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }]
+      };
+    }
   }
 
   /**
@@ -320,7 +360,13 @@ export class VertexAIDriver implements AIDriver {
 
       // Convert prompt to VertexAI format
       const request = this.compiledPromptToVertexAI(prompt);
-      
+
+      // Append options.messages if provided
+      if (options?.messages && options.messages.length > 0) {
+        const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
+        request.contents = [...(request.contents || []), ...additionalContents];
+      }
+
       // Create generation config
       const generationConfig: GenerationConfig = {
         maxOutputTokens: mergedOptions.maxTokens || 1000,
@@ -421,6 +467,12 @@ export class VertexAIDriver implements AIDriver {
 
     // Convert prompt to VertexAI format
     const request = this.compiledPromptToVertexAI(prompt);
+
+    // Append options.messages if provided
+    if (options?.messages && options.messages.length > 0) {
+      const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
+      request.contents = [...(request.contents || []), ...additionalContents];
+    }
 
     // Create generation config
     const generationConfig: GenerationConfig = {
