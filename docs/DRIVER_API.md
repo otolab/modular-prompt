@@ -65,7 +65,7 @@ close(): Promise<void>
 
 | ドライバー | プロバイダー | Structured Outputs | 用途 |
 |----------|------------|-------------------|------|
-| OllamaDriver | Ollama | ❌ 未対応 | ローカルLLM（OpenAI互換） |
+| OllamaDriver | Ollama | ✅ ネイティブ（継承） | ローカルLLM（OpenAI互換） |
 | MlxDriver | MLX | ✅ JSON抽出 | Apple Silicon最適化 |
 
 ### テスト用
