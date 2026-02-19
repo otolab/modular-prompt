@@ -89,38 +89,103 @@ export class VertexAIDriver implements AIDriver {
    * Convert CompiledPrompt to VertexAI's format
    */
   private compiledPromptToVertexAI(prompt: CompiledPrompt): GenerateContentRequest {
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+    // Helper to extract message elements and convert others to text
+    const processElements = (elements: Element[], defaultRole: 'system' | 'user' | 'assistant'): Array<{ role: 'user' | 'model'; parts: Part[] }> => {
+      const result: Array<{ role: 'user' | 'model'; parts: Part[] }> = [];
+      const textParts: string[] = [];
 
-    // Convert Element[] to string using formatter
-    const formatElements = (elements: Element[]): string => {
-      return elements.map(el => {
-        if (typeof el === 'string') return el;
-        if ('content' in el) return el.content;
-        return JSON.stringify(el);
-      }).join('\n');
+      for (const el of elements) {
+        if (typeof el === 'string') {
+          textParts.push(el);
+        } else if (typeof el === 'object' && el !== null && 'type' in el) {
+          if (el.type === 'message') {
+            // Flush accumulated text first
+            if (textParts.length > 0) {
+              result.push({
+                role: defaultRole === 'assistant' ? 'model' : 'user',
+                parts: [{ text: textParts.join('\n') }]
+              });
+              textParts.length = 0;
+            }
+
+            // Handle tool/toolCalls messages
+            if (el.role === 'tool') {
+              const toolContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
+              result.push({
+                role: 'user',
+                parts: [{ functionResponse: { name: el.name || el.toolCallId, response: JSON.parse(toolContent) } }]
+              });
+            } else if ('toolCalls' in el && el.toolCalls) {
+              const parts: Part[] = [];
+              const content = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
+              if (content) parts.push({ text: content });
+              for (const tc of el.toolCalls) {
+                parts.push({ functionCall: { name: tc.function.name, args: JSON.parse(tc.function.arguments) } });
+              }
+              result.push({ role: 'model', parts });
+            } else {
+              // Standard message
+              result.push({
+                role: el.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: typeof el.content === 'string' ? el.content : JSON.stringify(el.content) }]
+              });
+            }
+          } else if ('content' in el) {
+            textParts.push(typeof el.content === 'string' ? el.content : JSON.stringify(el.content));
+          } else {
+            textParts.push(JSON.stringify(el));
+          }
+        }
+      }
+
+      // Flush remaining text
+      if (textParts.length > 0) {
+        result.push({
+          role: defaultRole === 'assistant' ? 'model' : 'user',
+          parts: [{ text: textParts.join('\n') }]
+        });
+      }
+
+      return result;
     };
 
-    // Add instructions as system message
+    // Process each section
+    const systemParts: string[] = [];
+    const contents: Array<{ role: 'user' | 'model'; parts: Part[] }> = [];
+
+    // Instructions → system instruction (text only, no message elements expected here)
     if (prompt.instructions && prompt.instructions.length > 0) {
-      messages.push({ role: 'system', content: formatElements(prompt.instructions) });
+      for (const el of prompt.instructions) {
+        if (typeof el === 'string') {
+          systemParts.push(el);
+        } else if (typeof el === 'object' && el !== null && 'content' in el) {
+          systemParts.push(typeof el.content === 'string' ? el.content : JSON.stringify(el.content));
+        } else {
+          systemParts.push(JSON.stringify(el));
+        }
+      }
     }
 
-    // Add data as user message if present
+    // Data + Output → contents (may contain message elements)
     if (prompt.data && prompt.data.length > 0) {
-      messages.push({ role: 'user', content: formatElements(prompt.data) });
+      contents.push(...processElements(prompt.data, 'user'));
     }
-
-    // Add output format as user message if present
     if (prompt.output && prompt.output.length > 0) {
-      messages.push({ role: 'user', content: formatElements(prompt.output) });
+      contents.push(...processElements(prompt.output, 'user'));
     }
 
-    // If no user messages, add a default one
-    if (!prompt.data && !prompt.output) {
-      messages.push({ role: 'user', content: 'Please process according to the instructions.' });
+    // Ensure at least one user message
+    if (contents.length === 0) {
+      contents.push({
+        role: 'user',
+        parts: [{ text: 'Please process according to the instructions.' }]
+      });
     }
 
-    return this.convertMessages(messages);
+    return {
+      contents,
+      systemInstruction: systemParts.length > 0 ? systemParts.join('\n\n') : undefined
+    };
   }
 
   /**
@@ -361,12 +426,6 @@ export class VertexAIDriver implements AIDriver {
       // Convert prompt to VertexAI format
       const request = this.compiledPromptToVertexAI(prompt);
 
-      // Append options.messages if provided
-      if (options?.messages && options.messages.length > 0) {
-        const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
-        request.contents = [...(request.contents || []), ...additionalContents];
-      }
-
       // Create generation config
       const generationConfig: GenerationConfig = {
         maxOutputTokens: mergedOptions.maxTokens || 1000,
@@ -467,12 +526,6 @@ export class VertexAIDriver implements AIDriver {
 
     // Convert prompt to VertexAI format
     const request = this.compiledPromptToVertexAI(prompt);
-
-    // Append options.messages if provided
-    if (options?.messages && options.messages.length > 0) {
-      const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
-      request.contents = [...(request.contents || []), ...additionalContents];
-    }
 
     // Create generation config
     const generationConfig: GenerationConfig = {

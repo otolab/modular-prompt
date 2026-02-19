@@ -1,7 +1,8 @@
 import type { FormatterOptions } from './formatter/types.js';
+import type { ToolCall } from '@modular-prompt/core';
 
 // Re-export from core for convenience
-export type { CompiledPrompt } from '@modular-prompt/core';
+export type { CompiledPrompt, ToolCall } from '@modular-prompt/core';
 
 /**
  * Chat message role
@@ -87,20 +88,6 @@ export type ToolChoice =
   | 'required'  // Must use at least one tool
   | { type: 'function'; function: { name: string } };  // Force specific tool
 
-/**
- * Tool call result from the model
- */
-export interface ToolCall {
-  /** Unique ID for this tool call (used when returning results) */
-  id: string;
-  type: 'function';
-  function: {
-    /** Function name to call */
-    name: string;
-    /** Arguments as JSON string */
-    arguments: string;
-  };
-}
 
 /**
  * Query result from AI model
@@ -154,8 +141,6 @@ export interface QueryOptions {
   tools?: ToolDefinition[];
   /** Tool usage strategy */
   toolChoice?: ToolChoice;
-  /** Additional messages for multi-turn conversation (e.g., tool results) */
-  messages?: ChatMessage[];
 }
 
 /**

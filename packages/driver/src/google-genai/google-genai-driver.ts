@@ -159,16 +159,31 @@ export class GoogleGenAIDriver implements AIDriver {
     }
 
     if (element.type === 'message') {
-      // Role conversion:
-      // - assistant → model
-      // - system → user (Gemini API doesn't support system role in contents)
-      // - user → user
-      const role = element.role === 'assistant' ? 'model' : 'user';
-      const messageContent = this.contentToString(element.content);
-      return {
-        role,
-        parts: [{ text: messageContent }]
-      };
+      if (element.role === 'tool') {
+        return {
+          role: 'user',
+          parts: [{ functionResponse: { name: element.name || element.toolCallId, response: JSON.parse(element.content) } }]
+        };
+      } else if ('toolCalls' in element && element.toolCalls) {
+        const parts: Part[] = [];
+        const content = this.contentToString(element.content);
+        if (content) parts.push({ text: content });
+        for (const tc of element.toolCalls) {
+          parts.push({ functionCall: { name: tc.function.name, args: JSON.parse(tc.function.arguments) } });
+        }
+        return { role: 'model', parts };
+      } else {
+        // Role conversion:
+        // - assistant → model
+        // - system → user (Gemini API doesn't support system role in contents)
+        // - user → user
+        const role = element.role === 'assistant' ? 'model' : 'user';
+        const messageContent = this.contentToString(element.content);
+        return {
+          role,
+          parts: [{ text: messageContent }]
+        };
+      }
     }
 
     // Non-message elements: convert to Part and wrap in Content without role
@@ -299,15 +314,9 @@ export class GoogleGenAIDriver implements AIDriver {
 
       // Data + Output → contents (Content[])
       const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
-      let contents = allDataElements.length > 0
+      const contents = allDataElements.length > 0
         ? allDataElements.map(el => this.elementToContent(el))
         : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
-
-      // Append options.messages if provided
-      if (options?.messages && options.messages.length > 0) {
-        const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
-        contents = [...contents, ...additionalContents];
-      }
 
       // Create generation config
       const config: Record<string, unknown> = {
@@ -425,15 +434,9 @@ export class GoogleGenAIDriver implements AIDriver {
 
     // Data + Output → contents (Content[])
     const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
-    let contents = allDataElements.length > 0
+    const contents = allDataElements.length > 0
       ? allDataElements.map(el => this.elementToContent(el))
       : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
-
-    // Append options.messages if provided
-    if (options?.messages && options.messages.length > 0) {
-      const additionalContents = options.messages.map(msg => this.chatMessageToContent(msg));
-      contents = [...contents, ...additionalContents];
-    }
 
     // Create generation config
     const config: Record<string, unknown> = {

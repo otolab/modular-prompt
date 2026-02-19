@@ -119,10 +119,28 @@ export class OpenAIDriver implements AIDriver {
             content.push(el.content);
           } else if (el.type === 'message') {
             // Handle message elements separately
-            messages.push({
-              role: el.role as 'system' | 'user' | 'assistant',
-              content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content)
-            });
+            if (el.role === 'tool') {
+              messages.push({
+                role: 'tool',
+                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
+                tool_call_id: el.toolCallId
+              });
+            } else if ('toolCalls' in el && el.toolCalls) {
+              messages.push({
+                role: 'assistant',
+                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
+                tool_calls: el.toolCalls.map((tc: ToolCall) => ({
+                  id: tc.id,
+                  type: tc.type,
+                  function: { name: tc.function.name, arguments: tc.function.arguments }
+                }))
+              });
+            } else {
+              messages.push({
+                role: el.role as 'system' | 'user' | 'assistant',
+                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content)
+              });
+            }
           } else if (el.type === 'section' || el.type === 'subsection') {
             // Process section content
             if (el.title) content.push(`## ${el.title}`);
@@ -196,13 +214,7 @@ export class OpenAIDriver implements AIDriver {
     try {
       const openaiOptions = options as OpenAIQueryOptions || {};
       const mergedOptions = { ...this.defaultOptions, ...openaiOptions };
-      let messages = this.compiledPromptToMessages(prompt);
-
-      // Append options.messages if provided
-      if (options?.messages && options.messages.length > 0) {
-        const additionalMessages = options.messages.map(msg => this.chatMessageToOpenAI(msg));
-        messages = [...messages, ...additionalMessages];
-      }
+      const messages = this.compiledPromptToMessages(prompt);
 
       const params: ChatCompletionCreateParams = {
         model: mergedOptions.model || this.defaultModel,

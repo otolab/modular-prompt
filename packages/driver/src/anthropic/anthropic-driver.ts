@@ -124,10 +124,12 @@ export class AnthropicDriver implements AIDriver {
    */
   private compiledPromptToAnthropic(prompt: CompiledPrompt): {
     system?: string;
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    messages: Array<{ role: 'user' | 'assistant'; content: any }>;
   } {
     let system: string | undefined;
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [];
 
     // Helper to process elements
     const processElements = (elements: unknown[]): string => {
@@ -143,13 +145,27 @@ export class AnthropicDriver implements AIDriver {
             content.push(el.content);
           } else if (el.type === 'message') {
             // Handle message elements separately
-            const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
             const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
 
-            if (role === 'system') {
-              system = system ? `${system}\n\n${messageContent}` : messageContent;
+            if (el.role === 'tool') {
+              messages.push({
+                role: 'user',
+                content: [{ type: 'tool_result', tool_use_id: el.toolCallId, content: el.content }]
+              });
+            } else if ('toolCalls' in el && el.toolCalls) {
+              const blocks: unknown[] = [];
+              if (messageContent) blocks.push({ type: 'text', text: messageContent });
+              for (const tc of el.toolCalls) {
+                blocks.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input: JSON.parse(tc.function.arguments) });
+              }
+              messages.push({ role: 'assistant', content: blocks });
             } else {
-              messages.push({ role: role as 'user' | 'assistant', content: messageContent });
+              const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
+              if (role === 'system') {
+                system = system ? `${system}\n\n${messageContent}` : messageContent;
+              } else {
+                messages.push({ role: role as 'user' | 'assistant', content: messageContent });
+              }
             }
           } else if (el.type === 'section' || el.type === 'subsection') {
             // Process section content
@@ -242,15 +258,7 @@ export class AnthropicDriver implements AIDriver {
     const mergedOptions = { ...this.defaultOptions, ...anthropicOptions };
 
     // Convert prompt
-    const { system, messages: promptMessages } = this.compiledPromptToAnthropic(prompt);
-
-    // Append options.messages if provided
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let messages: any[] = promptMessages;
-    if (options?.messages && options.messages.length > 0) {
-      const additionalMessages = options.messages.map(msg => this.chatMessageToAnthropic(msg));
-      messages = [...promptMessages, ...additionalMessages];
-    }
+    const { system, messages } = this.compiledPromptToAnthropic(prompt);
 
     // Build API params
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
