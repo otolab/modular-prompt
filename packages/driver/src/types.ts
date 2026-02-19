@@ -17,6 +17,52 @@ export interface ChatMessage {
 }
 
 /**
+ * Tool function definition
+ */
+export interface ToolFunction {
+  /** Function name (a-z, A-Z, 0-9, _, - up to 64 chars) */
+  name: string;
+  /** Description used by the model to decide when to call the tool */
+  description?: string;
+  /** JSON Schema object for parameters */
+  parameters?: Record<string, unknown>;
+  /** Strict schema adherence (OpenAI Structured Outputs) */
+  strict?: boolean;
+}
+
+/**
+ * Tool definition wrapper
+ */
+export interface ToolDefinition {
+  type: 'function';
+  function: ToolFunction;
+}
+
+/**
+ * Tool usage strategy
+ */
+export type ToolChoice =
+  | 'auto'      // Model decides automatically (default)
+  | 'none'      // Disable tool usage
+  | 'required'  // Must use at least one tool
+  | { type: 'function'; function: { name: string } };  // Force specific tool
+
+/**
+ * Tool call result from the model
+ */
+export interface ToolCall {
+  /** Unique ID for this tool call (used when returning results) */
+  id: string;
+  type: 'function';
+  function: {
+    /** Function name to call */
+    name: string;
+    /** Arguments as JSON string */
+    arguments: string;
+  };
+}
+
+/**
  * Query result from AI model
  */
 export interface QueryResult {
@@ -38,7 +84,10 @@ export interface QueryResult {
     totalTokens: number;
   };
 
-  finishReason?: 'stop' | 'length' | 'error';
+  /** Tool calls selected by the model */
+  toolCalls?: ToolCall[];
+
+  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
 }
 
 /**
@@ -56,6 +105,10 @@ export interface QueryOptions {
    * - 'force-completion': Force completion API
    */
   apiStrategy?: 'auto' | 'force-chat' | 'force-completion';
+  /** Available tool definitions */
+  tools?: ToolDefinition[];
+  /** Tool usage strategy */
+  toolChoice?: ToolChoice;
 }
 
 /**
