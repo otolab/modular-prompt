@@ -35,8 +35,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'test-chat',
         provider: 'test' as any,
-        capabilities: ['chat', 'japanese'],
-        enabled: true
+        capabilities: ['chat', 'japanese']
       });
       
       const profile: DialogProfile = {
@@ -79,8 +78,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'test-chat',
         provider: 'test' as any,
-        capabilities: ['chat'],
-        enabled: true
+        capabilities: ['chat']
       });
       
       const profile: DialogProfile = {
@@ -136,8 +134,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'echo-text',
         provider: 'echo' as any,
-        capabilities: ['chat'],
-        enabled: true
+        capabilities: ['chat']
       });
       
       const profile: DialogProfile = {
@@ -180,8 +177,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'echo-messages',
         provider: 'echo' as any,
-        capabilities: ['chat'],
-        enabled: true
+        capabilities: ['chat']
       });
       
       const profile: DialogProfile = {
@@ -235,8 +231,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'echo-debug',
         provider: 'echo' as any,
-        capabilities: ['chat'],
-        enabled: true
+        capabilities: ['chat']
       });
       
       const profile: DialogProfile = {
@@ -309,8 +304,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'test-chat',
         provider: 'test' as any,
-        capabilities: ['chat'],
-        enabled: true
+        capabilities: ['chat']
       });
       
       const profile: DialogProfile = {
@@ -372,8 +366,7 @@ describe('AI Chat E2E Tests', () => {
       registry.registerModel({
         model: 'echo-both',
         provider: 'echo' as any,
-        capabilities: ['chat'],
-        enabled: true
+        capabilities: ['chat']
       });
       
       const profile: DialogProfile = {

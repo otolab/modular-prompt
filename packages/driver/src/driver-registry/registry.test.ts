@@ -35,7 +35,7 @@ describe('DriverRegistry', () => {
       expect(result?.model.capabilities).toContain('local');
     });
 
-    it('should set default values for enabled and priority', () => {
+    it('should set default values for priority', () => {
       const spec: ModelSpec = {
         model: 'test-model',
         provider: 'echo',
@@ -46,7 +46,7 @@ describe('DriverRegistry', () => {
 
       const result = registry.selectModel({});
 
-      expect(result?.model.enabled).toBe(true);
+      expect(result?.model.disabled).toBeUndefined();
       expect(result?.model.priority).toBe(0);
     });
   });
