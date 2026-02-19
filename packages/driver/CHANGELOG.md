@@ -1,5 +1,13 @@
 # @modular-prompt/driver
 
+## 0.6.1
+
+### Patch Changes
+
+- f17538c: fix(driver): ChatMessage に tool call/tool result の表現力を追加
+
+  ChatMessage を Union 型に拡張し、QueryOptions.messages で tools 会話ループを実現可能にした。
+
 ## 0.6.0
 
 ### Minor Changes
