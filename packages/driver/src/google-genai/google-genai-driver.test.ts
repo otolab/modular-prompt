@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GoogleGenAIDriver } from './google-genai-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
+import type { ToolDefinition } from '../types.js';
 
 // Mock @google/genai
 vi.mock('@google/genai', () => {
@@ -33,7 +34,14 @@ vi.mock('@google/genai', () => {
           })
         }
       };
-    })
+    }),
+    FunctionCallingConfigMode: {
+      MODE_UNSPECIFIED: 'MODE_UNSPECIFIED',
+      AUTO: 'AUTO',
+      ANY: 'ANY',
+      NONE: 'NONE',
+      VALIDATED: 'VALIDATED',
+    }
   };
 });
 
@@ -180,6 +188,366 @@ describe('GoogleGenAIDriver', () => {
   describe('close', () => {
     it('should close without errors', async () => {
       await expect(driver.close()).resolves.not.toThrow();
+    });
+  });
+
+  describe('tools support', () => {
+    const toolDefs: ToolDefinition[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' }
+            },
+            required: ['location']
+          }
+        }
+      }
+    ];
+
+    const basicPrompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'You are helpful' }],
+      data: [{ type: 'text', content: 'What is the weather?' }],
+      output: []
+    };
+
+    it('should pass tools and toolConfig to API config', async () => {
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(basicPrompt, {
+        tools: toolDefs,
+        toolChoice: 'auto'
+      });
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      expect(callArgs.config.tools).toEqual([{
+        functionDeclarations: [{
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: { location: { type: 'string' } },
+            required: ['location']
+          }
+        }]
+      }]);
+      expect(callArgs.config.toolConfig).toEqual({
+        functionCallingConfig: { mode: 'AUTO' }
+      });
+    });
+
+    it('should convert toolChoice "none" to NONE mode', async () => {
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(basicPrompt, {
+        tools: toolDefs,
+        toolChoice: 'none'
+      });
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      expect(callArgs.config.toolConfig).toEqual({
+        functionCallingConfig: { mode: 'NONE' }
+      });
+    });
+
+    it('should convert toolChoice "required" to ANY mode', async () => {
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(basicPrompt, {
+        tools: toolDefs,
+        toolChoice: 'required'
+      });
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      expect(callArgs.config.toolConfig).toEqual({
+        functionCallingConfig: { mode: 'ANY' }
+      });
+    });
+
+    it('should convert specific function toolChoice to ANY with allowedFunctionNames', async () => {
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(basicPrompt, {
+        tools: toolDefs,
+        toolChoice: { type: 'function', function: { name: 'get_weather' } }
+      });
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      expect(callArgs.config.toolConfig).toEqual({
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: ['get_weather']
+        }
+      });
+    });
+
+    it('should not include tools in config when not specified', async () => {
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(basicPrompt);
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      expect(callArgs.config).not.toHaveProperty('tools');
+      expect(callArgs.config).not.toHaveProperty('toolConfig');
+    });
+
+    it('should extract single tool call from query response', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        get text() { throw new Error('no text'); },
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [{
+              functionCall: {
+                id: 'call_abc123',
+                name: 'get_weather',
+                args: { location: 'Tokyo' }
+              }
+            }]
+          }
+        }],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 5,
+          totalTokenCount: 15
+        }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls![0]).toEqual({
+        id: 'call_abc123',
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          arguments: '{"location":"Tokyo"}'
+        }
+      });
+    });
+
+    it('should handle multiple tool calls', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        get text() { throw new Error('no text'); },
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [
+              {
+                functionCall: {
+                  id: 'call_1',
+                  name: 'get_weather',
+                  args: { location: 'Tokyo' }
+                }
+              },
+              {
+                functionCall: {
+                  id: 'call_2',
+                  name: 'get_weather',
+                  args: { location: 'Osaka' }
+                }
+              }
+            ]
+          }
+        }],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 5,
+          totalTokenCount: 15
+        }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls![0].id).toBe('call_1');
+      expect(result.toolCalls![0].function.arguments).toBe('{"location":"Tokyo"}');
+      expect(result.toolCalls![1].id).toBe('call_2');
+      expect(result.toolCalls![1].function.arguments).toBe('{"location":"Osaka"}');
+    });
+
+    it('should generate fallback id when response has no id', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        get text() { throw new Error('no text'); },
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [{
+              functionCall: {
+                name: 'get_weather',
+                args: { location: 'Tokyo' }
+              }
+            }]
+          }
+        }],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 5,
+          totalTokenCount: 15
+        }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls![0].id).toBe('call_0');
+    });
+
+    it('should handle text and tool calls mixed response', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        text: 'I will check the weather for you.',
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [
+              { text: 'I will check the weather for you.' },
+              {
+                functionCall: {
+                  id: 'call_1',
+                  name: 'get_weather',
+                  args: { location: 'Tokyo' }
+                }
+              }
+            ]
+          }
+        }],
+        usageMetadata: {
+          promptTokenCount: 10,
+          candidatesTokenCount: 20,
+          totalTokenCount: 30
+        }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.content).toBe('I will check the weather for you.');
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.toolCalls).toHaveLength(1);
+    });
+
+    it('should not include toolCalls when no function calls in response', async () => {
+      const result = await driver.query(basicPrompt);
+
+      expect(result.toolCalls).toBeUndefined();
+    });
+
+    it('should extract tool calls from stream response', async () => {
+      vi.spyOn(driver['client'].models, 'generateContentStream').mockResolvedValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            text: 'Checking weather...',
+            candidates: [{
+              finishReason: undefined,
+              content: {
+                parts: [{ text: 'Checking weather...' }]
+              }
+            }]
+          };
+          yield {
+            get text() { throw new Error('no text'); },
+            candidates: [{
+              finishReason: 'STOP',
+              content: {
+                parts: [{
+                  functionCall: {
+                    id: 'call_stream_1',
+                    name: 'get_weather',
+                    args: { location: 'Tokyo' }
+                  }
+                }]
+              }
+            }]
+          };
+        }
+      } as unknown as ReturnType<typeof driver['client']['models']['generateContentStream']>);
+
+      const { stream, result } = await driver.streamQuery(basicPrompt, { tools: toolDefs });
+
+      const chunks: string[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toEqual(['Checking weather...']);
+
+      const finalResult = await result;
+      expect(finalResult.finishReason).toBe('tool_calls');
+      expect(finalResult.toolCalls).toHaveLength(1);
+      expect(finalResult.toolCalls![0]).toEqual({
+        id: 'call_stream_1',
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          arguments: '{"location":"Tokyo"}'
+        }
+      });
+    });
+
+    it('should handle tool-call-only stream response (no text)', async () => {
+      vi.spyOn(driver['client'].models, 'generateContentStream').mockResolvedValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            get text() { throw new Error('no text'); },
+            candidates: [{
+              finishReason: 'STOP',
+              content: {
+                parts: [{
+                  functionCall: {
+                    id: 'call_only_1',
+                    name: 'get_weather',
+                    args: { location: 'Tokyo' }
+                  }
+                }]
+              }
+            }]
+          };
+        }
+      } as unknown as ReturnType<typeof driver['client']['models']['generateContentStream']>);
+
+      const { stream, result } = await driver.streamQuery(basicPrompt, { tools: toolDefs });
+
+      const chunks: string[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks).toEqual([]);
+
+      const finalResult = await result;
+      expect(finalResult.content).toBe('');
+      expect(finalResult.finishReason).toBe('tool_calls');
+      expect(finalResult.toolCalls).toHaveLength(1);
+    });
+
+    it('should pass tools config in streamQuery', async () => {
+      const mockGenerateContentStream = driver['client'].models.generateContentStream as ReturnType<typeof vi.fn>;
+
+      await driver.streamQuery(basicPrompt, {
+        tools: toolDefs,
+        toolChoice: 'required'
+      });
+
+      const callArgs = mockGenerateContentStream.mock.calls[mockGenerateContentStream.mock.calls.length - 1][0];
+      expect(callArgs.config.tools).toEqual([{
+        functionDeclarations: [{
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: { location: { type: 'string' } },
+            required: ['location']
+          }
+        }]
+      }]);
+      expect(callArgs.config.toolConfig).toEqual({
+        functionCallingConfig: { mode: 'ANY' }
+      });
     });
   });
 

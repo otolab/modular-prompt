@@ -5,7 +5,12 @@ export type {
   QueryResult,
   QueryOptions,
   DriverConfig,
-  Role
+  Role,
+  ToolFunction,
+  ToolDefinition,
+  ToolChoice,
+  ToolCall,
+  FinishReason
 } from './types.js';
 
 // Test driver

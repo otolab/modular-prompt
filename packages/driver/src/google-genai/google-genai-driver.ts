@@ -1,7 +1,7 @@
-import { GoogleGenAI } from '@google/genai';
-import type { Part, Content } from '@google/genai';
+import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
+import type { Part, Content, FunctionDeclaration, FunctionCallingConfig } from '@google/genai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall } from '../types.js';
 
 /**
  * GoogleGenAI driver configuration
@@ -189,6 +189,60 @@ export class GoogleGenAIDriver implements AIDriver {
   }
 
   /**
+   * Convert ToolDefinition[] to GoogleGenAI tools format
+   */
+  private convertTools(tools: ToolDefinition[]): { functionDeclarations: FunctionDeclaration[] }[] {
+    const functionDeclarations: FunctionDeclaration[] = tools.map(tool => ({
+      name: tool.function.name,
+      description: tool.function.description,
+      parametersJsonSchema: tool.function.parameters,
+    }));
+    return [{ functionDeclarations }];
+  }
+
+  /**
+   * Convert ToolChoice to GoogleGenAI FunctionCallingConfig
+   */
+  private convertToolChoice(toolChoice: ToolChoice): FunctionCallingConfig {
+    if (toolChoice === 'auto') {
+      return { mode: FunctionCallingConfigMode.AUTO };
+    }
+    if (toolChoice === 'none') {
+      return { mode: FunctionCallingConfigMode.NONE };
+    }
+    if (toolChoice === 'required') {
+      return { mode: FunctionCallingConfigMode.ANY };
+    }
+    // Specific function
+    return {
+      mode: FunctionCallingConfigMode.ANY,
+      allowedFunctionNames: [toolChoice.function.name],
+    };
+  }
+
+  /**
+   * Extract ToolCalls from response parts
+   */
+  private extractToolCalls(parts: Part[] | undefined): ToolCall[] {
+    if (!parts) return [];
+    const toolCalls: ToolCall[] = [];
+    for (const part of parts) {
+      if (part.functionCall) {
+        const fc = part.functionCall;
+        toolCalls.push({
+          id: fc.id || `call_${toolCalls.length}`,
+          type: 'function',
+          function: {
+            name: fc.name || '',
+            arguments: JSON.stringify(fc.args ?? {}),
+          },
+        });
+      }
+    }
+    return toolCalls;
+  }
+
+  /**
    * Query implementation
    */
   async query(
@@ -231,6 +285,16 @@ export class GoogleGenAIDriver implements AIDriver {
         config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
       }
 
+      // Add tools configuration
+      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+        config.tools = this.convertTools(mergedOptions.tools);
+      }
+      if (mergedOptions.toolChoice) {
+        config.toolConfig = {
+          functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
+        };
+      }
+
       // Remove undefined values
       Object.keys(config).forEach(key => {
         if (config[key] === undefined) {
@@ -249,13 +313,22 @@ export class GoogleGenAIDriver implements AIDriver {
       });
 
       // Extract text content using convenience property
-      const content = response.text || '';
+      let content = '';
+      try {
+        content = response.text || '';
+      } catch {
+        // response.text throws if there are no text parts (e.g. tool-call-only response)
+      }
 
-      // Extract candidate for finish reason
+      // Extract candidate for finish reason and tool calls
       const candidate = response.candidates?.[0];
+      const toolCalls = this.extractToolCalls(candidate?.content?.parts as Part[] | undefined);
 
       // Map finish reason
-      const finishReason = finishReasonMap[candidate?.finishReason || 'error'] || 'error';
+      let finishReason = finishReasonMap[candidate?.finishReason || 'error'] || 'error';
+      if (toolCalls.length > 0) {
+        finishReason = 'tool_calls';
+      }
 
       // Handle structured outputs
       let structuredOutput: unknown | undefined;
@@ -271,6 +344,7 @@ export class GoogleGenAIDriver implements AIDriver {
         content,
         finishReason,
         structuredOutput,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         usage: response.usageMetadata ? {
           promptTokens: response.usageMetadata.promptTokenCount || 0,
           completionTokens: response.usageMetadata.candidatesTokenCount || 0,
@@ -331,6 +405,16 @@ export class GoogleGenAIDriver implements AIDriver {
       config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
     }
 
+    // Add tools configuration
+    if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+      config.tools = this.convertTools(mergedOptions.tools);
+    }
+    if (mergedOptions.toolChoice) {
+      config.toolConfig = {
+        functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
+      };
+    }
+
     // Remove undefined values
     Object.keys(config).forEach(key => {
       if (config[key] === undefined) {
@@ -354,15 +438,29 @@ export class GoogleGenAIDriver implements AIDriver {
     let finishReason: QueryResult['finishReason'] = 'stop';
     let streamConsumed = false;
     const chunks: string[] = [];
+    const accumulatedToolCalls: ToolCall[] = [];
 
     // Process the stream and cache chunks
     const processStream = async () => {
       try {
         for await (const chunk of streamResponse) {
-          const text = chunk.text;
+          // Extract text - use try/catch as .text may throw for non-text parts
+          let text: string | undefined;
+          try {
+            text = chunk.text;
+          } catch {
+            // No text content in this chunk
+          }
           if (text) {
             fullContent += text;
             chunks.push(text);
+          }
+
+          // Extract tool calls from chunk parts
+          const parts = chunk.candidates?.[0]?.content?.parts;
+          if (parts) {
+            const chunkToolCalls = this.extractToolCalls(parts as Part[]);
+            accumulatedToolCalls.push(...chunkToolCalls);
           }
 
           // Update finish reason if provided
@@ -383,13 +481,19 @@ export class GoogleGenAIDriver implements AIDriver {
       } catch {
         finishReason = 'error';
       }
+
+      // Override finish reason if tool calls were found
+      if (accumulatedToolCalls.length > 0) {
+        finishReason = 'tool_calls';
+      }
+
       streamConsumed = true;
     };
 
     // Start processing the stream
     const processingPromise = processStream();
 
-    // Create the stream generator that yields cached chunks
+    // Create the stream generator that yields cached chunks (text only)
     const streamGenerator = async function* () {
       let index = 0;
       while (!streamConsumed || index < chunks.length) {
@@ -419,6 +523,7 @@ export class GoogleGenAIDriver implements AIDriver {
       return {
         content: fullContent,
         structuredOutput,
+        toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
         usage,
         finishReason
       };

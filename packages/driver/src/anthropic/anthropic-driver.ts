@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { MessageCreateParamsStreaming } from '@anthropic-ai/sdk/resources/messages';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
 
 /**
@@ -22,11 +23,41 @@ export interface AnthropicQueryOptions extends QueryOptions {
   topP?: number;
   topK?: number;
   stopSequences?: string[];
+  tools?: ToolDefinition[];
+  toolChoice?: ToolChoice;
 }
 
 /**
  * Anthropic API driver
  */
+/**
+ * Convert common ToolDefinition[] to Anthropic Tool format
+ */
+function convertTools(tools: ToolDefinition[]): MessageCreateParamsStreaming['tools'] {
+  return tools.map(tool => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    input_schema: {
+      type: 'object' as const,
+      ...tool.function.parameters
+    }
+  }));
+}
+
+/**
+ * Convert common ToolChoice to Anthropic tool_choice format
+ */
+function convertToolChoice(toolChoice: ToolChoice): MessageCreateParamsStreaming['tool_choice'] {
+  if (typeof toolChoice === 'string') {
+    switch (toolChoice) {
+      case 'auto': return { type: 'auto' };
+      case 'none': return { type: 'none' };
+      case 'required': return { type: 'any' };
+    }
+  }
+  return { type: 'tool', name: toolChoice.function.name };
+}
+
 export class AnthropicDriver implements AIDriver {
   private client: Anthropic;
   private defaultModel: string;
@@ -174,8 +205,9 @@ export class AnthropicDriver implements AIDriver {
     // Convert prompt
     const { system, messages } = this.compiledPromptToAnthropic(prompt);
 
-    // Create stream
-    const anthropicStream = await this.client.messages.create({
+    // Build API params
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const params: Record<string, any> = {
       model: mergedOptions.model || this.defaultModel,
       messages,
       max_tokens: mergedOptions.maxTokens || 4096,
@@ -184,15 +216,29 @@ export class AnthropicDriver implements AIDriver {
       top_k: mergedOptions.topK,
       stop_sequences: mergedOptions.stopSequences,
       system,
+      tools: mergedOptions.tools ? convertTools(mergedOptions.tools) : undefined,
+      tool_choice: mergedOptions.toolChoice ? convertToolChoice(mergedOptions.toolChoice) : undefined,
       stream: true
+    };
+
+    // Remove undefined values
+    Object.keys(params).forEach(key => {
+      if (params[key] === undefined) {
+        delete params[key];
+      }
     });
+
+    // Create stream
+    const anthropicStream = await this.client.messages.create(params as MessageCreateParamsStreaming);
 
     // Shared state
     let fullContent = '';
-    let usage: QueryResult['usage'] | undefined;
+    let inputTokens = 0;
+    let outputTokens = 0;
     let finishReason: QueryResult['finishReason'] = 'stop';
     let streamConsumed = false;
     const chunks: string[] = [];
+    const toolCallDeltas = new Map<number, { id: string; name: string; arguments: string }>();
 
     // Process the stream
     const processStream = async () => {
@@ -201,19 +247,38 @@ export class AnthropicDriver implements AIDriver {
           const content = chunk.delta.text;
           fullContent += content;
           chunks.push(content);
-        } else if (chunk.type === 'message_stop') {
-          // TODO: Investigate correct way to get usage from streaming response
-          // The actual API response may contain usage data in message_stop event,
-          // but the SDK type definitions don't reflect this.
-          // Consider checking message_start event or using MessageStream class instead.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const finalMessage = chunk as any;
-          if (finalMessage.message?.usage) {
-            usage = {
-              promptTokens: finalMessage.message.usage.input_tokens,
-              completionTokens: finalMessage.message.usage.output_tokens,
-              totalTokens: finalMessage.message.usage.input_tokens + finalMessage.message.usage.output_tokens
-            };
+        } else if (chunk.type === 'content_block_start' && chunk.content_block.type === 'tool_use') {
+          // Register new tool call
+          toolCallDeltas.set(chunk.index, {
+            id: chunk.content_block.id,
+            name: chunk.content_block.name,
+            arguments: ''
+          });
+        } else if (chunk.type === 'content_block_delta' && chunk.delta.type === 'input_json_delta') {
+          // Accumulate tool call arguments
+          const existing = toolCallDeltas.get(chunk.index);
+          if (existing) {
+            existing.arguments += chunk.delta.partial_json;
+          }
+        } else if (chunk.type === 'message_start') {
+          // Get input tokens from message_start
+          if (chunk.message?.usage) {
+            inputTokens = chunk.message.usage.input_tokens;
+          }
+        } else if (chunk.type === 'message_delta') {
+          // Get stop_reason and output tokens from message_delta
+          if (chunk.usage) {
+            outputTokens = chunk.usage.output_tokens;
+          }
+          if (chunk.delta?.stop_reason) {
+            const reason = chunk.delta.stop_reason;
+            if (reason === 'tool_use') {
+              finishReason = 'tool_calls';
+            } else if (reason === 'max_tokens') {
+              finishReason = 'length';
+            } else {
+              finishReason = 'stop';
+            }
           }
         }
       }
@@ -246,10 +311,30 @@ export class AnthropicDriver implements AIDriver {
         }
       }
 
+      // Build tool calls from accumulated deltas
+      let toolCalls: ToolCall[] | undefined;
+      if (toolCallDeltas.size > 0) {
+        toolCalls = Array.from(toolCallDeltas.values()).map(tc => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: tc.arguments
+          }
+        }));
+      }
+
+      // Build usage
+      const usage: QueryResult['usage'] | undefined =
+        (inputTokens > 0 || outputTokens > 0)
+          ? { promptTokens: inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens }
+          : undefined;
+
       return {
         content: fullContent,
         structuredOutput,
         usage,
+        toolCalls,
         finishReason
       };
     });

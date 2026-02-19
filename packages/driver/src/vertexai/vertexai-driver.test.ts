@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VertexAIDriver } from './vertexai-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
+import type { ToolDefinition } from '../types.js';
+
+// Shared mock functions (hoisted for vi.mock factory)
+const { mockGenerateContent, mockGenerateContentStream } = vi.hoisted(() => ({
+  mockGenerateContent: vi.fn(),
+  mockGenerateContentStream: vi.fn()
+}));
 
 // Mock @google-cloud/vertexai module
 vi.mock('@google-cloud/vertexai', () => {
-  const mockGenerateContent = vi.fn().mockResolvedValue({
+  mockGenerateContent.mockResolvedValue({
     response: {
       candidates: [{
         content: {
@@ -21,7 +28,7 @@ vi.mock('@google-cloud/vertexai', () => {
     }
   });
   
-  const mockGenerateContentStream = vi.fn().mockResolvedValue({
+  mockGenerateContentStream.mockResolvedValue({
     stream: (async function* () {
       yield {
         candidates: [{
@@ -57,13 +64,13 @@ vi.mock('@google-cloud/vertexai', () => {
   return {
     VertexAI: vi.fn().mockImplementation(() => ({
       getGenerativeModel: vi.fn().mockReturnValue({
-        generateContent: mockGenerateContent,
-        generateContentStream: mockGenerateContentStream
+        generateContent: (...args: unknown[]) => mockGenerateContent(...args),
+        generateContentStream: (...args: unknown[]) => mockGenerateContentStream(...args)
       }),
       preview: {
         getGenerativeModel: vi.fn().mockReturnValue({
-          generateContent: mockGenerateContent,
-          generateContentStream: mockGenerateContentStream
+          generateContent: (...args: unknown[]) => mockGenerateContent(...args),
+          generateContentStream: (...args: unknown[]) => mockGenerateContentStream(...args)
         })
       }
     })),
@@ -80,6 +87,12 @@ vi.mock('@google-cloud/vertexai', () => {
       BOOLEAN: 'BOOLEAN',
       ARRAY: 'ARRAY',
       OBJECT: 'OBJECT'
+    },
+    FunctionCallingMode: {
+      MODE_UNSPECIFIED: 'MODE_UNSPECIFIED',
+      AUTO: 'AUTO',
+      ANY: 'ANY',
+      NONE: 'NONE'
     }
   };
 });
@@ -196,6 +209,247 @@ describe('VertexAIDriver', () => {
     expect(result.finishReason).toBe('error');
   });
   
+  describe('tools support', () => {
+    const toolDefs: ToolDefinition[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parameters: {
+            type: 'object',
+            properties: { location: { type: 'string' } },
+            required: ['location']
+          }
+        }
+      }
+    ];
+
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'Test' }],
+      data: [{ type: 'text', content: 'Data' }],
+      output: []
+    };
+
+    it('should pass tools and toolChoice to API request', async () => {
+      await driver.query(prompt, {
+        tools: toolDefs,
+        toolChoice: 'auto'
+      });
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tools: expect.arrayContaining([
+            expect.objectContaining({
+              functionDeclarations: expect.arrayContaining([
+                expect.objectContaining({ name: 'get_weather' })
+              ])
+            })
+          ]),
+          toolConfig: expect.objectContaining({
+            functionCallingConfig: expect.objectContaining({ mode: 'AUTO' })
+          })
+        })
+      );
+    });
+
+    it('should pass toolChoice "required" as ANY mode', async () => {
+      await driver.query(prompt, {
+        tools: toolDefs,
+        toolChoice: 'required'
+      });
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            functionCallingConfig: expect.objectContaining({ mode: 'ANY' })
+          })
+        })
+      );
+    });
+
+    it('should pass toolChoice "none" as NONE mode', async () => {
+      await driver.query(prompt, {
+        tools: toolDefs,
+        toolChoice: 'none'
+      });
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            functionCallingConfig: expect.objectContaining({ mode: 'NONE' })
+          })
+        })
+      );
+    });
+
+    it('should pass specific function toolChoice as ANY with allowedFunctionNames', async () => {
+      await driver.query(prompt, {
+        tools: toolDefs,
+        toolChoice: { type: 'function', function: { name: 'get_weather' } }
+      });
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            functionCallingConfig: expect.objectContaining({
+              mode: 'ANY',
+              allowedFunctionNames: ['get_weather']
+            })
+          })
+        })
+      );
+    });
+
+    it('should not include tools in request when not specified', async () => {
+      await driver.query(prompt);
+
+      const calledRequest = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      expect(calledRequest).not.toHaveProperty('tools');
+      expect(calledRequest).not.toHaveProperty('toolConfig');
+    });
+
+    it('should extract tool calls from response', async () => {
+      mockGenerateContent.mockResolvedValueOnce({
+        response: {
+          candidates: [{
+            content: {
+              parts: [
+                {
+                  functionCall: {
+                    name: 'get_weather',
+                    args: { location: 'Tokyo' }
+                  }
+                }
+              ],
+              role: 'model'
+            },
+            finishReason: 'STOP'
+          }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15
+          }
+        }
+      });
+
+      const result = await driver.query(prompt, { tools: toolDefs });
+
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls![0]).toEqual({
+        id: 'call_0',
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          arguments: '{"location":"Tokyo"}'
+        }
+      });
+    });
+
+    it('should handle multiple tool calls', async () => {
+      mockGenerateContent.mockResolvedValueOnce({
+        response: {
+          candidates: [{
+            content: {
+              parts: [
+                { functionCall: { name: 'get_weather', args: { location: 'Tokyo' } } },
+                { functionCall: { name: 'get_weather', args: { location: 'Osaka' } } }
+              ],
+              role: 'model'
+            },
+            finishReason: 'STOP'
+          }]
+        }
+      });
+
+      const result = await driver.query(prompt, { tools: toolDefs });
+
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls![0].function.name).toBe('get_weather');
+      expect(result.toolCalls![1].function.name).toBe('get_weather');
+      expect(result.toolCalls![0].id).toBe('call_0');
+      expect(result.toolCalls![1].id).toBe('call_1');
+    });
+
+    it('should return undefined toolCalls when no function calls in response', async () => {
+      const result = await driver.query(prompt);
+
+      expect(result.toolCalls).toBeUndefined();
+    });
+
+    it('should handle tool calls in streamQuery result', async () => {
+      mockGenerateContentStream.mockResolvedValueOnce({
+        stream: (async function* () {
+          yield {
+            candidates: [{
+              content: {
+                parts: [{ text: 'Checking...' }]
+              }
+            }]
+          };
+        })(),
+        response: Promise.resolve({
+          candidates: [{
+            content: {
+              parts: [
+                { text: 'Checking...' },
+                { functionCall: { name: 'get_weather', args: { location: 'Tokyo' } } }
+              ],
+              role: 'model'
+            },
+            finishReason: 'STOP'
+          }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15
+          }
+        })
+      });
+
+      const { stream, result } = await driver.streamQuery(prompt, { tools: toolDefs });
+
+      // Stream should yield text only
+      const streamChunks: string[] = [];
+      for await (const chunk of stream) {
+        streamChunks.push(chunk);
+      }
+      expect(streamChunks).toEqual(['Checking...']);
+
+      // Result should have tool calls
+      const finalResult = await result;
+      expect(finalResult.finishReason).toBe('tool_calls');
+      expect(finalResult.toolCalls).toHaveLength(1);
+      expect(finalResult.toolCalls![0].function.name).toBe('get_weather');
+    });
+
+    it('should use tools from defaultOptions', async () => {
+      const toolDriver = new VertexAIDriver({
+        project: 'test-project',
+        defaultOptions: {
+          tools: toolDefs,
+          toolChoice: 'auto'
+        }
+      });
+
+      await toolDriver.query(prompt);
+
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tools: expect.arrayContaining([
+            expect.objectContaining({
+              functionDeclarations: expect.arrayContaining([
+                expect.objectContaining({ name: 'get_weather' })
+              ])
+            })
+          ])
+        })
+      );
+    });
+  });
+
   it('should handle JSON response format', async () => {
     const prompt: CompiledPrompt = {
       instructions: [

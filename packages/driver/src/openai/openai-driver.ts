@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice } from '../types.js';
 import type {
   ChatCompletionCreateParams,
   ChatCompletionMessageParam
@@ -33,15 +33,8 @@ export interface OpenAIQueryOptions extends QueryOptions {
   topLogprobs?: number;
   responseFormat?: { type: 'json_object' | 'text' };
   seed?: number;
-  tools?: Array<{
-    type: 'function';
-    function: {
-      name: string;
-      description?: string;
-      parameters?: Record<string, unknown>;
-    };
-  }>;
-  toolChoice?: 'none' | 'auto' | { type: 'function'; function: { name: string } };
+  tools?: ToolDefinition[];
+  toolChoice?: ToolChoice;
 }
 
 /**
@@ -180,6 +173,8 @@ export class OpenAIDriver implements AIDriver {
         presence_penalty: mergedOptions.presencePenalty,
         stop: mergedOptions.stop,
         response_format: prompt.metadata?.outputSchema ? { type: 'json_object' } : undefined,
+        tools: mergedOptions.tools as ChatCompletionCreateParams['tools'],
+        tool_choice: mergedOptions.toolChoice as ChatCompletionCreateParams['tool_choice'],
         stream: true
       };
 
@@ -198,6 +193,7 @@ export class OpenAIDriver implements AIDriver {
       let finishReason: QueryResult['finishReason'] = 'stop';
       let streamConsumed = false;
       const chunks: string[] = [];
+      const toolCallDeltas = new Map<number, { id: string; name: string; arguments: string }>();
 
       // Process the OpenAI stream and cache chunks
       const processStream = async () => {
@@ -209,10 +205,33 @@ export class OpenAIDriver implements AIDriver {
               chunks.push(content);
             }
 
+            // Accumulate tool call deltas
+            const deltaToolCalls = chunk.choices[0]?.delta?.tool_calls;
+            if (deltaToolCalls) {
+              for (const delta of deltaToolCalls) {
+                const existing = toolCallDeltas.get(delta.index);
+                if (existing) {
+                  // Append arguments fragment
+                  if (delta.function?.arguments) {
+                    existing.arguments += delta.function.arguments;
+                  }
+                } else {
+                  // New tool call
+                  toolCallDeltas.set(delta.index, {
+                    id: delta.id || '',
+                    name: delta.function?.name || '',
+                    arguments: delta.function?.arguments || ''
+                  });
+                }
+              }
+            }
+
             // Update finish reason if provided
             if (chunk.choices[0]?.finish_reason) {
               const reason = chunk.choices[0].finish_reason;
-              if (reason === 'length') {
+              if (reason === 'tool_calls') {
+                finishReason = 'tool_calls';
+              } else if (reason === 'length') {
                 finishReason = 'length';
               } else if (reason === 'content_filter') {
                 finishReason = 'error';
@@ -262,10 +281,24 @@ export class OpenAIDriver implements AIDriver {
           }
         }
 
+        // Build tool calls from accumulated deltas
+        let toolCalls: ToolCall[] | undefined;
+        if (toolCallDeltas.size > 0) {
+          toolCalls = Array.from(toolCallDeltas.values()).map(tc => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: {
+              name: tc.name,
+              arguments: tc.arguments
+            }
+          }));
+        }
+
         return {
           content: fullContent,
           structuredOutput,
           usage,
+          toolCalls,
           finishReason
         };
       });

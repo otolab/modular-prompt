@@ -1,5 +1,6 @@
 // Re-export types from driver package
-export type { AIDriver, QueryResult } from '@modular-prompt/driver';
+export type { AIDriver, QueryResult, FinishReason } from '@modular-prompt/driver';
+import type { FinishReason } from '@modular-prompt/driver';
 
 /**
  * Result of workflow execution
@@ -21,7 +22,7 @@ export interface WorkflowError<TContext> extends Error {
   context: TContext;  // エラー時点のコンテキスト（再開可能）
   partialResult?: string;   // 部分的な出力
   phase?: string;     // エラーが発生したフェーズ
-  finishReason?: 'stop' | 'length' | 'error';  // 終了理由
+  finishReason?: FinishReason;  // 終了理由
 }
 
 /**
@@ -31,7 +32,7 @@ export class WorkflowExecutionError<TContext = any> extends Error implements Wor
   public context: TContext;
   public partialResult?: string;
   public phase?: string;
-  public finishReason?: 'stop' | 'length' | 'error';
+  public finishReason?: FinishReason;
   
   constructor(
     originalError: Error | string,
@@ -39,7 +40,7 @@ export class WorkflowExecutionError<TContext = any> extends Error implements Wor
     options?: {
       partialResult?: string;
       phase?: string;
-      finishReason?: 'stop' | 'length' | 'error';
+      finishReason?: FinishReason;
     }
   ) {
     const message = typeof originalError === 'string' 

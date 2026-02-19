@@ -6,10 +6,12 @@ import {
   FinishReason,
   GenerateContentRequest,
   ResponseSchema,
-  SchemaType
+  SchemaType,
+  FunctionCallingMode
 } from '@google-cloud/vertexai';
+import type { Part } from '@google-cloud/vertexai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice } from '../types.js';
 
 /**
  * VertexAI driver configuration
@@ -224,6 +226,65 @@ export class VertexAIDriver implements AIDriver {
   }
   
   /**
+   * Convert ToolDefinition[] to VertexAI tools format
+   */
+  private convertTools(tools: ToolDefinition[]) {
+    return [{
+      functionDeclarations: tools.map(tool => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        // JSON Schema → VertexAI FunctionDeclarationSchema (reuse convertJsonSchema + cast)
+        ...(tool.function.parameters
+          ? { parameters: this.convertJsonSchema(tool.function.parameters) as unknown as import('@google-cloud/vertexai').FunctionDeclarationSchema }
+          : {}),
+      }))
+    }];
+  }
+
+  /**
+   * Convert ToolChoice to VertexAI ToolConfig
+   */
+  private convertToolChoice(toolChoice: ToolChoice) {
+    if (toolChoice === 'auto') {
+      return { functionCallingConfig: { mode: FunctionCallingMode.AUTO } };
+    }
+    if (toolChoice === 'none') {
+      return { functionCallingConfig: { mode: FunctionCallingMode.NONE } };
+    }
+    if (toolChoice === 'required') {
+      return { functionCallingConfig: { mode: FunctionCallingMode.ANY } };
+    }
+    return {
+      functionCallingConfig: {
+        mode: FunctionCallingMode.ANY,
+        allowedFunctionNames: [toolChoice.function.name],
+      },
+    };
+  }
+
+  /**
+   * Extract ToolCalls from response parts
+   */
+  private extractToolCalls(parts: Part[] | undefined): ToolCall[] {
+    if (!parts) return [];
+    const toolCalls: ToolCall[] = [];
+    for (const part of parts) {
+      if ('functionCall' in part && part.functionCall) {
+        const fc = part.functionCall;
+        toolCalls.push({
+          id: `call_${toolCalls.length}`,
+          type: 'function',
+          function: {
+            name: fc.name,
+            arguments: JSON.stringify(fc.args ?? {}),
+          },
+        });
+      }
+    }
+    return toolCalls;
+  }
+
+  /**
    * Create a generative model client
    */
   private createClient(model: string, config: GenerationConfig) {
@@ -277,6 +338,14 @@ export class VertexAIDriver implements AIDriver {
         }
       });
       
+      // Add tools configuration
+      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+        request.tools = this.convertTools(mergedOptions.tools);
+      }
+      if (mergedOptions.toolChoice) {
+        request.toolConfig = this.convertToolChoice(mergedOptions.toolChoice);
+      }
+
       // Create client and generate
       const model = mergedOptions.model || this.defaultModel;
       const client = this.createClient(model, generationConfig);
@@ -297,9 +366,15 @@ export class VertexAIDriver implements AIDriver {
       const content = candidate.content.parts
         .map(part => part.text || '')
         .join('');
-      
+
+      // Extract tool calls
+      const toolCalls = this.extractToolCalls(candidate.content.parts as Part[]);
+
       // Map finish reason
-      const finishReason = finishReasonMap[candidate.finishReason || 'error'];
+      let finishReason = finishReasonMap[candidate.finishReason || 'error'];
+      if (toolCalls.length > 0) {
+        finishReason = 'tool_calls';
+      }
 
       // Handle structured outputs
       let structuredOutput: unknown | undefined;
@@ -315,6 +390,7 @@ export class VertexAIDriver implements AIDriver {
         content,
         finishReason,
         structuredOutput,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         usage: response.usageMetadata ? {
           promptTokens: response.usageMetadata.promptTokenCount || 0,
           completionTokens: response.usageMetadata.candidatesTokenCount || 0,
@@ -361,6 +437,14 @@ export class VertexAIDriver implements AIDriver {
       }
     });
 
+    // Add tools configuration
+    if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+      request.tools = this.convertTools(mergedOptions.tools);
+    }
+    if (mergedOptions.toolChoice) {
+      request.toolConfig = this.convertToolChoice(mergedOptions.toolChoice);
+    }
+
     // Create client and generate stream
     const model = mergedOptions.model || this.defaultModel;
     const client = this.createClient(model, generationConfig);
@@ -393,8 +477,14 @@ export class VertexAIDriver implements AIDriver {
         .map(part => part.text || '')
         .join('');
 
+      // Extract tool calls
+      const toolCalls = this.extractToolCalls(candidate.content.parts as Part[]);
+
       // Map finish reason
-      const finishReason = finishReasonMap[candidate.finishReason || 'error'];
+      let finishReason = finishReasonMap[candidate.finishReason || 'error'];
+      if (toolCalls.length > 0) {
+        finishReason = 'tool_calls';
+      }
 
       // Handle structured outputs
       let structuredOutput: unknown | undefined;
@@ -410,6 +500,7 @@ export class VertexAIDriver implements AIDriver {
         content,
         finishReason,
         structuredOutput,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         usage: response.usageMetadata ? {
           promptTokens: response.usageMetadata.promptTokenCount || 0,
           completionTokens: response.usageMetadata.candidatesTokenCount || 0,
