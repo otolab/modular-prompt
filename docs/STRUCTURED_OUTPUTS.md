@@ -70,9 +70,11 @@ APIレベルでstructured outputsをサポート：
 - **MlxDriver**: JSON抽出ユーティリティを使用
 - **TestDriver / EchoDriver**: JSON抽出（詳細は[TEST_DRIVERS.md](./TEST_DRIVERS.md)）
 
-### 3. 未対応
+### 3. OpenAI互換型
 
-- **OllamaDriver**: 実装可能（OpenAI互換）
+OpenAIDriverを継承し、OpenAI互換APIを使用：
+
+- **OllamaDriver**: `response_format` APIパラメータを使用（OpenAIDriver継承）
 
 ## 使用方法
 
@@ -188,7 +190,7 @@ const data = result.structuredOutput ||
 | TestDriver | ✅ 対応済み | JSON抽出 | v0.2.1〜 |
 | EchoDriver | ✅ 対応済み | JSON抽出 | v0.2.1〜 |
 | MlxDriver | ✅ 対応済み | JSON抽出 | v0.2.0〜 |
-| OllamaDriver | ❌ 未対応 | - | 実装可能（OpenAI互換） |
+| OllamaDriver | ✅ 対応済み | response_format API（OpenAIDriver継承） | コード変更なし、OpenAI互換APIを利用 |
 
 ## トラブルシューティング
 
