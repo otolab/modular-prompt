@@ -1,5 +1,8 @@
 # MLX Capability公開機能のリファクタリング
 
+> **ステータス**: 完了・反映済み（2025-11-25）
+> **結果**: ModelSpecManagerを削減し、`getCapabilities()`メソッドを追加。TypeScript側とPython側の責務を明確化。1,853行のコード削減に成功。
+
 ## 背景
 
 nymphish-claudeでの利用を想定したcapability公開機能の実装において、設計の問題点が明らかになった：

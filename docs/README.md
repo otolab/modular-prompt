@@ -51,6 +51,19 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 ### 品質保証
 
 - **[テスト戦略と指針](./TESTING_STRATEGY.md)** - テストの分類、実装指針、品質基準
+- **[プロンプト検証テクニック](./PROMPT_VALIDATION_TECHNIQUES.md)** - プロンプト設計の検証手法
+
+## ツール機能
+
+### Function Calling
+
+- **[Tools仕様](./TOOLS_SPEC.md)** - Function Callingの仕様と実装ガイド
+
+## プロジェクト管理
+
+### ドキュメント管理
+
+- **[ドキュメント戦略](./DOCUMENT_STRATEGY.md)** - ドキュメント分類・配置ルール・ライフサイクル管理
 
 ---
 
