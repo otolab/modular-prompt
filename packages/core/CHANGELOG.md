@@ -1,5 +1,13 @@
 # @modular-prompt/core
 
+## 0.2.0
+
+### Minor Changes
+
+- ea719c3: feat(core): ToolCall 型を追加し MessageElement を Union 型に拡張
+
+  ToolCall 型を core に定義し、MessageElement を StandardMessageElement | ToolResultMessageElement の Union 型に変更。tools 会話ループのメッセージを Element 経由で表現可能にした。
+
 ## 0.1.10
 
 ### Patch Changes

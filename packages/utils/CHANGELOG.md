@@ -1,5 +1,12 @@
 # @modular-prompt/utils
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [ea719c3]
+  - @modular-prompt/core@0.2.0
+
 ## 0.2.1
 
 ### Patch Changes
