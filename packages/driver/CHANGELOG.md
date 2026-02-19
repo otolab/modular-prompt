@@ -1,5 +1,19 @@
 # @modular-prompt/driver
 
+## 0.6.0
+
+### Minor Changes
+
+- e0117fc: feat(driver): tools（Function Calling）サポートの追加
+
+  全ドライバー（OpenAI, Anthropic, GoogleGenAI, VertexAI, Ollama）に tools/function calling 機能を追加。
+  QueryOptions に tools/toolChoice、QueryResult に toolCalls を追加し、ストリーミング時の並列 tool calls 蓄積にも対応。
+
+### Patch Changes
+
+- Updated dependencies [d7c8e5c]
+  - @modular-prompt/utils@0.2.1
+
 ## 0.5.2
 
 ### Patch Changes

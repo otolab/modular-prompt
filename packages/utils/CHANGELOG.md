@@ -1,5 +1,13 @@
 # @modular-prompt/utils
 
+## 0.2.1
+
+### Patch Changes
+
+- d7c8e5c: fix(utils): logger の JSONL ファイル書き込み順序を修正
+
+  flushToFile の並列書き込みを逐次書き込みに変更し、エントリの書き込み順序を保証。
+
 ## 0.2.0
 
 ### Minor Changes
