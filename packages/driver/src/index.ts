@@ -9,7 +9,8 @@ export type {
   ToolFunction,
   ToolDefinition,
   ToolChoice,
-  ToolCall
+  ToolCall,
+  FinishReason
 } from './types.js';
 
 // Test driver

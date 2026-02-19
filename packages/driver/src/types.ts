@@ -87,8 +87,13 @@ export interface QueryResult {
   /** Tool calls selected by the model */
   toolCalls?: ToolCall[];
 
-  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
+  finishReason?: FinishReason;
 }
+
+/**
+ * Reason for finishing the query
+ */
+export type FinishReason = 'stop' | 'length' | 'error' | 'tool_calls';
 
 /**
  * Options for querying AI model
