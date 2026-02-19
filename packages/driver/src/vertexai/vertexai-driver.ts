@@ -55,6 +55,23 @@ const finishReasonMap: Record<FinishReason | 'error', QueryResult['finishReason'
 };
 
 /**
+ * Convert tool result content to a Record<string, unknown> for Gemini API's functionResponse.
+ * The Gemini API requires response to be a JSON object (Record<string, unknown>).
+ * Uses "output" key to wrap non-object values per API convention.
+ */
+function toFunctionResponsePayload(content: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return { output: parsed };
+  } catch {
+    return { output: content };
+  }
+}
+
+/**
  * VertexAI (Google Gemini) driver
  */
 export class VertexAIDriver implements AIDriver {
@@ -113,7 +130,7 @@ export class VertexAIDriver implements AIDriver {
               const toolContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
               result.push({
                 role: 'user',
-                parts: [{ functionResponse: { name: el.name || el.toolCallId, response: JSON.parse(toolContent) } }]
+                parts: [{ functionResponse: { name: el.name || el.toolCallId, response: toFunctionResponsePayload(toolContent) } }]
               });
             } else if ('toolCalls' in el && el.toolCalls) {
               const parts: Part[] = [];
@@ -214,7 +231,7 @@ export class VertexAIDriver implements AIDriver {
         parts: [{
           functionResponse: {
             name: message.name || message.toolCallId,
-            response: JSON.parse(message.content)
+            response: toFunctionResponsePayload(message.content)
           }
         }]
       };

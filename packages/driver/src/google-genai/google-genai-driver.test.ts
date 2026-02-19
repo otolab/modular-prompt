@@ -648,6 +648,110 @@ describe('GoogleGenAIDriver', () => {
         })
       });
     });
+
+    it('should wrap plain text tool result content in { output } object', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_456',
+              type: 'function',
+              function: { name: 'run_command', arguments: '{"cmd":"ls -l"}' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            content: 'total 24\n-rw-------  1 user  staff  4355 README.md',
+            toolCallId: 'call_456',
+            name: 'run_command'
+          }
+        ],
+        output: []
+      };
+
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      await driver.query(prompt);
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      const userMsgs = callArgs.contents.filter((c: { role: string }) => c.role === 'user');
+      const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
+        m.parts.some((p: { functionResponse?: unknown }) => p.functionResponse)
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.parts[0]).toMatchObject({
+        functionResponse: expect.objectContaining({
+          name: 'run_command',
+          response: { output: 'total 24\n-rw-------  1 user  staff  4355 README.md' }
+        })
+      });
+    });
+
+    it('should wrap JSON primitive and array tool result content in { output } object', async () => {
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+
+      // JSON数値
+      const promptNumber: CompiledPrompt = {
+        instructions: [],
+        data: [{
+          type: 'message',
+          role: 'tool',
+          content: '42',
+          toolCallId: 'call_1',
+          name: 'count'
+        }],
+        output: []
+      };
+      await driver.query(promptNumber);
+      let callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      let toolResult = callArgs.contents.find((c: { parts: unknown[] }) =>
+        c.parts?.some((p: { functionResponse?: unknown }) => p.functionResponse)
+      );
+      expect(toolResult.parts[0].functionResponse.response).toEqual({ output: 42 });
+
+      // JSON配列
+      const promptArray: CompiledPrompt = {
+        instructions: [],
+        data: [{
+          type: 'message',
+          role: 'tool',
+          content: '[1, 2, 3]',
+          toolCallId: 'call_2',
+          name: 'list'
+        }],
+        output: []
+      };
+      await driver.query(promptArray);
+      callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      toolResult = callArgs.contents.find((c: { parts: unknown[] }) =>
+        c.parts?.some((p: { functionResponse?: unknown }) => p.functionResponse)
+      );
+      expect(toolResult.parts[0].functionResponse.response).toEqual({ output: [1, 2, 3] });
+
+      // JSON文字列
+      const promptString: CompiledPrompt = {
+        instructions: [],
+        data: [{
+          type: 'message',
+          role: 'tool',
+          content: '"hello"',
+          toolCallId: 'call_3',
+          name: 'greet'
+        }],
+        output: []
+      };
+      await driver.query(promptString);
+      callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      toolResult = callArgs.contents.find((c: { parts: unknown[] }) =>
+        c.parts?.some((p: { functionResponse?: unknown }) => p.functionResponse)
+      );
+      expect(toolResult.parts[0].functionResponse.response).toEqual({ output: 'hello' });
+    });
   });
 
 });

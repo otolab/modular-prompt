@@ -150,6 +150,23 @@ export class GoogleGenAIDriver implements AIDriver {
   }
 
   /**
+   * Convert tool result content to a Record<string, unknown> for Gemini API's functionResponse.
+   * The Gemini API requires response to be a JSON object (Record<string, unknown>).
+   * Uses "output" key to wrap non-object values per API convention.
+   */
+  private toFunctionResponsePayload(content: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+      return { output: parsed };
+    } catch {
+      return { output: content };
+    }
+  }
+
+  /**
    * Convert Element to Content (structure-preserving conversion)
    * Used for conversation history where role matters
    */
@@ -162,7 +179,7 @@ export class GoogleGenAIDriver implements AIDriver {
       if (element.role === 'tool') {
         return {
           role: 'user',
-          parts: [{ functionResponse: { name: element.name || element.toolCallId, response: JSON.parse(element.content) } }]
+          parts: [{ functionResponse: { name: element.name || element.toolCallId, response: this.toFunctionResponsePayload(element.content) } }]
         };
       } else if ('toolCalls' in element && element.toolCalls) {
         const parts: Part[] = [];
@@ -218,7 +235,7 @@ export class GoogleGenAIDriver implements AIDriver {
         parts: [{
           functionResponse: {
             name: message.name || message.toolCallId,
-            response: JSON.parse(message.content)
+            response: this.toFunctionResponsePayload(message.content)
           }
         }]
       };

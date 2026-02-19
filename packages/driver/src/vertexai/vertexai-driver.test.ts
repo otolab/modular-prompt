@@ -534,6 +534,47 @@ describe('VertexAIDriver', () => {
         })
       });
     });
+
+    it('should wrap plain text tool result content in { output } object', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_456',
+              type: 'function',
+              function: { name: 'run_command', arguments: '{"cmd":"ls -l"}' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            content: 'total 24\n-rw-------  1 user  staff  4355 README.md',
+            toolCallId: 'call_456',
+            name: 'run_command'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledRequest = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      const userMsgs = calledRequest.contents.filter((c: { role: string }) => c.role === 'user');
+      const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
+        m.parts.some((p: { functionResponse?: unknown }) => p.functionResponse)
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.parts[0]).toMatchObject({
+        functionResponse: expect.objectContaining({
+          name: 'run_command',
+          response: { output: 'total 24\n-rw-------  1 user  staff  4355 README.md' }
+        })
+      });
+    });
   });
 
 });
