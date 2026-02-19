@@ -25,6 +25,7 @@ describe('Logger', () => {
       logFile: undefined,
     });
     logger.clearLogEntries();
+    Logger.clearFileQueue();
 
     // 既存のテストログファイルを削除
     if (existsSync(testLogFile)) {

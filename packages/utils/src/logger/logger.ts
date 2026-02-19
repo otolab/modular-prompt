@@ -37,9 +37,6 @@ const envLogLevel: LogLevel | false =
   && process.env.MODULAR_PROMPT_LOG_LEVEL as LogLevel;
 
 export class Logger {
-  // 進行中のファイル書き込みPromiseを追跡
-  private static pendingWrites: Promise<void>[] = [];
-
   // グローバル設定（全インスタンスで共有）
   private static config: LoggerConfig = {
     level: envLogLevel || 'info',
@@ -352,6 +349,11 @@ export class Logger {
     Logger.logEntries = [];
   }
 
+  // ファイル書き込みキューをクリア
+  static clearFileQueue(): void {
+    Logger.fileQueue = [];
+  }
+
   // インスタンス設定をクリア（テスト用）
   clearInstanceConfig(): void {
     this.instanceConfig = {};
@@ -420,13 +422,10 @@ export class Logger {
       }
     }
 
-    // 全エントリをファイルに書き込み
-    const writePromises = entries.map(entry => this.writeToFile(entry));
-    Logger.pendingWrites.push(...writePromises);
-
-    // 全ての書き込み完了を待つ
-    await Promise.allSettled(Logger.pendingWrites);
-    Logger.pendingWrites = [];
+    // 全エントリを順序を保持してファイルに書き込み
+    for (const entry of entries) {
+      await this.writeToFile(entry);
+    }
 
     // 書き込み完了後、キューから削除
     if (!filterByContext) {
