@@ -1,5 +1,13 @@
 # @modular-prompt/simple-chat
 
+## 0.1.20
+
+### Patch Changes
+
+- Updated dependencies [f17538c]
+  - @modular-prompt/driver@0.6.1
+  - @modular-prompt/process@0.1.18
+
 ## 0.1.19
 
 ### Patch Changes
