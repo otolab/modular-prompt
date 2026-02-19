@@ -1,5 +1,8 @@
 # MLX ModelSpec → MlxModelConfig リネーム計画
 
+> **ステータス**: 完了・反映済み（2025-11-25）
+> **結果**: mlx-capability-refactoring.v1.mdの実装によりModelSpecManager自体が削除され、リネームは不要となった。
+
 ## リネーム対象の型
 
 ### 主要な型
