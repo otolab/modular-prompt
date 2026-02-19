@@ -1,6 +1,6 @@
 {
   "name": "@modular-prompt/utils",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Utility functions for modular-prompt",
   "type": "module",
   "main": "./dist/index.js",
