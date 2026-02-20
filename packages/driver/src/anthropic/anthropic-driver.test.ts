@@ -209,17 +209,14 @@ describe('AnthropicDriver', () => {
 
     const toolDefs: ToolDefinition[] = [
       {
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          description: 'Get current weather for a location',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: { type: 'string', description: 'City name' }
-            },
-            required: ['location']
-          }
+        name: 'get_weather',
+        description: 'Get current weather for a location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: { type: 'string', description: 'City name' }
+          },
+          required: ['location']
         }
       }
     ];
@@ -291,11 +288,8 @@ describe('AnthropicDriver', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls![0]).toEqual({
         id: 'toolu_abc123',
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          arguments: '{"location":"Tokyo"}'
-        }
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
       });
     });
 
@@ -303,15 +297,12 @@ describe('AnthropicDriver', () => {
       const multiToolDefs: ToolDefinition[] = [
         ...toolDefs,
         {
-          type: 'function',
-          function: {
-            name: 'get_time',
-            description: 'Get current time',
-            parameters: {
-              type: 'object',
-              properties: {
-                timezone: { type: 'string' }
-              }
+          name: 'get_time',
+          description: 'Get current time',
+          parameters: {
+            type: 'object',
+            properties: {
+              timezone: { type: 'string' }
             }
           }
         }
@@ -334,10 +325,10 @@ describe('AnthropicDriver', () => {
       const result = await driver.query(prompt, { tools: multiToolDefs });
 
       expect(result.toolCalls).toHaveLength(2);
-      expect(result.toolCalls![0].function.name).toBe('get_weather');
-      expect(result.toolCalls![0].function.arguments).toBe('{"location":"Tokyo"}');
-      expect(result.toolCalls![1].function.name).toBe('get_time');
-      expect(result.toolCalls![1].function.arguments).toBe('{"timezone":"JST"}');
+      expect(result.toolCalls![0].name).toBe('get_weather');
+      expect(result.toolCalls![0].arguments).toEqual({ location: 'Tokyo' });
+      expect(result.toolCalls![1].name).toBe('get_time');
+      expect(result.toolCalls![1].arguments).toEqual({ timezone: 'JST' });
       expect(result.finishReason).toBe('tool_calls');
     });
 
@@ -392,7 +383,7 @@ describe('AnthropicDriver', () => {
 
       await driver.query(prompt, {
         tools: toolDefs,
-        toolChoice: { type: 'function', function: { name: 'get_weather' } }
+        toolChoice: { name: 'get_weather' }
       });
 
       expect(mockCreate).toHaveBeenCalledWith(
@@ -466,7 +457,7 @@ describe('AnthropicDriver', () => {
 
       expect(result.content).toBe('Let me check the weather.');
       expect(result.toolCalls).toHaveLength(1);
-      expect(result.toolCalls![0].function.arguments).toBe('{"location":"Nagoya"}');
+      expect(result.toolCalls![0].arguments).toEqual({ location: 'Nagoya' });
       expect(result.finishReason).toBe('tool_calls');
     });
 
@@ -492,7 +483,7 @@ describe('AnthropicDriver', () => {
 
       const finalResult = await result;
       expect(finalResult.toolCalls).toHaveLength(1);
-      expect(finalResult.toolCalls![0].function.name).toBe('get_weather');
+      expect(finalResult.toolCalls![0].name).toBe('get_weather');
     });
 
     it('should yield only text in stream when mixed with tool calls', async () => {
@@ -540,7 +531,7 @@ describe('AnthropicDriver', () => {
 
       const result = await driver.query(prompt, { tools: toolDefs });
 
-      expect(result.toolCalls![0].function.arguments).toBe('{"location":"Hiroshima"}');
+      expect(result.toolCalls![0].arguments).toEqual({ location: 'Hiroshima' });
     });
 
     it('should extract usage from message_start and message_delta', async () => {
@@ -587,17 +578,18 @@ describe('AnthropicDriver', () => {
             content: 'Let me check the weather',
             toolCalls: [{
               id: 'call_123',
-              type: 'function',
-              function: { name: 'get_weather', arguments: '{"city":"Tokyo"}' }
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
             }]
           },
           // ツール実行結果
           {
             type: 'message',
             role: 'tool',
-            content: '{"temp":25}',
             toolCallId: 'call_123',
-            name: 'get_weather'
+            name: 'get_weather',
+            kind: 'data',
+            value: { temp: 25 }
           }
         ],
         output: []
@@ -636,7 +628,7 @@ describe('AnthropicDriver', () => {
       const toolResultMsg = calledParams.messages.find(
         (m: { role: string; content: unknown[] }) =>
           m.role === 'user' && Array.isArray(m.content) &&
-          m.content.some((c: { type: string }) => c.type === 'tool_result')
+          m.content.some((c: unknown) => (c as { type: string }).type === 'tool_result')
       );
       expect(toolResultMsg).toBeDefined();
       expect(toolResultMsg.content).toContainEqual(
@@ -644,6 +636,61 @@ describe('AnthropicDriver', () => {
           type: 'tool_result',
           tool_use_id: 'call_123',
           content: '{"temp":25}'
+        })
+      );
+    });
+
+    it('should convert tool result with error kind to Anthropic API format with is_error flag', async () => {
+      const toolPrompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_err',
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_err',
+            name: 'get_weather',
+            kind: 'error',
+            value: 'Connection timeout'
+          }
+        ],
+        output: []
+      };
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Error occurred' } };
+          yield { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 10 } };
+        }
+      };
+      mockCreate.mockResolvedValue(mockStream);
+
+      await driver.query(toolPrompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+
+      // tool result: role: 'user', content配列にtool_resultを含む（is_error: true）
+      const toolResultMsg = calledParams.messages.find(
+        (m: { role: string; content: unknown[] }) =>
+          m.role === 'user' && Array.isArray(m.content) &&
+          m.content.some((c: unknown) => (c as { type: string }).type === 'tool_result')
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.content).toContainEqual(
+        expect.objectContaining({
+          type: 'tool_result',
+          tool_use_id: 'call_err',
+          content: 'Connection timeout',
+          is_error: true
         })
       );
     });

@@ -24,14 +24,21 @@ export interface StandardMessageElement {
   toolCalls?: ToolCall[];
 }
 
+// ツール実行結果の種類
+export type ToolResultKind = 'text' | 'data' | 'error';
+
 // ツール結果メッセージ要素
 export interface ToolResultMessageElement {
   type: 'message';
   role: 'tool';
-  content: string;
+  /** 対応するToolCallのID */
   toolCallId: string;
-  /** GoogleGenAI/VertexAIのfunctionResponseで必要 */
-  name?: string;
+  /** 関数名 */
+  name: string;
+  /** 値の種類を示すタグ */
+  kind: ToolResultKind;
+  /** ツール実行結果の値そのもの */
+  value: unknown;
 }
 
 // メッセージ要素（Union型）
@@ -72,17 +79,16 @@ export interface SubSectionElement<TContext = any> {
   items: (string | SimpleDynamicContent<TContext>)[];
 }
 
-// ツール呼び出し結果
+// ツール呼び出し（モデル → アプリ）
 export interface ToolCall {
   /** ツール呼び出しの一意ID */
   id: string;
-  type: 'function';
-  function: {
-    /** 関数名 */
-    name: string;
-    /** 引数のJSON文字列 */
-    arguments: string;
-  };
+  /** 関数名 */
+  name: string;
+  /** 引数データ（ネイティブオブジェクト） */
+  arguments: Record<string, unknown>;
+  /** ドライバー固有のコンテキスト（次ターンへのパススルー用） */
+  metadata?: Record<string, unknown>;
 }
 
 // JSON スキーマ要素

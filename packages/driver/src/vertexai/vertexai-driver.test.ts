@@ -212,15 +212,12 @@ describe('VertexAIDriver', () => {
   describe('tools support', () => {
     const toolDefs: ToolDefinition[] = [
       {
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          description: 'Get the weather for a location',
-          parameters: {
-            type: 'object',
-            properties: { location: { type: 'string' } },
-            required: ['location']
-          }
+        name: 'get_weather',
+        description: 'Get the weather for a location',
+        parameters: {
+          type: 'object',
+          properties: { location: { type: 'string' } },
+          required: ['location']
         }
       }
     ];
@@ -286,7 +283,7 @@ describe('VertexAIDriver', () => {
     it('should pass specific function toolChoice as ANY with allowedFunctionNames', async () => {
       await driver.query(prompt, {
         tools: toolDefs,
-        toolChoice: { type: 'function', function: { name: 'get_weather' } }
+        toolChoice: { name: 'get_weather' }
       });
 
       expect(mockGenerateContent).toHaveBeenCalledWith(
@@ -340,11 +337,8 @@ describe('VertexAIDriver', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls![0]).toEqual({
         id: 'call_0',
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          arguments: '{"location":"Tokyo"}'
-        }
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
       });
     });
 
@@ -367,8 +361,8 @@ describe('VertexAIDriver', () => {
       const result = await driver.query(prompt, { tools: toolDefs });
 
       expect(result.toolCalls).toHaveLength(2);
-      expect(result.toolCalls![0].function.name).toBe('get_weather');
-      expect(result.toolCalls![1].function.name).toBe('get_weather');
+      expect(result.toolCalls![0].name).toBe('get_weather');
+      expect(result.toolCalls![1].name).toBe('get_weather');
       expect(result.toolCalls![0].id).toBe('call_0');
       expect(result.toolCalls![1].id).toBe('call_1');
     });
@@ -422,7 +416,7 @@ describe('VertexAIDriver', () => {
       const finalResult = await result;
       expect(finalResult.finishReason).toBe('tool_calls');
       expect(finalResult.toolCalls).toHaveLength(1);
-      expect(finalResult.toolCalls![0].function.name).toBe('get_weather');
+      expect(finalResult.toolCalls![0].name).toBe('get_weather');
     });
 
     it('should use tools from defaultOptions', async () => {
@@ -485,17 +479,18 @@ describe('VertexAIDriver', () => {
             content: 'Let me check the weather',
             toolCalls: [{
               id: 'call_123',
-              type: 'function',
-              function: { name: 'get_weather', arguments: '{"city":"Tokyo"}' }
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
             }]
           },
           // ツール実行結果
           {
             type: 'message',
             role: 'tool',
-            content: '{"temp":25}',
             toolCallId: 'call_123',
-            name: 'get_weather'
+            name: 'get_weather',
+            kind: 'data',
+            value: { temp: 25 }
           }
         ],
         output: []
@@ -524,13 +519,57 @@ describe('VertexAIDriver', () => {
       // user message (tool result): role: 'user', parts[0].functionResponseを含む
       const userMsgs = calledRequest.contents.filter((c: { role: string }) => c.role === 'user');
       const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
-        m.parts.some((p: { functionResponse?: unknown }) => p.functionResponse)
+        m.parts.some((p: unknown) => (p as { functionResponse?: unknown }).functionResponse)
       );
       expect(toolResultMsg).toBeDefined();
       expect(toolResultMsg.parts[0]).toMatchObject({
         functionResponse: expect.objectContaining({
           name: 'get_weather',
           response: { temp: 25 }
+        })
+      });
+    });
+
+    it('should convert tool result with error kind to VertexAI API format', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_err',
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_err',
+            name: 'get_weather',
+            kind: 'error',
+            value: 'Connection timeout'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledRequest = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+
+      // user message (tool result): functionResponse with error wrapper
+      const userMsgs = calledRequest.contents.filter((c: { role: string }) => c.role === 'user');
+      const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
+        m.parts.some((p: unknown) => (p as { functionResponse?: unknown }).functionResponse)
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.parts[0]).toMatchObject({
+        functionResponse: expect.objectContaining({
+          name: 'get_weather',
+          response: { error: 'Connection timeout' }
         })
       });
     });

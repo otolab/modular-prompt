@@ -114,17 +114,14 @@ describe('OpenAIDriver', () => {
   describe('tools support', () => {
     const toolDefs: ToolDefinition[] = [
       {
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          description: 'Get the weather for a location',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: { type: 'string' }
-            },
-            required: ['location']
-          }
+        name: 'get_weather',
+        description: 'Get the weather for a location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: { type: 'string' }
+          },
+          required: ['location']
         }
       }
     ];
@@ -143,7 +140,20 @@ describe('OpenAIDriver', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          tools: toolDefs,
+          tools: [{
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' }
+                },
+                required: ['location']
+              }
+            }
+          }],
           tool_choice: 'auto'
         })
       );
@@ -234,11 +244,8 @@ describe('OpenAIDriver', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls![0]).toEqual({
         id: 'call_abc123',
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          arguments: '{"location":"Tokyo"}'
-        }
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
       });
     });
 
@@ -293,8 +300,16 @@ describe('OpenAIDriver', () => {
       } as OpenAIQueryOptions);
 
       expect(result.toolCalls).toHaveLength(2);
-      expect(result.toolCalls![0].id).toBe('call_1');
-      expect(result.toolCalls![1].id).toBe('call_2');
+      expect(result.toolCalls![0]).toEqual({
+        id: 'call_1',
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
+      });
+      expect(result.toolCalls![1]).toEqual({
+        id: 'call_2',
+        name: 'get_weather',
+        arguments: { location: 'Osaka' }
+      });
     });
 
     it('should not include toolCalls when no tool calls in response', async () => {
@@ -354,7 +369,7 @@ describe('OpenAIDriver', () => {
         output: []
       };
 
-      const specificChoice = { type: 'function' as const, function: { name: 'get_weather' } };
+      const specificChoice = { name: 'get_weather' };
       await driver.query(prompt, {
         tools: toolDefs,
         toolChoice: specificChoice
@@ -362,7 +377,7 @@ describe('OpenAIDriver', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          tool_choice: specificChoice
+          tool_choice: { type: 'function', function: { name: 'get_weather' } }
         })
       );
     });
@@ -386,7 +401,21 @@ describe('OpenAIDriver', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          tools: toolDefs,
+          tools: [{
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' }
+                },
+                required: ['location']
+              },
+              strict: undefined
+            }
+          }],
           tool_choice: 'auto'
         })
       );
@@ -493,7 +522,7 @@ describe('OpenAIDriver', () => {
 
       expect(result.content).toBe('Let me check the weather.');
       expect(result.toolCalls).toHaveLength(1);
-      expect(result.toolCalls![0].function.name).toBe('get_weather');
+      expect(result.toolCalls![0].name).toBe('get_weather');
       expect(result.finishReason).toBe('tool_calls');
     });
 
@@ -665,13 +694,13 @@ describe('OpenAIDriver', () => {
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls![0]).toEqual({
         id: 'call_a',
-        type: 'function',
-        function: { name: 'get_weather', arguments: '{"city":"tokyo"}' }
+        name: 'get_weather',
+        arguments: { city: 'tokyo' }
       });
       expect(result.toolCalls![1]).toEqual({
         id: 'call_b',
-        type: 'function',
-        function: { name: 'get_time', arguments: '{"tz":"JST"}' }
+        name: 'get_time',
+        arguments: { tz: 'JST' }
       });
     });
   });
@@ -722,17 +751,18 @@ describe('OpenAIDriver', () => {
             content: 'Let me check the weather',
             toolCalls: [{
               id: 'call_123',
-              type: 'function',
-              function: { name: 'get_weather', arguments: '{"city":"Tokyo"}' }
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
             }]
           },
           // ツール実行結果
           {
             type: 'message',
             role: 'tool',
-            content: '{"temp":25}',
             toolCallId: 'call_123',
-            name: 'get_weather'
+            name: 'get_weather',
+            kind: 'data',
+            value: { temp: 25 }
           }
         ],
         output: []
@@ -763,6 +793,44 @@ describe('OpenAIDriver', () => {
           role: 'tool',
           content: '{"temp":25}',
           tool_call_id: 'call_123'
+        })
+      );
+    });
+
+    it('should convert tool result with error kind to API format', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_err',
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_err',
+            name: 'get_weather',
+            kind: 'error',
+            value: 'Connection timeout'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      expect(calledParams.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'tool',
+          content: '{"error":"Connection timeout"}',
+          tool_call_id: 'call_err'
         })
       );
     });

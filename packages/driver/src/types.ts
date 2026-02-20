@@ -1,8 +1,7 @@
-import type { FormatterOptions } from './formatter/types.js';
-import type { ToolCall } from '@modular-prompt/core';
+import type { ToolCall, ToolResultKind } from '@modular-prompt/core';
 
 // Re-export from core for convenience
-export type { CompiledPrompt, ToolCall } from '@modular-prompt/core';
+export type { CompiledPrompt, ToolCall, ToolResultKind } from '@modular-prompt/core';
 
 /**
  * Chat message role
@@ -31,11 +30,14 @@ export interface AssistantToolCallMessage {
  */
 export interface ToolResultMessage {
   role: 'tool';
-  content: string;
   /** ID of the tool call this result is for */
   toolCallId: string;
-  /** Function name (required for GoogleGenAI/VertexAI) */
-  name?: string;
+  /** Function name */
+  name: string;
+  /** Kind of the result value */
+  kind: ToolResultKind;
+  /** The result value itself */
+  value: unknown;
 }
 
 /**
@@ -58,9 +60,9 @@ export function isToolResult(message: ChatMessage): message is ToolResultMessage
 }
 
 /**
- * Tool function definition
+ * Tool definition
  */
-export interface ToolFunction {
+export interface ToolDefinition {
   /** Function name (a-z, A-Z, 0-9, _, - up to 64 chars) */
   name: string;
   /** Description used by the model to decide when to call the tool */
@@ -72,21 +74,13 @@ export interface ToolFunction {
 }
 
 /**
- * Tool definition wrapper
- */
-export interface ToolDefinition {
-  type: 'function';
-  function: ToolFunction;
-}
-
-/**
  * Tool usage strategy
  */
 export type ToolChoice =
   | 'auto'      // Model decides automatically (default)
   | 'none'      // Disable tool usage
   | 'required'  // Must use at least one tool
-  | { type: 'function'; function: { name: string } };  // Force specific tool
+  | { name: string };  // Force specific tool
 
 
 /**

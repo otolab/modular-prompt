@@ -117,9 +117,28 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       
     case 'message': {
       // Preserve original role
-      const messageContent = typeof element.content === 'string' 
-        ? element.content 
-        : JSON.stringify(element.content);
+      let messageContent: string;
+      if (element.role === 'tool') {
+        // ToolResultMessageElement
+        switch (element.kind) {
+          case 'text':
+            messageContent = String(element.value);
+            break;
+          case 'data':
+            messageContent = JSON.stringify(element.value);
+            break;
+          case 'error':
+            messageContent = String(element.value);
+            break;
+          default:
+            messageContent = String(element.value);
+        }
+      } else {
+        // StandardMessageElement
+        messageContent = typeof element.content === 'string'
+          ? element.content
+          : JSON.stringify(element.content);
+      }
       return [{
         role: element.role as 'system' | 'user' | 'assistant',
         content: messageContent

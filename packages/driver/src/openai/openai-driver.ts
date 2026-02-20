@@ -76,18 +76,27 @@ export class OpenAIDriver implements AIDriver {
         content: message.content || null,
         tool_calls: message.toolCalls.map(tc => ({
           id: tc.id,
-          type: tc.type,
+          type: 'function' as const,
           function: {
-            name: tc.function.name,
-            arguments: tc.function.arguments
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments)
           }
         }))
       };
     } else if (isToolResult(message)) {
       // ToolResultMessage
+      // Convert kind+value to OpenAI content format
+      let content: string;
+      if (message.kind === 'text') {
+        content = String(message.value);
+      } else if (message.kind === 'data') {
+        content = JSON.stringify(message.value);
+      } else { // 'error'
+        content = JSON.stringify({ error: message.value });
+      }
       return {
         role: 'tool',
-        content: message.content,
+        content,
         tool_call_id: message.toolCallId
       };
     } else {
@@ -120,10 +129,20 @@ export class OpenAIDriver implements AIDriver {
           } else if (el.type === 'message') {
             // Handle message elements separately
             if (el.role === 'tool') {
+              // ToolResultMessageElement
+              const toolResultEl = el as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
+              let toolContent: string;
+              if (toolResultEl.kind === 'text') {
+                toolContent = String(toolResultEl.value);
+              } else if (toolResultEl.kind === 'data') {
+                toolContent = JSON.stringify(toolResultEl.value);
+              } else { // 'error'
+                toolContent = JSON.stringify({ error: toolResultEl.value });
+              }
               messages.push({
                 role: 'tool',
-                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
-                tool_call_id: el.toolCallId
+                content: toolContent,
+                tool_call_id: toolResultEl.toolCallId
               });
             } else if ('toolCalls' in el && el.toolCalls) {
               messages.push({
@@ -131,8 +150,8 @@ export class OpenAIDriver implements AIDriver {
                 content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
                 tool_calls: el.toolCalls.map((tc: ToolCall) => ({
                   id: tc.id,
-                  type: tc.type,
-                  function: { name: tc.function.name, arguments: tc.function.arguments }
+                  type: 'function' as const,
+                  function: { name: tc.name, arguments: JSON.stringify(tc.arguments) }
                 }))
               });
             } else {
@@ -216,6 +235,34 @@ export class OpenAIDriver implements AIDriver {
       const mergedOptions = { ...this.defaultOptions, ...openaiOptions };
       const messages = this.compiledPromptToMessages(prompt);
 
+      // Convert tools from intermediate format to OpenAI format
+      const tools: ChatCompletionCreateParams['tools'] = mergedOptions.tools
+        ? mergedOptions.tools.map(tool => ({
+            type: 'function' as const,
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters,
+              strict: tool.strict
+            }
+          }))
+        : undefined;
+
+      // Convert toolChoice from intermediate format to OpenAI format
+      let tool_choice: ChatCompletionCreateParams['tool_choice'];
+      if (mergedOptions.toolChoice) {
+        if (typeof mergedOptions.toolChoice === 'string') {
+          // 'auto', 'none', 'required' - pass as-is
+          tool_choice = mergedOptions.toolChoice;
+        } else {
+          // { name: string } → { type: 'function', function: { name } }
+          tool_choice = {
+            type: 'function' as const,
+            function: { name: mergedOptions.toolChoice.name }
+          };
+        }
+      }
+
       const params: ChatCompletionCreateParams = {
         model: mergedOptions.model || this.defaultModel,
         messages,
@@ -226,8 +273,8 @@ export class OpenAIDriver implements AIDriver {
         presence_penalty: mergedOptions.presencePenalty,
         stop: mergedOptions.stop,
         response_format: prompt.metadata?.outputSchema ? { type: 'json_object' } : undefined,
-        tools: mergedOptions.tools as ChatCompletionCreateParams['tools'],
-        tool_choice: mergedOptions.toolChoice as ChatCompletionCreateParams['tool_choice'],
+        tools,
+        tool_choice,
         stream: true
       };
 
@@ -337,14 +384,21 @@ export class OpenAIDriver implements AIDriver {
         // Build tool calls from accumulated deltas
         let toolCalls: ToolCall[] | undefined;
         if (toolCallDeltas.size > 0) {
-          toolCalls = Array.from(toolCallDeltas.values()).map(tc => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: {
-              name: tc.name,
-              arguments: tc.arguments
+          toolCalls = Array.from(toolCallDeltas.values()).map(tc => {
+            // Parse arguments string to object
+            let parsedArgs: Record<string, unknown>;
+            try {
+              parsedArgs = JSON.parse(tc.arguments);
+            } catch {
+              // If parsing fails, use empty object
+              parsedArgs = {};
             }
-          }));
+            return {
+              id: tc.id,
+              name: tc.name,
+              arguments: parsedArgs
+            };
+          });
         }
 
         return {
