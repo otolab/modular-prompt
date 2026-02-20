@@ -115,12 +115,31 @@ export class DefaultFormatter implements ElementFormatter {
   private formatMessage(element: MessageElement): string {
     const { markers } = this.options;
     const role = element.role.toUpperCase();
-    
-    // Convert content to string if it's an Attachment array
-    const contentStr = typeof element.content === 'string' 
-      ? element.content 
-      : JSON.stringify(element.content);
-    
+
+    // Convert content to string based on message type
+    let contentStr: string;
+    if (element.role === 'tool') {
+      // ToolResultMessageElement
+      switch (element.kind) {
+        case 'text':
+          contentStr = String(element.value);
+          break;
+        case 'data':
+          contentStr = JSON.stringify(element.value);
+          break;
+        case 'error':
+          contentStr = String(element.value);
+          break;
+        default:
+          contentStr = String(element.value);
+      }
+    } else {
+      // StandardMessageElement
+      contentStr = typeof element.content === 'string'
+        ? element.content
+        : JSON.stringify(element.content);
+    }
+
     // Use special tokens or custom markers if available
     if (this.specialTokens && this.specialTokens[element.role]) {
       const token = this.specialTokens[element.role];
@@ -128,14 +147,14 @@ export class DefaultFormatter implements ElementFormatter {
         return `${token.start.text}${contentStr}${token.end.text}`;
       }
     }
-    
+
     // Use role-specific markers if configured
     if (markers.messageRole && markers.messageContent) {
       const roleMarker = markers.messageRole.replace('{role}', role);
       const contentMarker = markers.messageContent.replace('{content}', contentStr);
       return roleMarker + contentMarker;
     }
-    
+
     // Default formatting with XML-like tags for MLX models
     return `<!-- begin of ${role} -->\n${contentStr.trim()}\n<!-- end of ${role} -->`;
   }
