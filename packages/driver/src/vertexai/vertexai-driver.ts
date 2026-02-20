@@ -110,17 +110,28 @@ export class VertexAIDriver implements AIDriver {
 
             // Handle tool/toolCalls messages
             if (el.role === 'tool') {
-              const toolContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
+              // ToolResultMessageElement - convert kind+value to response format
+              const toolResultEl = el as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
+              let response: object;
+              if (toolResultEl.kind === 'text') {
+                response = { output: toolResultEl.value };
+              } else if (toolResultEl.kind === 'data') {
+                // Check if value is a plain object
+                const isPlainObject = typeof toolResultEl.value === 'object' && toolResultEl.value !== null && !Array.isArray(toolResultEl.value);
+                response = isPlainObject ? (toolResultEl.value as object) : { output: toolResultEl.value };
+              } else { // 'error'
+                response = { error: toolResultEl.value };
+              }
               result.push({
                 role: 'user',
-                parts: [{ functionResponse: { name: el.name || el.toolCallId, response: JSON.parse(toolContent) } }]
+                parts: [{ functionResponse: { name: toolResultEl.name, response } }]
               });
             } else if ('toolCalls' in el && el.toolCalls) {
               const parts: Part[] = [];
               const content = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
               if (content) parts.push({ text: content });
               for (const tc of el.toolCalls) {
-                parts.push({ functionCall: { name: tc.function.name, args: JSON.parse(tc.function.arguments) } });
+                parts.push({ functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } });
               }
               result.push({ role: 'model', parts });
             } else {
@@ -201,20 +212,30 @@ export class VertexAIDriver implements AIDriver {
       for (const tc of message.toolCalls) {
         parts.push({
           functionCall: {
-            name: tc.function.name,
-            args: JSON.parse(tc.function.arguments)
+            name: tc.name,
+            args: tc.arguments as Record<string, unknown>
           }
         });
       }
       return { role: 'model', parts };
     } else if (isToolResult(message)) {
-      // ToolResultMessage
+      // ToolResultMessage - convert kind+value to response format
+      let response: object;
+      if (message.kind === 'text') {
+        response = { output: message.value };
+      } else if (message.kind === 'data') {
+        // Check if value is a plain object
+        const isPlainObject = typeof message.value === 'object' && message.value !== null && !Array.isArray(message.value);
+        response = isPlainObject ? (message.value as object) : { output: message.value };
+      } else { // 'error'
+        response = { error: message.value };
+      }
       return {
         role: 'user',
         parts: [{
           functionResponse: {
-            name: message.name || message.toolCallId,
-            response: JSON.parse(message.content)
+            name: message.name,
+            response
           }
         }]
       };
@@ -336,11 +357,11 @@ export class VertexAIDriver implements AIDriver {
   private convertTools(tools: ToolDefinition[]) {
     return [{
       functionDeclarations: tools.map(tool => ({
-        name: tool.function.name,
-        description: tool.function.description,
+        name: tool.name,
+        description: tool.description,
         // JSON Schema → VertexAI FunctionDeclarationSchema (reuse convertJsonSchema + cast)
-        ...(tool.function.parameters
-          ? { parameters: this.convertJsonSchema(tool.function.parameters) as unknown as import('@google-cloud/vertexai').FunctionDeclarationSchema }
+        ...(tool.parameters
+          ? { parameters: this.convertJsonSchema(tool.parameters) as unknown as import('@google-cloud/vertexai').FunctionDeclarationSchema }
           : {}),
       }))
     }];
@@ -362,7 +383,7 @@ export class VertexAIDriver implements AIDriver {
     return {
       functionCallingConfig: {
         mode: FunctionCallingMode.ANY,
-        allowedFunctionNames: [toolChoice.function.name],
+        allowedFunctionNames: [toolChoice.name],
       },
     };
   }
@@ -378,11 +399,8 @@ export class VertexAIDriver implements AIDriver {
         const fc = part.functionCall;
         toolCalls.push({
           id: `call_${toolCalls.length}`,
-          type: 'function',
-          function: {
-            name: fc.name,
-            arguments: JSON.stringify(fc.args ?? {}),
-          },
+          name: fc.name,
+          arguments: (fc.args ?? {}) as Record<string, unknown>,
         });
       }
     }

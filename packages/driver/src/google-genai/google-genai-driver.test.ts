@@ -195,17 +195,14 @@ describe('GoogleGenAIDriver', () => {
   describe('tools support', () => {
     const toolDefs: ToolDefinition[] = [
       {
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          description: 'Get the weather for a location',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: { type: 'string' }
-            },
-            required: ['location']
-          }
+        name: 'get_weather',
+        description: 'Get the weather for a location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: { type: 'string' }
+          },
+          required: ['location']
         }
       }
     ];
@@ -274,7 +271,7 @@ describe('GoogleGenAIDriver', () => {
 
       await driver.query(basicPrompt, {
         tools: toolDefs,
-        toolChoice: { type: 'function', function: { name: 'get_weather' } }
+        toolChoice: { name: 'get_weather' }
       });
 
       const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
@@ -324,11 +321,8 @@ describe('GoogleGenAIDriver', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls![0]).toEqual({
         id: 'call_abc123',
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          arguments: '{"location":"Tokyo"}'
-        }
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
       });
     });
 
@@ -368,9 +362,9 @@ describe('GoogleGenAIDriver', () => {
       expect(result.finishReason).toBe('tool_calls');
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls![0].id).toBe('call_1');
-      expect(result.toolCalls![0].function.arguments).toBe('{"location":"Tokyo"}');
+      expect(result.toolCalls![0].arguments).toEqual({ location: 'Tokyo' });
       expect(result.toolCalls![1].id).toBe('call_2');
-      expect(result.toolCalls![1].function.arguments).toBe('{"location":"Osaka"}');
+      expect(result.toolCalls![1].arguments).toEqual({ location: 'Osaka' });
     });
 
     it('should generate fallback id when response has no id', async () => {
@@ -482,11 +476,8 @@ describe('GoogleGenAIDriver', () => {
       expect(finalResult.toolCalls).toHaveLength(1);
       expect(finalResult.toolCalls![0]).toEqual({
         id: 'call_stream_1',
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          arguments: '{"location":"Tokyo"}'
-        }
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
       });
     });
 
@@ -597,17 +588,18 @@ describe('GoogleGenAIDriver', () => {
             content: 'Let me check the weather',
             toolCalls: [{
               id: 'call_123',
-              type: 'function',
-              function: { name: 'get_weather', arguments: '{"city":"Tokyo"}' }
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
             }]
           },
           // ツール実行結果
           {
             type: 'message',
             role: 'tool',
-            content: '{"temp":25}',
             toolCallId: 'call_123',
-            name: 'get_weather'
+            name: 'get_weather',
+            kind: 'data',
+            value: { temp: 25 }
           }
         ],
         output: []

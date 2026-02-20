@@ -110,7 +110,13 @@ export class GoogleGenAIDriver implements AIDriver {
 
       case 'message': {
         // Flatten message as text
-        const messageContent = this.contentToString(element.content);
+        if (element.role === 'tool') {
+          // ToolResultMessageElement doesn't have content property
+          const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
+          const textValue = toolResultEl.kind === 'text' ? String(toolResultEl.value) : JSON.stringify(toolResultEl.value);
+          return { text: `${element.role}: ${textValue}` };
+        }
+        const messageContent = this.contentToString((element as { content: string | unknown[] }).content);
         return { text: `${element.role}: ${messageContent}` };
       }
 
@@ -150,6 +156,23 @@ export class GoogleGenAIDriver implements AIDriver {
   }
 
   /**
+   * Convert kind+value to GoogleGenAI functionResponse
+   */
+  private toFunctionResponsePayload(kind: string, value: unknown): Record<string, unknown> {
+    if (kind === 'text') {
+      return { output: String(value) };
+    } else if (kind === 'data') {
+      // Check if value is a plain object
+      if (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype) {
+        return value as Record<string, unknown>;
+      }
+      return { output: value };
+    } else { // 'error'
+      return { error: value };
+    }
+  }
+
+  /**
    * Convert Element to Content (structure-preserving conversion)
    * Used for conversation history where role matters
    */
@@ -160,16 +183,23 @@ export class GoogleGenAIDriver implements AIDriver {
 
     if (element.type === 'message') {
       if (element.role === 'tool') {
+        // ToolResultMessageElement
+        const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
         return {
           role: 'user',
-          parts: [{ functionResponse: { name: element.name || element.toolCallId, response: JSON.parse(element.content) } }]
+          parts: [{
+            functionResponse: {
+              name: toolResultEl.name,
+              response: this.toFunctionResponsePayload(toolResultEl.kind, toolResultEl.value)
+            }
+          }]
         };
       } else if ('toolCalls' in element && element.toolCalls) {
         const parts: Part[] = [];
         const content = this.contentToString(element.content);
         if (content) parts.push({ text: content });
         for (const tc of element.toolCalls) {
-          parts.push({ functionCall: { name: tc.function.name, args: JSON.parse(tc.function.arguments) } });
+          parts.push({ functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } });
         }
         return { role: 'model', parts };
       } else {
@@ -205,8 +235,8 @@ export class GoogleGenAIDriver implements AIDriver {
       for (const tc of message.toolCalls) {
         parts.push({
           functionCall: {
-            name: tc.function.name,
-            args: JSON.parse(tc.function.arguments)
+            name: tc.name,
+            args: tc.arguments as Record<string, unknown>
           }
         });
       }
@@ -217,8 +247,8 @@ export class GoogleGenAIDriver implements AIDriver {
         role: 'user',
         parts: [{
           functionResponse: {
-            name: message.name || message.toolCallId,
-            response: JSON.parse(message.content)
+            name: message.name,
+            response: this.toFunctionResponsePayload(message.kind, message.value)
           }
         }]
       };
@@ -248,9 +278,9 @@ export class GoogleGenAIDriver implements AIDriver {
    */
   private convertTools(tools: ToolDefinition[]): { functionDeclarations: FunctionDeclaration[] }[] {
     const functionDeclarations: FunctionDeclaration[] = tools.map(tool => ({
-      name: tool.function.name,
-      description: tool.function.description,
-      parametersJsonSchema: tool.function.parameters,
+      name: tool.name,
+      description: tool.description,
+      parametersJsonSchema: tool.parameters,
     }));
     return [{ functionDeclarations }];
   }
@@ -271,7 +301,7 @@ export class GoogleGenAIDriver implements AIDriver {
     // Specific function
     return {
       mode: FunctionCallingConfigMode.ANY,
-      allowedFunctionNames: [toolChoice.function.name],
+      allowedFunctionNames: [toolChoice.name],
     };
   }
 
@@ -286,11 +316,8 @@ export class GoogleGenAIDriver implements AIDriver {
         const fc = part.functionCall;
         toolCalls.push({
           id: fc.id || `call_${toolCalls.length}`,
-          type: 'function',
-          function: {
-            name: fc.name || '',
-            arguments: JSON.stringify(fc.args ?? {}),
-          },
+          name: fc.name || '',
+          arguments: fc.args ?? {},
         });
       }
     }

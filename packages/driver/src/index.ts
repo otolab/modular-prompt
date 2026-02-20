@@ -9,7 +9,6 @@ export type {
   QueryOptions,
   DriverConfig,
   Role,
-  ToolFunction,
   ToolDefinition,
   ToolChoice,
   ToolCall,
