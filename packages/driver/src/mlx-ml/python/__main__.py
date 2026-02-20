@@ -34,59 +34,69 @@ def read():
 def supports_chat_template():
     """
     チャットテンプレートがサポートされているかを判定
-    
+
     apply_chat_templateメソッドの存在と、tokenizer.chat_templateの両方を確認する。
     tokenizer.chat_templateが設定されていない場合、apply_chat_templateを呼んでも
     エラーになるため、両方の条件をチェックする必要がある。
-    
+
     Returns:
         bool: チャットテンプレートがサポートされている場合True
     """
-    return (hasattr(tokenizer, 'apply_chat_template') and 
-            hasattr(tokenizer, 'chat_template') and 
+    return (hasattr(tokenizer, 'apply_chat_template') and
+            hasattr(tokenizer, 'chat_template') and
             tokenizer.chat_template is not None)
+
 
 def handle_capabilities():
     """capabilities API の処理"""
     print(json.dumps(capabilities), end='\0', flush=True)
 
 
-def handle_format_test(messages, options=None):
+def handle_format_test(messages, options=None, tools=None):
     """フォーマットテスト API の処理（実際に生成せずフォーマットのみ）"""
     if options is None:
         options = {}
-    
+
     result = {
         "formatted_prompt": None,
         "template_applied": False,
         "model_specific_processing": None,
         "error": None
     }
-    
+
     try:
         # チャットテンプレートが利用可能かチェック
         if supports_chat_template():
             # messagesはTypeScript側で既にモデル固有処理済み
             result["model_specific_processing"] = messages
-            
+
             # プロンプト生成（フォーマットのみ）
             primer = options.get('primer')
             add_generation_prompt = True
             tokenize = False  # 常にテキストで返す
-            
+
             if primer is not None:
                 messages.append({'role': 'assistant', 'content': primer})
                 add_generation_prompt = False
 
-            formatted_prompt = tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=add_generation_prompt,
-                tokenize=tokenize,
-            )
+            # tools対応を試みる（テンプレートが対応していなければtools無しで実行）
+            try:
+                formatted_prompt = tokenizer.apply_chat_template(
+                    messages,
+                    tools=tools,
+                    add_generation_prompt=add_generation_prompt,
+                    tokenize=tokenize,
+                )
+            except TypeError:
+                formatted_prompt = tokenizer.apply_chat_template(
+                    messages,
+                    add_generation_prompt=add_generation_prompt,
+                    tokenize=tokenize,
+                )
 
             if primer is not None:
                 formatted_prompt = primer.join(formatted_prompt.split(primer)[0:-1]) + primer
-            
+
             result["formatted_prompt"] = formatted_prompt
             result["template_applied"] = True
         else:
@@ -95,49 +105,52 @@ def handle_format_test(messages, options=None):
             primer = options.get('primer')
             if primer is not None:
                 formatted_prompt += primer
-            
+
             result["formatted_prompt"] = formatted_prompt
             result["template_applied"] = False
-        
+
     except Exception as e:
         result["error"] = str(e)
-    
+
     print(json.dumps(result), end='\0', flush=True)
 
-def handle_chat(messages, primer=None, options=None):
+def handle_chat(messages, primer=None, options=None, tools=None):
     """chat API の処理"""
     if options is None:
         options = {}
-    
+
     # チャットテンプレートが利用可能かチェック
     if not supports_chat_template():
         # チャットテンプレートがない場合はcompletionフォーマットに変換
-        # 注意: TypeScript側でAPIを決定するため、ここに来る場合は
-        # TypeScript側でchatが選択されたが、実際にはテンプレートがないケース
         prompt = generate_merged_prompt(messages)
-        # primerはTypeScript側で既に追加されている場合があるので追加しない
-        # （TypeScript側でcompletion APIへの変換時に追加済み）
         if primer is not None:
             print(primer, end='', flush=True)
         generate_text(prompt, options)
         return
-    
-    # messagesはTypeScript側で既にモデル固有処理済み
-    
+
     # プロンプト生成
     add_generation_prompt = True
     tokenize = False
-    
+
     if primer is not None:
         messages.append({'role': 'assistant', 'content': primer})
         add_generation_prompt = False
         tokenize = False
 
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        add_generation_prompt=add_generation_prompt,
-        tokenize=tokenize,
-    )
+    # tools対応を試みる（テンプレートが対応していなければtools無しで実行）
+    try:
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tools=tools,
+            add_generation_prompt=add_generation_prompt,
+            tokenize=tokenize,
+        )
+    except TypeError:
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=add_generation_prompt,
+            tokenize=tokenize,
+        )
 
     if primer is not None:
         prompt = primer.join(prompt.split(primer)[0:-1]) + primer
@@ -274,20 +287,22 @@ def main():
                     sys.stderr.write("Error: 'messages' field is required for format_test method\n")
                     print('\n', end='\0', flush=True)
                     continue
-                
+
                 options = req.get('options', {})
-                handle_format_test(messages, options)
-            
+                tools = req.get('tools')
+                handle_format_test(messages, options, tools)
+
             elif method == 'chat':
                 messages = req.get('messages')
                 if not messages:
                     sys.stderr.write("Error: 'messages' field is required for chat method\n")
                     print('\n', end='\0', flush=True)
                     continue
-                
+
                 primer = req.get('primer')
                 options = req.get('options', {})
-                handle_chat(messages, primer, options)
+                tools = req.get('tools')
+                handle_chat(messages, primer, options, tools)
             
             elif method == 'completion':
                 prompt = req.get('prompt')

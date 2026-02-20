@@ -1,18 +1,33 @@
 import { Readable } from 'stream';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolCall, FinishReason } from '../types.js';
 import type { FormatterOptions, ChatMessage } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
 import { MlxProcess } from './process/index.js';
 import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities } from './types.js';
-import type { MlxRuntimeInfo } from './process/types.js';
+import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
 import { createModelSpecificProcessor } from './process/model-specific.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
+import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
 
 // ========================================================================
 // Utility Functions (exported for testing)
 // ========================================================================
+
+/**
+ * Convert ToolDefinition to MlxToolDefinition
+ */
+function convertToolDefinitions(tools: ToolDefinition[]): MlxToolDefinition[] {
+  return tools.map(tool => ({
+    type: 'function' as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters
+    }
+  }));
+}
 
 /**
  * Check if the prompt contains MessageElement
@@ -152,6 +167,14 @@ export class MlxDriver implements AIDriver {
     // auto: use chat if chat template is available
     return this.runtimeInfo?.features.apply_chat_template ? 'chat' : 'completion';
   }
+
+  /**
+   * モデルがnativeツール対応かを判定
+   */
+  private hasNativeToolSupport(): boolean {
+    const toolCallFormat = this.runtimeInfo?.features?.chat_template?.tool_call_format;
+    return !!toolCallFormat?.call_start;
+  }
   
   /**
    * Execute query and return stream
@@ -165,20 +188,44 @@ export class MlxDriver implements AIDriver {
     // APIを選択
     const api = this.determineApi(options);
 
+    // tools変換
+    const tools = options?.tools ? convertToolDefinitions(options.tools) : undefined;
+
+    // nativeツール非対応の場合、tool定義をテキストとしてプロンプトに注入
+    let augmentedPrompt = prompt;
+    if (options?.tools && options.tools.length > 0 && !this.hasNativeToolSupport()) {
+      const toolsText = formatToolDefinitionsAsText(
+        options.tools,
+        this.runtimeInfo?.special_tokens,
+        this.runtimeInfo?.features?.chat_template?.tool_call_format
+      );
+      // instructions の末尾にTextElementとして追加
+      augmentedPrompt = {
+        ...prompt,
+        instructions: [
+          ...prompt.instructions,
+          { type: 'text' as const, content: toolsText }
+        ]
+      };
+    }
+
     let stream: Readable;
     if (api === 'completion') {
       // completion APIを使用 - 標準フォーマッターを使用
-      let formattedPrompt = formatCompletionPrompt(prompt, this.formatterOptions);
+      // completion APIではtools非対応
+      let formattedPrompt = formatCompletionPrompt(augmentedPrompt, this.formatterOptions);
       // モデル固有の後処理を適用
       formattedPrompt = this.modelProcessor.applyCompletionSpecificProcessing(formattedPrompt);
       stream = await this.process.completion(formattedPrompt, mlxOptions);
     } else {
       // chat APIを使用 - メッセージ変換して処理
-      const messages = formatPromptAsMessages(prompt, this.formatterOptions);
+      const messages = formatPromptAsMessages(augmentedPrompt, this.formatterOptions);
       let mlxMessages = convertMessages(messages);
       // chat APIではチャット処理を適用
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions);
+      // nativeツール対応の場合のみPythonにtoolsを渡す
+      const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools);
     }
 
     return stream;
@@ -239,10 +286,23 @@ export class MlxDriver implements AIDriver {
         }
       }
 
+      // Tool call detection
+      let toolCalls: ToolCall[] | undefined;
+      let finalContent = content;
+      if (options?.tools && options.tools.length > 0) {
+        const parseResult = parseToolCalls(content, this.runtimeInfo);
+        if (parseResult.toolCalls.length > 0) {
+          toolCalls = parseResult.toolCalls;
+          finalContent = parseResult.content;
+        }
+      }
+
+      const finishReason: FinishReason = toolCalls ? 'tool_calls' : 'stop';
       return {
-        content,
+        content: finalContent,
         structuredOutput,
-        finishReason: 'stop' as const
+        toolCalls,
+        finishReason
       };
     });
 
@@ -276,7 +336,14 @@ export class MlxDriver implements AIDriver {
           templateString: this.runtimeInfo.features.chat_template.template_string,
           supportedRoles: this.runtimeInfo.features.chat_template.supported_roles,
           preview: this.runtimeInfo.features.chat_template.preview,
-          constraints: this.runtimeInfo.features.chat_template.constraints
+          constraints: this.runtimeInfo.features.chat_template.constraints,
+          toolCallFormat: this.runtimeInfo.features.chat_template.tool_call_format ? {
+            toolParserType: this.runtimeInfo.features.chat_template.tool_call_format.tool_parser_type,
+            callStart: this.runtimeInfo.features.chat_template.tool_call_format.call_start,
+            callEnd: this.runtimeInfo.features.chat_template.tool_call_format.call_end,
+            responseStart: this.runtimeInfo.features.chat_template.tool_call_format.response_start,
+            responseEnd: this.runtimeInfo.features.chat_template.tool_call_format.response_end,
+          } : undefined
         } : undefined
       },
       chatRestrictions: this.runtimeInfo.chat_restrictions ? {

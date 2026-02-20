@@ -3,7 +3,7 @@
  */
 
 import type { PromptModule } from '@modular-prompt/core';
-import type { QueryResult } from '@modular-prompt/driver';
+import type { QueryResult, QueryOptions, ToolCall } from '@modular-prompt/driver';
 
 /**
  * Test case definition
@@ -17,6 +17,8 @@ export interface TestCase {
   input: any;
   /** Model names to use for this test case (optional, uses all enabled models if not specified) */
   models?: string[];
+  /** Query options for this test case (tools, temperature, etc.) */
+  queryOptions?: Partial<QueryOptions>;
 }
 
 /**
@@ -26,6 +28,8 @@ export interface RunResult {
   success: boolean;
   elapsed: number;
   content: string;
+  toolCalls?: ToolCall[];
+  finishReason?: string;
   error?: string;
 }
 

@@ -33,6 +33,9 @@ export class ExperimentRunner {
     const allResults: TestResult[] = [];
     const evaluationContexts: EvaluationContext[] = [];
 
+    // ドライバー切り替えをテストケースをまたいでトラッキング
+    let activeModelName: string | null = null;
+
     for (const testCase of this.testCases) {
       console.log('─'.repeat(80));
       console.log(`Test Case: ${testCase.name}`);
@@ -82,27 +85,28 @@ export class ExperimentRunner {
       }
 
       // Test with each model
-      let previousDriver: any = null;
-      let previousModelName: string | null = null;
-
       for (const { name: modelName, spec: modelSpec } of modelsToTest) {
-        console.log(`🤖 Testing with ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
-
-        // Close previous driver if switching models
-        if (previousDriver && previousModelName && previousModelName !== modelName) {
-          logger.verbose(`Switching from ${previousModelName} to ${modelName}, closing previous driver...`);
-          await this.driverManager.close(previousModelName);
-          previousDriver = null;
+        // モデル切り替え: 前のドライバーをクローズしてから新しいモデルを起動
+        if (activeModelName && activeModelName !== modelName) {
+          logger.info(`Closing driver: ${activeModelName} (switching to ${modelName})`);
+          await this.driverManager.close(activeModelName);
+          activeModelName = null;
         }
+
+        if (activeModelName === modelName) {
+          logger.verbose(`Reusing driver for ${modelName}`);
+        } else {
+          logger.info(`Creating new driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
+        }
+        console.log(`🤖 Testing with ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
 
         // Get or create driver for this model
         const driver = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
-        previousDriver = driver;
-        previousModelName = modelName;
+        activeModelName = modelName;
 
         // Test each module
         for (const { name, compiled, prompt } of compiledModules) {
-          const runs = await this.runModuleTest(name, compiled, driver);
+          const runs = await this.runModuleTest(name, compiled, driver, testCase);
 
           allResults.push({
             testCase: testCase.name,
@@ -112,6 +116,8 @@ export class ExperimentRunner {
               success: r.success,
               elapsed: r.elapsed,
               content: r.queryResult?.content || '',
+              toolCalls: r.queryResult?.toolCalls,
+              finishReason: r.queryResult?.finishReason,
               error: r.error,
             })),
           });
@@ -143,7 +149,8 @@ export class ExperimentRunner {
   private async runModuleTest(
     moduleName: string,
     compiled: any,
-    driver: any
+    driver: any,
+    testCase: TestCase
   ): Promise<Array<{ success: boolean; elapsed: number; queryResult?: QueryResult; error?: string }>> {
     logger.verbose(`Running ${this.repeatCount} time(s) for module: ${moduleName}`);
 
@@ -157,10 +164,30 @@ export class ExperimentRunner {
         const result = await driver.query(compiled, {
           temperature: 0.7,
           maxTokens: 2048,
+          ...testCase.queryOptions,
         });
         const elapsed = Date.now() - startTime;
 
         logger.verbose(`Module ${moduleName} run ${i + 1}: Success (${elapsed}ms)`);
+
+        // Display result summary (思考ブロックはプレビューから除外)
+        // パターン: <think>...</think> または 先頭から</think>まで（テンプレートが<think>を付与する場合）
+        const displayContent = result.content
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
+          .replace(/^[\s\S]*?<\/think>\s*/g, '');
+        const contentPreview = displayContent.length > 200
+          ? displayContent.substring(0, 200) + '...'
+          : displayContent;
+        console.log(`   ✅ [${moduleName}] run ${i + 1} (${elapsed}ms) finishReason=${result.finishReason || 'unknown'}`);
+        if (result.toolCalls && result.toolCalls.length > 0) {
+          for (const tc of result.toolCalls) {
+            console.log(`      🔧 toolCall: ${tc.name}(${JSON.stringify(tc.arguments)})`);
+          }
+        }
+        if (contentPreview.trim()) {
+          console.log(`      📝 ${contentPreview}`);
+        }
+
         runs.push({
           success: true,
           elapsed,

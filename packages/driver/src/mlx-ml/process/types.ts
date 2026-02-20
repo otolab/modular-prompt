@@ -28,10 +28,21 @@ export interface MlxFormatTestRequest extends MlxBaseRequest {
   };
 }
 
+/** HuggingFace apply_chat_template 互換のtool定義 */
+export interface MlxToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+}
+
 export interface MlxChatRequest extends MlxBaseRequest {
   method: 'chat';
   messages: MlxMessage[];
   primer?: string;
+  tools?: MlxToolDefinition[];
   options?: MlxMlModelOptions;
 }
 
@@ -43,11 +54,20 @@ export interface MlxCompletionRequest extends MlxBaseRequest {
 
 export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest;
 
+export interface ToolCallFormat {
+  tool_parser_type?: string;
+  call_start?: string;
+  call_end?: string;
+  response_start?: string;
+  response_end?: string;
+}
+
 export interface ChatTemplateInfo {
   template_string?: string;
   supported_roles: string[];
   preview?: string;
   constraints: Record<string, unknown>;
+  tool_call_format?: ToolCallFormat;
 }
 
 /**

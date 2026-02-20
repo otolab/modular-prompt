@@ -210,6 +210,13 @@ console.log('='.repeat(80));
 console.log('✨ Experiment completed');
 console.log('='.repeat(80));
 
+// Flush log file if configured
+if (options.logFile) {
+  const { logger } = await import('./logger.js');
+  await logger.flush();
+  console.log(`📄 Log file written: ${options.logFile}`);
+}
+
 // Cleanup drivers
 await driverManager.cleanup();
 

@@ -34,6 +34,17 @@ export interface MlxMlModelOptions {
 export type { ChatRestrictions, ApiStrategy };
 
 /**
+ * ツール呼び出しフォーマット
+ */
+export interface ToolCallFormat {
+  toolParserType?: string;
+  callStart?: string;
+  callEnd?: string;
+  responseStart?: string;
+  responseEnd?: string;
+}
+
+/**
  * チャットテンプレート情報
  */
 export interface ChatTemplateInfo {
@@ -41,6 +52,7 @@ export interface ChatTemplateInfo {
   supportedRoles: string[];
   preview?: string;
   constraints: Record<string, unknown>;
+  toolCallFormat?: ToolCallFormat;
 }
 
 /**

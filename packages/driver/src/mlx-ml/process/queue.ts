@@ -18,7 +18,8 @@ import type {
   MlxMessage,
   MlxMlModelOptions,
   MlxRuntimeInfo,
-  MlxFormatTestResult
+  MlxFormatTestResult,
+  MlxToolDefinition
 } from './types.js';
 
 export interface QueueManagerCallbacks {
@@ -63,13 +64,14 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[]): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
           method: 'chat',
           messages,
           primer,
+          tools,
           options: mapOptionsToPython(options, true)  // strict mode: true
         };
         this.queue.push({
