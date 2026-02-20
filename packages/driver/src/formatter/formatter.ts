@@ -113,31 +113,52 @@ export class DefaultFormatter implements ElementFormatter {
   }
   
   private formatMessage(element: MessageElement): string {
-    const { markers } = this.options;
-    const role = element.role.toUpperCase();
+    const { markers, lineBreak } = this.options;
 
-    // Convert content to string based on message type
-    let contentStr: string;
+    // ToolResultMessageElement → toolResponse: 形式
     if (element.role === 'tool') {
-      // ToolResultMessageElement
+      let valueStr: string;
       switch (element.kind) {
         case 'text':
-          contentStr = String(element.value);
+          valueStr = String(element.value);
           break;
         case 'data':
-          contentStr = JSON.stringify(element.value);
+          valueStr = JSON.stringify(element.value, null, 2);
           break;
         case 'error':
-          contentStr = String(element.value);
+          valueStr = JSON.stringify({ error: String(element.value) });
           break;
         default:
-          contentStr = String(element.value);
+          valueStr = String(element.value);
       }
-    } else {
-      // StandardMessageElement
-      contentStr = typeof element.content === 'string'
-        ? element.content
-        : JSON.stringify(element.content);
+      return `toolResponse:${lineBreak}\`\`\`json${lineBreak}${valueStr}${lineBreak}\`\`\``;
+    }
+
+    const role = element.role.toUpperCase();
+
+    // StandardMessageElement - content変換
+    let contentStr = typeof element.content === 'string'
+      ? element.content
+      : JSON.stringify(element.content);
+
+    // toolCalls付きassistantメッセージ → tool call展開
+    if (element.role === 'assistant' && element.toolCalls && element.toolCalls.length > 0) {
+      const parts: string[] = [];
+      if (contentStr.trim()) {
+        parts.push(contentStr.trim());
+      }
+      const toolCallToken = this.specialTokens?.tool_call;
+      for (const tc of element.toolCalls) {
+        const tcJson = JSON.stringify({ name: tc.name, arguments: tc.arguments }, null, 2);
+        if (toolCallToken && this.isTokenPair(toolCallToken)) {
+          // 特殊トークンがある場合はそれを使用
+          parts.push(`${toolCallToken.start.text}${lineBreak}${tcJson}${lineBreak}${toolCallToken.end.text}`);
+        } else {
+          // フォールバック: ラベル付きコードブロック
+          parts.push(`\`\`\`json:toolCall${lineBreak}${tcJson}${lineBreak}\`\`\``);
+        }
+      }
+      contentStr = parts.join(lineBreak);
     }
 
     // Use special tokens or custom markers if available

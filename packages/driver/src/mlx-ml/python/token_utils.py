@@ -169,17 +169,88 @@ def get_special_tokens(tokenizer):
     return special_tokens
 
 
+def detect_tool_call_format(tokenizer):
+    """tokenizer設定からtool call/resultのデリミタを検出する
+
+    tokenizer_config.json / chat_template からtool call関連の情報を抽出:
+    - tool_parser_type: パーサー種別（"json_tools" 等）
+    - chat_template テキスト内の <tool_call></tool_call> 等のタグパターン
+
+    Returns:
+        dict or None: {
+            "tool_parser_type": str,  # tokenizer_configのtool_parser_type
+            "call_start": str,        # tool callの開始デリミタ
+            "call_end": str,          # tool callの終了デリミタ
+            "response_start": str,    # tool responseの開始デリミタ（検出時）
+            "response_end": str,      # tool responseの終了デリミタ（検出時）
+        } or None
+    """
+    import re
+
+    # tool_parser_type を取得
+    tool_parser_type = None
+    if hasattr(tokenizer, 'init_kwargs'):
+        tool_parser_type = tokenizer.init_kwargs.get('tool_parser_type')
+
+    # chat_template テキストを取得
+    template = getattr(tokenizer, 'chat_template', None)
+    if not template and hasattr(tokenizer, 'init_kwargs'):
+        template = tokenizer.init_kwargs.get('chat_template', '')
+
+    # tool_parser_type もテンプレートもなければ非対応
+    if not tool_parser_type and not template:
+        return None
+
+    result = {}
+    if tool_parser_type:
+        result["tool_parser_type"] = tool_parser_type
+
+    # テンプレートテキストからデリミタを抽出
+    if template:
+        # tool_call タグの検出（<tool_call>, <|tool_call|> 等）
+        call_match = re.search(r'(<\|?tool_call\|?>)\s*\\n.*?(<\/?\|?tool_call\|?>|<\|?/tool_call\|?>)', template)
+        if call_match:
+            result["call_start"] = call_match.group(1)
+            result["call_end"] = call_match.group(2)
+        else:
+            # フォールバック: tool_call を含む開閉タグペアを探す
+            tags = re.findall(r'<[|/]?tool_call[|]?>', template)
+            if len(tags) >= 2:
+                # 開タグと閉タグを分離
+                open_tags = [t for t in tags if '/' not in t]
+                close_tags = [t for t in tags if '/' in t]
+                if open_tags and close_tags:
+                    result["call_start"] = open_tags[0]
+                    result["call_end"] = close_tags[0]
+
+        # tool_response タグの検出
+        resp_tags = re.findall(r'<[|/]?tool_response[|]?>', template)
+        if len(resp_tags) >= 2:
+            open_tags = [t for t in resp_tags if '/' not in t]
+            close_tags = [t for t in resp_tags if '/' in t]
+            if open_tags and close_tags:
+                result["response_start"] = open_tags[0]
+                result["response_end"] = close_tags[0]
+
+    return result if result else None
+
+
 def get_chat_template_info(tokenizer):
     """チャットテンプレートの詳細情報を取得"""
     if not hasattr(tokenizer, 'apply_chat_template'):
         return None
-    
+
     template_info = {
         "template_string": getattr(tokenizer, 'chat_template', None),
         "supported_roles": [],
         "preview": None,
         "constraints": {}
     }
+
+    # tool callフォーマット検出
+    tool_format = detect_tool_call_format(tokenizer)
+    if tool_format:
+        template_info["tool_call_format"] = tool_format
     
     # サポートされるroleを検査
     test_roles = ["system", "user", "assistant", "tool", "function"]

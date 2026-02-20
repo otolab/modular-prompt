@@ -1,0 +1,73 @@
+# Tools実験設定
+# MLXドライバーでのtool calling動作確認
+
+models:
+  qwen3-4b:
+    model: "mlx-community/Qwen3-4B-Thinking-2507-heretic-8bit"
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 10
+  gemma3-12b:
+    model: "mlx-community/gemma-3-12b-it-qat-4bit"
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 20
+
+drivers:
+  mlx: {}
+
+modules:
+  - name: tools-test
+    path: ./tools-test-module.mjs
+    description: "ツール呼び出し実験用"
+
+testCases:
+  # --- gemma3-12b ---
+  - name: "[gemma3] 天気ツール呼び出し"
+    description: "get_weatherツールを呼び出すことを期待"
+    models: ["gemma3-12b"]
+    input:
+      question: "東京の天気を教えてください。"
+    queryOptions: &tool_weather
+      temperature: 0.3
+      maxTokens: 512
+      tools: &tools_def
+        - name: get_weather
+          description: "指定された場所の現在の天気を取得する"
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: "天気を取得する場所（都市名）"
+            required:
+              - location
+      toolChoice: auto
+
+  - name: "[gemma3] ツール不要の質問"
+    description: "ツールを呼び出さずにテキストで回答することを期待"
+    models: ["gemma3-12b"]
+    input:
+      question: "1 + 1 は何ですか？"
+    queryOptions: &tool_math
+      temperature: 0.3
+      maxTokens: 1024
+      tools: *tools_def
+      toolChoice: auto
+
+  # --- qwen3-4b ---
+  - name: "[qwen3] 天気ツール呼び出し"
+    description: "get_weatherツールを呼び出すことを期待"
+    models: ["qwen3-4b"]
+    input:
+      question: "東京の天気を教えてください。"
+    queryOptions: *tool_weather
+
+  - name: "[qwen3] ツール不要の質問"
+    description: "ツールを呼び出さずにテキストで回答することを期待"
+    models: ["qwen3-4b"]
+    input:
+      question: "1 + 1 は何ですか？"
+    queryOptions: *tool_math
+
+evaluators: []

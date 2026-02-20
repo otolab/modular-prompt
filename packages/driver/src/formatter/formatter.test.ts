@@ -516,3 +516,89 @@ describe('DefaultFormatter with Special Tokens', () => {
     });
   });
 });
+
+describe('DefaultFormatter tool message formatting', () => {
+  it('should format assistant message with toolCalls as json:toolCall code blocks', () => {
+    const formatter = new DefaultFormatter();
+    const element: MessageElement = {
+      type: 'message',
+      role: 'assistant',
+      content: 'Let me check.',
+      toolCalls: [{
+        id: 'call_0',
+        name: 'get_weather',
+        arguments: { location: 'Tokyo' }
+      }]
+    };
+
+    const result = formatter.format(element);
+
+    expect(result).toContain('Let me check.');
+    expect(result).toContain('```json:toolCall');
+    expect(result).toContain('"name": "get_weather"');
+    expect(result).toContain('"location": "Tokyo"');
+  });
+
+  it('should use special tokens for toolCalls when available', () => {
+    const formatter = new DefaultFormatter({
+      specialTokens: {
+        tool_call: {
+          start: { text: '<tool_call>', id: 100 },
+          end: { text: '</tool_call>', id: 101 }
+        }
+      }
+    });
+    const element: MessageElement = {
+      type: 'message',
+      role: 'assistant',
+      content: '',
+      toolCalls: [{
+        id: 'call_0',
+        name: 'test_fn',
+        arguments: { x: 1 }
+      }]
+    };
+
+    const result = formatter.format(element);
+
+    expect(result).toContain('<tool_call>');
+    expect(result).toContain('</tool_call>');
+    expect(result).toContain('"name": "test_fn"');
+    expect(result).not.toContain('```json:toolCall');
+  });
+
+  it('should format tool result as toolResponse with json code block', () => {
+    const formatter = new DefaultFormatter();
+    const element: MessageElement = {
+      type: 'message',
+      role: 'tool',
+      toolCallId: 'call_0',
+      name: 'get_weather',
+      kind: 'data',
+      value: { temp: 25, condition: 'sunny' }
+    };
+
+    const result = formatter.format(element);
+
+    expect(result).toContain('toolResponse:');
+    expect(result).toContain('```json');
+    expect(result).toContain('"temp": 25');
+  });
+
+  it('should format tool error result with error wrapper', () => {
+    const formatter = new DefaultFormatter();
+    const element: MessageElement = {
+      type: 'message',
+      role: 'tool',
+      toolCallId: 'call_0',
+      name: 'get_weather',
+      kind: 'error',
+      value: 'Connection timeout'
+    };
+
+    const result = formatter.format(element);
+
+    expect(result).toContain('toolResponse:');
+    expect(result).toContain('"error":"Connection timeout"');
+  });
+});
