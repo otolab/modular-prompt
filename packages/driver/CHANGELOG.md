@@ -1,5 +1,26 @@
 # @modular-prompt/driver
 
+## 0.6.3
+
+### Patch Changes
+
+- 866051c: fix(driver): ModelSpec.enabled を disabled に変更し、AIService.selectModels() で無効モデルを除外
+
+  ModelSpec.enabled フラグを disabled に変更。デフォルトで有効、明示的に `disabled: true` で無効化するシンプルな設計に統一。AIService.selectModels() に disabled チェックを追加し、無効モデルが選択されない問題を修正。(#88)
+
+- 1c8c8db: feat(core,driver): ToolCall/ToolResult 型を中間フォーマットに移行 (#109)
+
+  ToolCall/ToolResult 型を OpenAI API ロックインからプロバイダー非依存の中間フォーマットに移行。
+
+  - ToolCall: `type: 'function'`廃止、`function`ネスト廃止、`arguments`をオブジェクト化、`metadata`追加
+  - ToolResult: `content: string` → `kind`(`text`/`data`/`error`) + `value`に分離
+  - ToolDefinition/ToolChoice: フラット化
+  - 全ドライバー（OpenAI, Anthropic, GoogleGenAI, VertexAI）のアダプター変換を実装
+
+- Updated dependencies [1c8c8db]
+  - @modular-prompt/core@0.1.12
+  - @modular-prompt/utils@0.2.3
+
 ## 0.6.2
 
 ### Patch Changes
