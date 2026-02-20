@@ -40,15 +40,12 @@ vi.mock('openai', () => {
 describe('OllamaDriver', () => {
   const toolDefs: ToolDefinition[] = [
     {
-      type: 'function',
-      function: {
-        name: 'get_weather',
-        description: 'Get the weather for a location',
-        parameters: {
-          type: 'object',
-          properties: { location: { type: 'string' } },
-          required: ['location']
-        }
+      name: 'get_weather',
+      description: 'Get the weather for a location',
+      parameters: {
+        type: 'object',
+        properties: { location: { type: 'string' } },
+        required: ['location']
       }
     }
   ];
@@ -85,7 +82,18 @@ describe('OllamaDriver', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          tools: toolDefs,
+          tools: [{
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: { location: { type: 'string' } },
+                required: ['location']
+              }
+            }
+          }],
           tool_choice: 'auto'
         })
       );
@@ -155,11 +163,8 @@ describe('OllamaDriver', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls![0]).toEqual({
         id: 'call_ollama_1',
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          arguments: '{"location":"Osaka"}'
-        }
+        name: 'get_weather',
+        arguments: { location: 'Osaka' }
       });
     });
 
@@ -226,7 +231,18 @@ describe('OllamaDriver', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          tools: toolDefs,
+          tools: [{
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: { location: { type: 'string' } },
+                required: ['location']
+              }
+            }
+          }],
           tool_choice: 'auto'
         })
       );
