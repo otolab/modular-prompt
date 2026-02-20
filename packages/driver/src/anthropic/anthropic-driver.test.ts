@@ -628,7 +628,7 @@ describe('AnthropicDriver', () => {
       const toolResultMsg = calledParams.messages.find(
         (m: { role: string; content: unknown[] }) =>
           m.role === 'user' && Array.isArray(m.content) &&
-          m.content.some((c: { type: string }) => c.type === 'tool_result')
+          m.content.some((c: unknown) => (c as { type: string }).type === 'tool_result')
       );
       expect(toolResultMsg).toBeDefined();
       expect(toolResultMsg.content).toContainEqual(
@@ -636,6 +636,61 @@ describe('AnthropicDriver', () => {
           type: 'tool_result',
           tool_use_id: 'call_123',
           content: '{"temp":25}'
+        })
+      );
+    });
+
+    it('should convert tool result with error kind to Anthropic API format with is_error flag', async () => {
+      const toolPrompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_err',
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_err',
+            name: 'get_weather',
+            kind: 'error',
+            value: 'Connection timeout'
+          }
+        ],
+        output: []
+      };
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Error occurred' } };
+          yield { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 10 } };
+        }
+      };
+      mockCreate.mockResolvedValue(mockStream);
+
+      await driver.query(toolPrompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+
+      // tool result: role: 'user', content配列にtool_resultを含む（is_error: true）
+      const toolResultMsg = calledParams.messages.find(
+        (m: { role: string; content: unknown[] }) =>
+          m.role === 'user' && Array.isArray(m.content) &&
+          m.content.some((c: unknown) => (c as { type: string }).type === 'tool_result')
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.content).toContainEqual(
+        expect.objectContaining({
+          type: 'tool_result',
+          tool_use_id: 'call_err',
+          content: 'Connection timeout',
+          is_error: true
         })
       );
     });

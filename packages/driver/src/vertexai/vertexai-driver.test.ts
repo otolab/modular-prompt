@@ -519,13 +519,57 @@ describe('VertexAIDriver', () => {
       // user message (tool result): role: 'user', parts[0].functionResponseを含む
       const userMsgs = calledRequest.contents.filter((c: { role: string }) => c.role === 'user');
       const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
-        m.parts.some((p: { functionResponse?: unknown }) => p.functionResponse)
+        m.parts.some((p: unknown) => (p as { functionResponse?: unknown }).functionResponse)
       );
       expect(toolResultMsg).toBeDefined();
       expect(toolResultMsg.parts[0]).toMatchObject({
         functionResponse: expect.objectContaining({
           name: 'get_weather',
           response: { temp: 25 }
+        })
+      });
+    });
+
+    it('should convert tool result with error kind to VertexAI API format', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_err',
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_err',
+            name: 'get_weather',
+            kind: 'error',
+            value: 'Connection timeout'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledRequest = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+
+      // user message (tool result): functionResponse with error wrapper
+      const userMsgs = calledRequest.contents.filter((c: { role: string }) => c.role === 'user');
+      const toolResultMsg = userMsgs.find((m: { parts: unknown[] }) =>
+        m.parts.some((p: unknown) => (p as { functionResponse?: unknown }).functionResponse)
+      );
+      expect(toolResultMsg).toBeDefined();
+      expect(toolResultMsg.parts[0]).toMatchObject({
+        functionResponse: expect.objectContaining({
+          name: 'get_weather',
+          response: { error: 'Connection timeout' }
         })
       });
     });

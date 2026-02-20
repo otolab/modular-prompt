@@ -796,6 +796,44 @@ describe('OpenAIDriver', () => {
         })
       );
     });
+
+    it('should convert tool result with error kind to API format', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_err',
+              name: 'get_weather',
+              arguments: { city: 'Tokyo' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_err',
+            name: 'get_weather',
+            kind: 'error',
+            value: 'Connection timeout'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      expect(calledParams.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'tool',
+          content: '{"error":"Connection timeout"}',
+          tool_call_id: 'call_err'
+        })
+      );
+    });
   });
 
 });
