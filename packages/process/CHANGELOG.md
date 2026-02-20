@@ -1,5 +1,12 @@
 # @modular-prompt/process
 
+## 0.1.22
+
+### Patch Changes
+
+- Updated dependencies [be3037c]
+  - @modular-prompt/driver@0.8.0
+
 ## 0.1.21
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @modular-prompt/experiment
 
+## 0.3.0
+
+### Minor Changes
+
+- be3037c: feat(driver,experiment): MLXDriver の tools 対応 (#90)
+
+  MLXDriver で Function Calling(tools)を使えるようにした。
+
+  - native tools 対応モデル(Qwen3 等): apply_chat_template で注入
+  - 非対応モデル(Gemma3 等): テキストフォールバック
+  - tokenizer_config.json から tool_call_format を自動検出
+  - experiment フレームワークに queryOptions(tools)対応を追加
+
+### Patch Changes
+
+- Updated dependencies [be3037c]
+  - @modular-prompt/driver@0.8.0
+
 ## 0.2.0
 
 ### Minor Changes
