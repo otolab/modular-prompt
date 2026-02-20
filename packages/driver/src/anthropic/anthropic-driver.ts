@@ -108,7 +108,7 @@ export class AnthropicDriver implements AIDriver {
       } else if (message.kind === 'data') {
         content = JSON.stringify(message.value);
       } else { // 'error'
-        content = JSON.stringify({ error: message.value });
+        content = String(message.value);
       }
       return {
         role: 'user',
@@ -163,7 +163,7 @@ export class AnthropicDriver implements AIDriver {
               } else if (toolResultEl.kind === 'data') {
                 toolContent = JSON.stringify(toolResultEl.value);
               } else { // 'error'
-                toolContent = JSON.stringify({ error: toolResultEl.value });
+                toolContent = String(toolResultEl.value);
               }
               messages.push({
                 role: 'user',
