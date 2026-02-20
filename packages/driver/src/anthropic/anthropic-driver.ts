@@ -36,11 +36,11 @@ export interface AnthropicQueryOptions extends QueryOptions {
  */
 function convertTools(tools: ToolDefinition[]): MessageCreateParamsStreaming['tools'] {
   return tools.map(tool => ({
-    name: tool.function.name,
-    description: tool.function.description,
+    name: tool.name,
+    description: tool.description,
     input_schema: {
       type: 'object' as const,
-      ...tool.function.parameters
+      ...tool.parameters
     }
   }));
 }
@@ -56,7 +56,7 @@ function convertToolChoice(toolChoice: ToolChoice): MessageCreateParamsStreaming
       case 'required': return { type: 'any' };
     }
   }
-  return { type: 'tool', name: toolChoice.function.name };
+  return { type: 'tool', name: toolChoice.name };
 }
 
 export class AnthropicDriver implements AIDriver {
@@ -95,19 +95,28 @@ export class AnthropicDriver implements AIDriver {
         blocks.push({
           type: 'tool_use',
           id: tc.id,
-          name: tc.function.name,
-          input: JSON.parse(tc.function.arguments)
+          name: tc.name,
+          input: tc.arguments
         });
       }
       return { role: 'assistant', content: blocks };
     } else if (isToolResult(message)) {
-      // ToolResultMessage
+      // ToolResultMessage - convert kind+value to Anthropic content format
+      let content: string;
+      if (message.kind === 'text') {
+        content = String(message.value);
+      } else if (message.kind === 'data') {
+        content = JSON.stringify(message.value);
+      } else { // 'error'
+        content = JSON.stringify({ error: message.value });
+      }
       return {
         role: 'user',
         content: [{
           type: 'tool_result',
           tool_use_id: message.toolCallId,
-          content: message.content
+          content,
+          is_error: message.kind === 'error'
         }]
       };
     } else {
@@ -145,21 +154,36 @@ export class AnthropicDriver implements AIDriver {
             content.push(el.content);
           } else if (el.type === 'message') {
             // Handle message elements separately
-            const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
-
             if (el.role === 'tool') {
+              // ToolResultMessageElement - convert kind+value to Anthropic content format
+              const toolResultEl = el as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
+              let toolContent: string;
+              if (toolResultEl.kind === 'text') {
+                toolContent = String(toolResultEl.value);
+              } else if (toolResultEl.kind === 'data') {
+                toolContent = JSON.stringify(toolResultEl.value);
+              } else { // 'error'
+                toolContent = JSON.stringify({ error: toolResultEl.value });
+              }
               messages.push({
                 role: 'user',
-                content: [{ type: 'tool_result', tool_use_id: el.toolCallId, content: el.content }]
+                content: [{
+                  type: 'tool_result',
+                  tool_use_id: toolResultEl.toolCallId,
+                  content: toolContent,
+                  is_error: toolResultEl.kind === 'error'
+                }]
               });
             } else if ('toolCalls' in el && el.toolCalls) {
+              const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
               const blocks: unknown[] = [];
               if (messageContent) blocks.push({ type: 'text', text: messageContent });
               for (const tc of el.toolCalls) {
-                blocks.push({ type: 'tool_use', id: tc.id, name: tc.function.name, input: JSON.parse(tc.function.arguments) });
+                blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments });
               }
               messages.push({ role: 'assistant', content: blocks });
             } else {
+              const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
               const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
               if (role === 'system') {
                 system = system ? `${system}\n\n${messageContent}` : messageContent;
@@ -369,14 +393,21 @@ export class AnthropicDriver implements AIDriver {
       // Build tool calls from accumulated deltas
       let toolCalls: ToolCall[] | undefined;
       if (toolCallDeltas.size > 0) {
-        toolCalls = Array.from(toolCallDeltas.values()).map(tc => ({
-          id: tc.id,
-          type: 'function' as const,
-          function: {
-            name: tc.name,
-            arguments: tc.arguments
+        toolCalls = Array.from(toolCallDeltas.values()).map(tc => {
+          // Parse arguments string to object
+          let parsedArgs: Record<string, unknown>;
+          try {
+            parsedArgs = JSON.parse(tc.arguments);
+          } catch {
+            // If parsing fails, use empty object
+            parsedArgs = {};
           }
-        }));
+          return {
+            id: tc.id,
+            name: tc.name,
+            arguments: parsedArgs
+          };
+        });
       }
 
       // Build usage
