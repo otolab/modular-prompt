@@ -4,14 +4,16 @@
  * Simple Chat CLI
  */
 
-/* eslint-disable no-console */
-
 import { program } from 'commander';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { Logger } from '@modular-prompt/utils';
 import { runChat } from './chat.js';
 import type { SimpleChatOptions } from './types.js';
+import { logger as baseLogger } from './logger.js';
+
+const logger = baseLogger.context('cli');
 
 // Get package.json for version
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,8 +33,16 @@ program
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
   .option('--stdin', 'Read user message from stdin')
+  .option('-q, --quiet', 'Suppress all output except errors')
+  .option('-v, --verbose', 'Show verbose output')
   .action(async (messageArgs: string[], options) => {
     try {
+      // Configure log level
+      if (options.quiet) {
+        Logger.configure({ level: 'error' });
+      } else if (options.verbose) {
+        Logger.configure({ level: 'verbose' });
+      }
       // Check for stdin flag in message args
       const hasStdinFlag = messageArgs.includes('-');
       const userMessage = hasStdinFlag
@@ -63,7 +73,7 @@ program
       
       await runChat(chatOptions);
     } catch (error) {
-      console.error(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+      logger.error(`${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   });

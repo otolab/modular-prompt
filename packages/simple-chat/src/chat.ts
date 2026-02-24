@@ -2,8 +2,6 @@
  * Main chat processing
  */
 
-/* eslint-disable no-console */
-
 import { readFileSync } from 'fs';
 import chalk from 'chalk';
 import type {
@@ -29,6 +27,9 @@ import {
 import { loadResourceFiles } from './resource-files.js';
 import type { MaterialContext } from '@modular-prompt/process';
 import { Spinner } from './spinner.js';
+import { logger as baseLogger } from './logger.js';
+
+const logger = baseLogger.context('chat');
 
 /**
  * Process user input
@@ -56,26 +57,23 @@ async function getUserMessage(options: SimpleChatOptions): Promise<string> {
 function displayChatLog(chatLog: ChatLog): void {
   const stats = getChatLogStats(chatLog);
   
-  console.log(chalk.blue('\n=== Chat Log ==='));
-  console.log(chalk.gray(`Session ID: ${stats.sessionId}`));
-  console.log(chalk.gray(`Started at: ${stats.startedAt}`));
-  console.log(chalk.gray(`Total messages: ${stats.totalMessages}`));
-  console.log();
-  
+  logger.info(chalk.blue('=== Chat Log ==='));
+  logger.info(chalk.gray(`Session ID: ${stats.sessionId}`));
+  logger.info(chalk.gray(`Started at: ${stats.startedAt}`));
+  logger.info(chalk.gray(`Total messages: ${stats.totalMessages}`));
+
   for (const message of chatLog.messages) {
-    const roleColor = 
+    const roleColor =
       message.role === 'user' ? chalk.green :
       message.role === 'assistant' ? chalk.cyan :
       chalk.yellow;
-    
-    console.log(roleColor(`[${message.role}]`));
-    console.log(message.content);
-    
+
+    logger.info(roleColor(`[${message.role}]`));
+    logger.info(message.content);
+
     if (message.resourceFiles && message.resourceFiles.length > 0) {
-      console.log(chalk.gray(`  Resources: ${message.resourceFiles.join(', ')}`));
+      logger.info(chalk.gray(`  Resources: ${message.resourceFiles.join(', ')}`));
     }
-    
-    console.log();
   }
 }
 
@@ -131,7 +129,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     // Add pre-message if defined
     if (profile.preMessage) {
       addMessage(chatLog, 'assistant', profile.preMessage);
-      console.log(chalk.cyan('Assistant: ') + profile.preMessage);
+      logger.info(chalk.cyan('Assistant: ') + profile.preMessage);
     }
   }
   
@@ -154,13 +152,13 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
 
     spinner.stop();
     if (loadedFiles.length > 0) {
-      console.log(chalk.gray(`✓ Loaded ${loadedFiles.length} resource file(s)`));
+      logger.info(chalk.gray(`✓ Loaded ${loadedFiles.length} resource file(s)`));
     }
   }
   
   // Add user message to log
   addMessage(chatLog, 'user', userMessage, loadedFiles);
-  console.log(chalk.green('\nUser: ') + userMessage);
+  logger.info(chalk.green('User: ') + userMessage);
   
   // Perform AI chat with optional custom drivers config
   const { response, driver } = await performAIChat(
@@ -177,7 +175,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   // Save chat log if path is specified
   if (options.logPath) {
     await saveChatLog(chatLog, options.logPath);
-    console.log(chalk.gray(`\n💾 Chat log saved to: ${options.logPath}`));
+    logger.info(chalk.gray(`💾 Chat log saved to: ${options.logPath}`));
   }
   
   // Close driver
