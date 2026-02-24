@@ -12,6 +12,23 @@ models:
     provider: "mlx"
     capabilities: ["local", "tools"]
     priority: 20
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+    disabled: true
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+    disabled: true
 
 drivers:
   mlx: {}
@@ -55,17 +72,32 @@ testCases:
       tools: *tools_def
       toolChoice: auto
 
-  # --- qwen3-4b ---
-  - name: "[qwen3] 天気ツール呼び出し"
+  # # --- qwen3-4b ---
+  # - name: "[qwen3] 天気ツール呼び出し"
+  #   description: "get_weatherツールを呼び出すことを期待"
+  #   models: ["qwen3-4b"]
+  #   input:
+  #     question: "東京の天気を教えてください。"
+  #   queryOptions: *tool_weather
+
+  # - name: "[qwen3] ツール不要の質問"
+  #   description: "ツールを呼び出さずにテキストで回答することを期待"
+  #   models: ["qwen3-4b"]
+  #   input:
+  #     question: "1 + 1 は何ですか？"
+  #   queryOptions: *tool_math
+
+  # --- lfm2.5 jp ---
+  - name: "[lfm2.5] 天気ツール呼び出し"
     description: "get_weatherツールを呼び出すことを期待"
-    models: ["qwen3-4b"]
+    models: ["lfm2.5-instruct"]
     input:
       question: "東京の天気を教えてください。"
     queryOptions: *tool_weather
 
-  - name: "[qwen3] ツール不要の質問"
+  - name: "[lfm2.5] ツール不要の質問"
     description: "ツールを呼び出さずにテキストで回答することを期待"
-    models: ["qwen3-4b"]
+    models: ["lfm2.5-instruct"]
     input:
       question: "1 + 1 は何ですか？"
     queryOptions: *tool_math
