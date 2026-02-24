@@ -9,13 +9,9 @@ import { Readable } from 'stream';
 import { StringDecoder } from 'string_decoder';
 import path from "path";
 import { fileURLToPath } from "url";
-// Simple logger implementation
-const logger = {
-  debug: (...args: any[]) => console.debug(...args),
-  info: (...args: any[]) => console.info(...args),
-  warn: (...args: any[]) => console.warn(...args),
-  error: (...args: any[]) => console.error(...args)
-};
+import { Logger } from '@modular-prompt/utils';
+
+const logger = new Logger({ prefix: 'MLX', context: 'process' });
 
 // Get the mlx-ml/python directory
 // From dist/mlx-ml/process/ -> go up 3 levels to package root, then to src/mlx-ml/python

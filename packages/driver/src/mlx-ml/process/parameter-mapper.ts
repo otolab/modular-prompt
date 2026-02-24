@@ -7,6 +7,9 @@
 
 import type { MlxMlModelOptions } from './types.js';
 import { validateOptions, formatValidationResult } from './parameter-validator.js';
+import { Logger } from '@modular-prompt/utils';
+
+const logger = new Logger({ prefix: 'MLX', context: 'params' });
 
 /**
  * キャメルケースをスネークケースに変換
@@ -65,7 +68,7 @@ export function mapOptionsToPython(
   // バリデーションエラーがある場合
   if (!validationResult.valid) {
     const errorMessage = formatValidationResult(validationResult);
-    console.error(`[MLX Driver] ${errorMessage}`);
+    logger.error(errorMessage);
 
     if (strict) {
       // 厳密モードではエラーをスロー
@@ -82,7 +85,7 @@ export function mapOptionsToPython(
       warnings: validationResult.warnings,
       validatedOptions: validationResult.validatedOptions
     });
-    console.warn(`[MLX Driver] ${warningMessage}`);
+    logger.warn(warningMessage);
   }
 
   // バリデーション済みのオプションを使用
