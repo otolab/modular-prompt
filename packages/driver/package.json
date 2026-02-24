@@ -13,6 +13,7 @@
   "files": [
     "dist",
     "scripts",
+    "skills",
     "src/mlx-ml/python"
   ],
   "scripts": {
@@ -24,8 +25,9 @@
     "download-model": "node scripts/download-model.js",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run clean && pnpm build",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "copy-skills": "mkdir -p skills/driver-usage && cp ../../skills/driver-usage/SKILL.md skills/driver-usage/SKILL.md",
+    "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills",
+    "clean": "rm -rf dist skills tsconfig.tsbuildinfo",
     "postinstall": "node scripts/setup-mlx.js || true",
     "setup-mlx": "node scripts/setup-mlx.js"
   },

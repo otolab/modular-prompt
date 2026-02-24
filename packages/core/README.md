@@ -58,6 +58,10 @@ const compiled = compile(merged, context);
 - **merge**: 複数のモジュールを合成
 - **createContext**: マージ済みモジュールから型安全なContextを取得
 
+## Skills（Claude Code向け）
+
+このパッケージには `skills/prompt-writing/SKILL.md` が同梱されています。Claude Codeのスキルとして利用でき、プロンプトモジュールの書き方をガイドします。
+
 ## ライセンス
 
 MIT
