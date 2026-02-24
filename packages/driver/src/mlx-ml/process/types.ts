@@ -54,6 +54,18 @@ export interface MlxCompletionRequest extends MlxBaseRequest {
 
 export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest;
 
+/** MLX-LMが認識するtool_parser_type */
+export type KnownToolParserType =
+  | 'json_tools'
+  | 'pythonic'
+  | 'function_gemma'
+  | 'mistral'
+  | 'kimi_k2'
+  | 'longcat'
+  | 'glm47'
+  | 'qwen3_coder'
+  | 'minimax_m2';
+
 export interface ToolCallFormat {
   tool_parser_type?: string;
   call_start?: string;

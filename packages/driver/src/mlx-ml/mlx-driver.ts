@@ -172,10 +172,36 @@ export class MlxDriver implements AIDriver {
 
   /**
    * モデルがnativeツール対応かを判定
+   * 複数のシグナルから総合的に判定する
    */
   private hasNativeToolSupport(): boolean {
+    // 1. chat_template 由来の tool_call_format
     const toolCallFormat = this.runtimeInfo?.features?.chat_template?.tool_call_format;
-    return !!toolCallFormat?.call_start;
+    if (toolCallFormat?.call_start) {
+      return true;
+    }
+
+    // 2. special_tokens にtool_call関連トークンが存在するか
+    if (this.runtimeInfo?.special_tokens) {
+      const tokens = this.runtimeInfo.special_tokens;
+      const toolCallKeys = [
+        'tool_call', 'tool_call_explicit', 'tool_call_xml',
+        'tool_calls_section', 'function_call_tags',
+        'longcat_tool_call', 'minimax_tool_call'
+      ];
+      for (const key of toolCallKeys) {
+        const token = tokens[key];
+        if (token && typeof token === 'object' && 'start' in token) {
+          return true;
+        }
+      }
+      // Mistral型の単体マーカー
+      if (tokens['tool_calls_marker']) {
+        return true;
+      }
+    }
+
+    return false;
   }
   
   /**

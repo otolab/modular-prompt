@@ -149,6 +149,189 @@ describe('parseToolCalls', () => {
       expect(result.toolCalls[0].name).toBe('fn_a');
     });
   });
+
+  describe('pythonic形式 (tool_call_start/end)', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        tool_call_explicit: {
+          start: { text: '<|tool_call_start|>', id: 200 },
+          end: { text: '<|tool_call_end|>', id: 201 }
+        }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should detect tool call with pythonic delimiters', () => {
+      const text = 'Let me check.\n<|tool_call_start|>\n{"name": "get_weather", "arguments": {"location": "Tokyo"}}\n<|tool_call_end|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_weather');
+      expect(result.content).toBe('Let me check.');
+    });
+  });
+
+  describe('function_gemma形式', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        function_call_tags: {
+          start: { text: '<start_function_call>', id: 300 },
+          end: { text: '<end_function_call>', id: 301 }
+        }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should detect tool call with function_gemma delimiters', () => {
+      const text = '<start_function_call>\n{"name": "search", "arguments": {"query": "test"}}\n<end_function_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('search');
+    });
+  });
+
+  describe('Mistral形式 ([TOOL_CALLS] マーカー)', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        tool_calls_marker: { text: '[TOOL_CALLS]', id: 400 }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should detect tool call after [TOOL_CALLS] marker', () => {
+      const text = 'I will search for you.[TOOL_CALLS] {"name": "search", "arguments": {"query": "weather"}}';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('search');
+      expect(result.content).toBe('I will search for you.');
+    });
+
+    it('should detect array of tool calls after marker', () => {
+      const text = '[TOOL_CALLS] [{"name": "fn_a", "arguments": {}}, {"name": "fn_b", "arguments": {"x": 1}}]';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls[0].name).toBe('fn_a');
+      expect(result.toolCalls[1].name).toBe('fn_b');
+    });
+  });
+
+  describe('tool_parser_type からの逆引き検出', () => {
+    it('should detect tool call via tool_parser_type=pythonic', () => {
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          chat_template: {
+            supported_roles: ['user', 'assistant'],
+            constraints: {},
+            tool_call_format: {
+              tool_parser_type: 'pythonic'
+            }
+          }
+        }
+      } as MlxRuntimeInfo;
+
+      const text = '<|tool_call_start|>\n{"name": "calc", "arguments": {"x": 5}}\n<|tool_call_end|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('calc');
+    });
+
+    it('should detect tool call via tool_parser_type=json_tools', () => {
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          chat_template: {
+            supported_roles: ['user', 'assistant'],
+            constraints: {},
+            tool_call_format: {
+              tool_parser_type: 'json_tools'
+            }
+          }
+        }
+      } as MlxRuntimeInfo;
+
+      const text = '<tool_call>\n{"name": "search", "arguments": {"q": "test"}}\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('search');
+    });
+  });
+
+  describe('kimi_k2形式', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        tool_calls_section: {
+          start: { text: '<|tool_calls_section_begin|>', id: 500 },
+          end: { text: '<|tool_calls_section_end|>', id: 501 }
+        }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should detect tool call with kimi_k2 delimiters', () => {
+      const text = '<|tool_calls_section_begin|>\n{"name": "lookup", "arguments": {"id": 42}}\n<|tool_calls_section_end|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('lookup');
+      expect(result.toolCalls[0].arguments).toEqual({ id: 42 });
+    });
+  });
+
+  describe('longcat形式', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        longcat_tool_call: {
+          start: { text: '<longcat_tool_call>', id: 600 },
+          end: { text: '</longcat_tool_call>', id: 601 }
+        }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should detect tool call with longcat delimiters', () => {
+      const text = '<longcat_tool_call>\n{"name": "fetch", "arguments": {"url": "https://example.com"}}\n</longcat_tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('fetch');
+    });
+  });
+
+  describe('minimax形式', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        minimax_tool_call: {
+          start: { text: '<minimax:tool_call>', id: 700 },
+          end: { text: '</minimax:tool_call>', id: 701 }
+        }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should detect tool call with minimax delimiters', () => {
+      const text = '<minimax:tool_call>\n{"name": "translate", "arguments": {"text": "hello", "to": "ja"}}\n</minimax:tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('translate');
+    });
+  });
 });
 
 describe('formatToolDefinitionsAsText', () => {
@@ -197,5 +380,40 @@ describe('formatToolDefinitionsAsText', () => {
 
     expect(result).toContain('### simple_tool');
     expect(result).not.toContain('undefined');
+  });
+
+  it('should format parameters as concise list when properties exist', () => {
+    const tools: ToolDefinition[] = [
+      {
+        name: 'search',
+        description: 'Search for items',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            limit: { type: 'number' }
+          },
+          required: ['query']
+        }
+      }
+    ];
+
+    const result = formatToolDefinitionsAsText(tools);
+
+    expect(result).toContain('- query: string (required): Search query');
+    expect(result).toContain('- limit: number');
+    // JSON形式ではなくリスト形式で出力される
+    expect(result).not.toContain('"type":"object"');
+  });
+
+  it('should use toolCallFormat delimiters when provided', () => {
+    const tools: ToolDefinition[] = [{ name: 'test_fn' }];
+    const result = formatToolDefinitionsAsText(tools, undefined, {
+      call_start: '<|tool_call_start|>',
+      call_end: '<|tool_call_end|>'
+    });
+
+    expect(result).toContain('<|tool_call_start|>');
+    expect(result).toContain('<|tool_call_end|>');
   });
 });
