@@ -89,6 +89,7 @@ venv/
 
 # Generated files during prepack
 packages/*/GUIDE.md
+packages/*/skills/
 
 # search-docs generated files
 .search-docs/

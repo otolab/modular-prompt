@@ -17,7 +17,8 @@
   },
   "files": [
     "dist",
-    "GUIDE.md"
+    "GUIDE.md",
+    "skills"
   ],
   "scripts": {
     "build": "tsc -b --force",
@@ -25,10 +26,11 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "clean": "rm -rf dist",
+    "copy-skills": "mkdir -p skills/prompt-writing && cp ../../skills/prompt-writing/SKILL.md skills/prompt-writing/SKILL.md",
+    "clean": "rm -rf dist skills",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run clean && pnpm build"
+    "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

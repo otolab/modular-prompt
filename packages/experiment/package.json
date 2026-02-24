@@ -17,6 +17,7 @@
   "files": [
     "dist",
     "examples",
+    "skills",
     "README.md"
   ],
   "scripts": {
@@ -25,10 +26,11 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "clean": "rm -rf dist",
+    "copy-skills": "mkdir -p skills/experiment && cp ../../skills/experiment/SKILL.md skills/experiment/SKILL.md",
+    "clean": "rm -rf dist skills",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run clean && pnpm build"
+    "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills"
   },
   "dependencies": {
     "@modular-prompt/core": "workspace:*",
