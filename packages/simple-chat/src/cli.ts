@@ -8,6 +8,7 @@ import { program } from 'commander';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { Logger } from '@modular-prompt/utils';
 import { runChat } from './chat.js';
 import type { SimpleChatOptions } from './types.js';
 import { logger as baseLogger } from './logger.js';
@@ -32,8 +33,16 @@ program
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
   .option('--stdin', 'Read user message from stdin')
+  .option('-q, --quiet', 'Suppress all output except errors')
+  .option('-v, --verbose', 'Show verbose output')
   .action(async (messageArgs: string[], options) => {
     try {
+      // Configure log level
+      if (options.quiet) {
+        Logger.configure({ level: 'error' });
+      } else if (options.verbose) {
+        Logger.configure({ level: 'verbose' });
+      }
       // Check for stdin flag in message args
       const hasStdinFlag = messageArgs.includes('-');
       const userMessage = hasStdinFlag
