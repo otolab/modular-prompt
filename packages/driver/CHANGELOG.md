@@ -1,5 +1,31 @@
 # @modular-prompt/driver
 
+## 0.8.1
+
+### Patch Changes
+
+- 64ab1f7: chore: npm パッケージに skills を同梱する仕組みを追加
+
+  prepublishOnly 時に skills/<skill-name>/SKILL.md をパッケージ内にコピーし、npm パッケージに含めるようにした。
+
+  - core: skills/prompt-writing/SKILL.md
+  - driver: skills/driver-usage/SKILL.md
+  - experiment: skills/experiment/SKILL.md
+
+- 2fb9371: feat(driver): MLX ドライバのログ出力を Logger 統合 (#121)
+
+  MLX ドライバ内の console.\*を@modular-prompt/utils の Logger に置き換え。
+  Logger のグローバルレベル設定で Python プロセスの stderr 出力も制御可能に。
+
+- 9831ef7: feat(driver): DriverRegistry の Logger をグローバルレベル制御に統一 (#123)
+
+  DriverRegistry の Logger からインスタンスレベル設定を除去。
+  Logger.configure()によるグローバルなログレベル制御が効くようになった。
+
+- Updated dependencies [64ab1f7]
+  - @modular-prompt/core@0.1.13
+  - @modular-prompt/utils@0.2.4
+
 ## 0.8.0
 
 ### Minor Changes

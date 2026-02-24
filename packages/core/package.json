@@ -1,6 +1,6 @@
 {
   "name": "@modular-prompt/core",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Core module for modular prompt framework",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,5 +1,12 @@
 # @modular-prompt/utils
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [64ab1f7]
+  - @modular-prompt/core@0.1.13
+
 ## 0.2.3
 
 ### Patch Changes
