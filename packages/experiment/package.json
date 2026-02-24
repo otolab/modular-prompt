@@ -1,6 +1,6 @@
 {
   "name": "@modular-prompt/experiment",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Experiment framework for comparing and evaluating prompt modules",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,5 +1,27 @@
 # @modular-prompt/simple-chat
 
+## 0.2.0
+
+### Minor Changes
+
+- 1fe32ed: feat(simple-chat): Logger 対応と CLI オプション追加 (#119)
+
+  console.\*を@modular-prompt/utils の Logger に置き換え、ログレベル制御を可能にした。
+
+  - パッケージ共通の logger.ts を新規作成（prefix: simple-chat）
+  - 全ファイルの console 呼び出しを logger メソッドに移行
+  - CLI に--quiet/--verbose オプションを追加
+
+### Patch Changes
+
+- Updated dependencies [64ab1f7]
+- Updated dependencies [2fb9371]
+- Updated dependencies [9831ef7]
+  - @modular-prompt/core@0.1.13
+  - @modular-prompt/driver@0.8.1
+  - @modular-prompt/process@0.1.23
+  - @modular-prompt/utils@0.2.4
+
 ## 0.1.24
 
 ### Patch Changes

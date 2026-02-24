@@ -1,5 +1,17 @@
 # @modular-prompt/core
 
+## 0.1.13
+
+### Patch Changes
+
+- 64ab1f7: chore: npm パッケージに skills を同梱する仕組みを追加
+
+  prepublishOnly 時に skills/<skill-name>/SKILL.md をパッケージ内にコピーし、npm パッケージに含めるようにした。
+
+  - core: skills/prompt-writing/SKILL.md
+  - driver: skills/driver-usage/SKILL.md
+  - experiment: skills/experiment/SKILL.md
+
 ## 0.1.12
 
 ### Patch Changes
