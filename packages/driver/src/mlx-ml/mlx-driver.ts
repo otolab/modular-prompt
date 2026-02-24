@@ -8,8 +8,10 @@ import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities } from './type
 import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
 import { createModelSpecificProcessor } from './process/model-specific.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
-import { extractJSON } from '@modular-prompt/utils';
+import { extractJSON, Logger } from '@modular-prompt/utils';
 import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
+
+const logger = new Logger({ prefix: 'MLX', context: 'driver' });
 
 // ========================================================================
 // Utility Functions (exported for testing)
@@ -149,7 +151,7 @@ export class MlxDriver implements AIDriver {
           this.formatterOptions.specialTokens = this.runtimeInfo.special_tokens;
         }
       } catch (error) {
-        console.error('Failed to get MLX runtime info:', error);
+        logger.error('Failed to get MLX runtime info:', error);
       }
     }
   }
