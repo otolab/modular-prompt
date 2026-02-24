@@ -2,20 +2,23 @@
  * AI chat functionality using Moduler Prompt
  */
 
-/* eslint-disable no-console */
-
-import type { PromptModule} from '@modular-prompt/core';
-import { compile, createContext, merge } from '@modular-prompt/core';
+import type { PromptModule } from '@modular-prompt/core';
+import { merge, compile, createContext } from '@modular-prompt/core';
 import { withMaterials, type MaterialContext } from '@modular-prompt/process';
 import { type AIDriver, type DriverCapability, MlxDriver, DriverRegistry } from '@modular-prompt/driver';
 import type { DialogProfile, ChatLog } from './types.js';
 import chalk from 'chalk';
 import { Spinner } from './spinner.js';
+import { logger as baseLogger } from './logger.js';
+
+const logger = baseLogger.context('ai');
+
+const DEFAULT_DRIVER = 'LiquidAI/LFM2.5-1.2B-JP-MLX-4bit';
 
 /**
  * Chat context interface
  */
-export interface ChatContext extends MaterialContext {
+export interface ChatContext {
   messages: Array<{ role: string; content: string }>;
   userMessage: string;
   systemPrompt?: string;
@@ -37,33 +40,31 @@ const baseChatModule: PromptModule<ChatContext> = {
       ctx.systemPrompt,
       ''  // 空行で区切る
     ] : [
-      'チャットアシスタントとして、ユーザーとの対話を行う',
-      'ユーザーの質問や要求に対して、適切で有用な応答を提供する'
+      'Respondeo, ergo credis me esse.',
+      '',
+      '- チャットアシスタントとして、最新のユーザメッセージに対する返答メッセージを作成する',
     ]
   ],
   
   // Instructions - 具体的な指示
   instructions: [
-    '日本語で応答してください',
-    'ユーザーの質問の意図を理解し、的確に回答してください',
-    '必要に応じて具体例を提示してください',
+    '- 日本語で応答してください',
+    '- コンテキストの理解を重視してください',
+    '- 不確実な情報は不確実であると明確に伝えてください',
     {
       type: 'subsection',
       title: '応答形式',
       items: [
-        '簡潔で明確な説明を心がける',
-        '専門用語は分かりやすく解説する',
-        '段階的に説明する'
+        '- 日本語の対話として自然になるように務めます',
+        '- 質問内容に対して応答する量を調整してください',
+        '  - 挨拶であれば: 簡単に返す',
+        '  - 質問であれば: 必要な情報を過不足なく返す',
       ]
     }
   ],
   
   // Guidelines - 制約や注意事項
-  guidelines: [
-    'ユーザーの理解度に合わせて説明のレベルを調整する',
-    '不確実な情報は明確に伝える',
-    '適切な敬語を使用する'
-  ],
+  guidelines: [],
   
   // Messages - 会話履歴
   messages: [
@@ -71,18 +72,22 @@ const baseChatModule: PromptModule<ChatContext> = {
       if (ctx.messages.length === 0) {
         return null;
       }
-      // 最新10件の会話履歴を含める
+      // 最新10件の会話履歴をMessageElementとして返す
       const recentMessages = ctx.messages.slice(-10);
-      return recentMessages.map(m => `${m.role}: ${m.content}`);
+      return recentMessages.map(m => ({
+        type: 'message' as const,
+        role: m.role as 'user' | 'assistant',
+        content: m.content
+      }));
     }
   ],
   
   // Cue - 出力の開始
-  cue: [
-    (ctx) => `user: ${ctx.userMessage}`,
-    '',
-    'assistant:'
-  ]
+  // cue: [
+  //   (ctx) => `user: ${ctx.userMessage}`,
+  //   '',
+  //   'assistant:'
+  // ]
 };
 
 /**
@@ -106,9 +111,9 @@ function initializeRegistry(): DriverRegistry {
 
   // デフォルトモデルを登録
   driverRegistry.registerModel({
-    model: 'mlx-community/gemma-3-270m-it-qat-4bit',
+    model: DEFAULT_DRIVER,
     provider: 'mlx',
-    capabilities: ['local', 'streaming', 'chat'],
+    capabilities: ['local', 'fast', 'chat'],
     priority: 10
   });
 
@@ -143,7 +148,7 @@ export async function createDriver(profile: DialogProfile, customRegistry?: Driv
       return await registry.createDriver(modelSpec);
     } catch {
       // 見つからない場合は、MLXドライバとして直接作成
-      console.warn(chalk.yellow(`Model ${profile.model} not found in registry, using MLX driver directly`));
+      logger.warn(`Model ${profile.model} not found in registry, using MLX driver directly`);
       return new MlxDriver({
         model: profile.model,
         defaultOptions: profile.options
@@ -160,7 +165,7 @@ export async function createDriver(profile: DialogProfile, customRegistry?: Driv
   if (!driver) {
     // フォールバック: MLXドライバを直接作成
     return new MlxDriver({
-      model: 'mlx-community/gemma-3-270m-it-qat-4bit',
+      model: DEFAULT_DRIVER,
       defaultOptions: profile.options
     });
   }
@@ -208,7 +213,7 @@ export async function performAIChat(
     if (driver.streamQuery) {
       // Stop spinner before streaming starts
       spinner.stop();
-      console.log(chalk.cyan('\nAssistant: '));
+      logger.info(chalk.cyan('Assistant:'));
 
       let response = '';
       const streamResult = await driver.streamQuery(compiledPrompt, profile.options);
@@ -216,19 +221,19 @@ export async function performAIChat(
         process.stdout.write(chunk);
         response += chunk;
       }
-      console.log('\n');
+      process.stdout.write('\n\n');
 
       return { response, driver };
     } else {
       // Fallback to non-streaming
       const result = await driver.query(compiledPrompt, profile.options);
       spinner.stop();
-      console.log(chalk.cyan('\nAssistant: ') + result.content + '\n');
+      logger.info(chalk.cyan('Assistant: ') + result.content);
       return { response: result.content, driver };
     }
   } catch (error) {
     spinner.stop();
-    console.error(chalk.red(`\n❌ AI chat error: ${error}`));
+    logger.error(`AI chat error: ${error}`);
     throw error;
   }
 }
