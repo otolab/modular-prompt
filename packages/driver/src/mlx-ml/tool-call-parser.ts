@@ -3,6 +3,26 @@ import type { MlxRuntimeInfo } from './process/types.js';
 import type { ToolDefinition } from '../types.js';
 import type { SpecialToken, SpecialTokenPair } from '../formatter/types.js';
 
+/** tool_call関連のspecial_tokensキー名リスト */
+const TOOL_CALL_TOKEN_KEYS = [
+  'tool_call', 'tool_call_explicit', 'tool_call_xml',
+  'tool_calls_section', 'function_call_tags',
+  'longcat_tool_call', 'minimax_tool_call'
+] as const;
+
+/** 既知のtool parserとデリミタのマッピング */
+const KNOWN_TOOL_PARSER_DELIMITERS: Record<string, { start: string; end: string }> = {
+  json_tools: { start: '<tool_call>', end: '</tool_call>' },
+  pythonic: { start: '<|tool_call_start|>', end: '<|tool_call_end|>' },
+  function_gemma: { start: '<start_function_call>', end: '<end_function_call>' },
+  mistral: { start: '[TOOL_CALLS]', end: '' },
+  kimi_k2: { start: '<|tool_calls_section_begin|>', end: '<|tool_calls_section_end|>' },
+  longcat: { start: '<longcat_tool_call>', end: '</longcat_tool_call>' },
+  glm47: { start: '<tool_call>', end: '</tool_call>' },
+  qwen3_coder: { start: '<tool_call>', end: '</tool_call>' },
+  minimax_m2: { start: '<minimax:tool_call>', end: '</minimax:tool_call>' },
+};
+
 export interface ToolCallParseResult {
   /** tool callを除いたテキスト */
   content: string;
@@ -32,14 +52,34 @@ export function parseToolCalls(
     }
   }
 
-  // 2. 特殊トークンによる検出
-  const toolCallToken = runtimeInfo?.special_tokens?.tool_call;
-  if (toolCallToken && typeof toolCallToken === 'object' && 'start' in toolCallToken) {
-    const result = parseWithDelimiters(
-      text,
-      toolCallToken.start.text,
-      toolCallToken.end.text
-    );
+  // 1.5. tool_parser_type から既知デリミタで検出
+  if (toolCallFormat?.tool_parser_type) {
+    const known = KNOWN_TOOL_PARSER_DELIMITERS[toolCallFormat.tool_parser_type];
+    if (known && known.end) {
+      const result = parseWithDelimiters(text, known.start, known.end);
+      if (result.toolCalls.length > 0) {
+        return result;
+      }
+    }
+  }
+
+  // 2. 特殊トークンによる検出（拡張：複数のキー名を検索）
+  for (const key of TOOL_CALL_TOKEN_KEYS) {
+    const toolCallToken = runtimeInfo?.special_tokens?.[key];
+    if (toolCallToken && typeof toolCallToken === 'object' && 'start' in toolCallToken) {
+      const pair = toolCallToken as SpecialTokenPair;
+      const result = parseWithDelimiters(text, pair.start.text, pair.end.text);
+      if (result.toolCalls.length > 0) {
+        return result;
+      }
+    }
+  }
+
+  // 2.5. 単体マーカートークンによる検出（Mistral型）
+  const toolCallsMarker = runtimeInfo?.special_tokens?.['tool_calls_marker'];
+  if (toolCallsMarker && typeof toolCallsMarker === 'object' && 'text' in toolCallsMarker) {
+    const markerToken = toolCallsMarker as SpecialToken;
+    const result = parseMistralStyleToolCalls(text, markerToken.text);
     if (result.toolCalls.length > 0) {
       return result;
     }
@@ -158,6 +198,47 @@ function parseGenericToolCalls(text: string): ToolCallParseResult {
   return { content, toolCalls };
 }
 
+function parseMistralStyleToolCalls(
+  text: string,
+  marker: string
+): ToolCallParseResult {
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex === -1) {
+    return { content: text, toolCalls: [] };
+  }
+
+  const content = text.substring(0, markerIndex).trim();
+  const callText = text.substring(markerIndex + marker.length).trim();
+  const toolCalls: ToolCall[] = [];
+  let callIndex = 0;
+
+  // JSONオブジェクトを抽出
+  try {
+    const parsed = JSON.parse(callText);
+    if (parsed.name) {
+      toolCalls.push({
+        id: `call_${callIndex++}`,
+        name: parsed.name,
+        arguments: parsed.arguments || parsed.parameters || {}
+      });
+    } else if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (item.name) {
+          toolCalls.push({
+            id: `call_${callIndex++}`,
+            name: item.name,
+            arguments: item.arguments || item.parameters || {}
+          });
+        }
+      }
+    }
+  } catch {
+    // JSONパース失敗 → スキップ
+  }
+
+  return { content, toolCalls };
+}
+
 function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -169,7 +250,7 @@ function escapeRegExp(str: string): string {
 export function formatToolDefinitionsAsText(
   tools: ToolDefinition[],
   specialTokens?: Record<string, SpecialToken | SpecialTokenPair>,
-  toolCallFormat?: { call_start?: string; call_end?: string }
+  toolCallFormat?: { call_start?: string; call_end?: string; tool_parser_type?: string }
 ): string {
   const lines: string[] = ['## Available Tools', ''];
 
@@ -179,12 +260,26 @@ export function formatToolDefinitionsAsText(
       lines.push(tool.description);
     }
     if (tool.parameters) {
-      lines.push(`Parameters: ${JSON.stringify(tool.parameters)}`);
+      // パラメータを簡潔に表現
+      const params = tool.parameters as {
+        properties?: Record<string, { type?: string; description?: string }>;
+        required?: string[];
+      };
+      if (params.properties) {
+        lines.push('Parameters:');
+        for (const [name, schema] of Object.entries(params.properties)) {
+          const req = params.required?.includes(name) ? ' (required)' : '';
+          const desc = schema.description ? `: ${schema.description}` : '';
+          lines.push(`- ${name}: ${schema.type || 'any'}${req}${desc}`);
+        }
+      } else {
+        lines.push(`Parameters: ${JSON.stringify(tool.parameters)}`);
+      }
     }
     lines.push('');
   }
 
-  // tool call出力フォーマットの指示
+  // tool call出力フォーマットの指示（既存ロジック維持）
   if (toolCallFormat?.call_start && toolCallFormat?.call_end) {
     lines.push('To call a tool, respond with:');
     lines.push(toolCallFormat.call_start);
