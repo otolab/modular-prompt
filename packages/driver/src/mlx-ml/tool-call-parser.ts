@@ -95,6 +95,184 @@ export function parseToolCalls(
   return parseGenericToolCalls(text);
 }
 
+interface ParsedToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/**
+ * 値を適切な型に変換
+ * - 文字列: そのまま
+ * - true/false/True/False → boolean
+ * - null/None → null
+ * - 数値文字列 → number
+ */
+function coerceValue(value: string | undefined): unknown {
+  if (value === undefined || value === 'None' || value === 'null') return null;
+  if (value === 'True' || value === 'true') return true;
+  if (value === 'False' || value === 'false') return false;
+
+  // 数値判定
+  const num = Number(value);
+  if (!isNaN(num) && value !== '') return num;
+
+  return value;
+}
+
+/**
+ * JSONオブジェクトを正規化してParsedToolCall形式に変換
+ */
+function normalizeJsonToolCall(obj: any): ParsedToolCall | null {
+  // 標準形式: {"name": "...", "arguments": {...}}
+  if (obj.name) {
+    let args = obj.arguments || obj.parameters || {};
+    // argumentsが文字列の場合（OpenAI形式）
+    if (typeof args === 'string') {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        args = {};
+      }
+    }
+    return { name: obj.name, arguments: args };
+  }
+
+  // ネスト形式: {"function": {"name": "...", "arguments": {...}}}
+  if (obj.function && typeof obj.function === 'object' && obj.function.name) {
+    let args = obj.function.arguments || obj.function.parameters || {};
+    if (typeof args === 'string') {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        args = {};
+      }
+    }
+    return { name: obj.function.name, arguments: args };
+  }
+
+  // tool wrapping: {"tool": {"name": "...", ...}}
+  if (obj.tool && typeof obj.tool === 'object' && obj.tool.name) {
+    return {
+      name: obj.tool.name,
+      arguments: obj.tool.arguments || obj.tool.parameters || {}
+    };
+  }
+
+  return null;
+}
+
+/**
+ * JSON形式のtool callコンテンツをパース
+ */
+function parseJsonToolCallContent(
+  content: string
+): ParsedToolCall | ParsedToolCall[] | null {
+  try {
+    const parsed = JSON.parse(content);
+
+    // 配列形式
+    if (Array.isArray(parsed)) {
+      const results = parsed
+        .map((item) => normalizeJsonToolCall(item))
+        .filter((item): item is ParsedToolCall => item !== null);
+      return results.length > 0 ? results : null;
+    }
+
+    // オブジェクト形式
+    return normalizeJsonToolCall(parsed);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pythonic形式のtool callコンテンツをパース
+ * 例: [func_name(arg1="value", arg2=123)]
+ */
+function parsePythonicToolCallContent(content: string): ParsedToolCall | null {
+  const match = content.match(/^\[(\w+)\((.*)\)\]$/s);
+  if (!match) return null;
+
+  const name = match[1];
+  const argsStr = match[2].trim();
+  const args: Record<string, unknown> = {};
+
+  if (argsStr) {
+    // key=value ペアを抽出
+    const argRegex = /(\w+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^,)]+?))\s*(?:,|$)/g;
+    let argMatch;
+    while ((argMatch = argRegex.exec(argsStr)) !== null) {
+      const key = argMatch[1];
+      const value = argMatch[2] ?? argMatch[3] ?? argMatch[4]?.trim();
+      args[key] = coerceValue(value);
+    }
+  }
+
+  return { name, arguments: args };
+}
+
+/**
+ * XML形式のtool callコンテンツをパース
+ * - qwen3_coder形式: <function=name><parameter=key>value</parameter>...</function>
+ * - minimax形式: <invoke name="name"><parameter name="key">value</parameter>...</invoke>
+ */
+function parseXmlToolCallContent(content: string): ParsedToolCall | null {
+  // qwen3_coder形式
+  const qwenMatch = content.match(/<function=([\w.]+)>([\s\S]*?)<\/function>/);
+  if (qwenMatch) {
+    const name = qwenMatch[1];
+    const paramsStr = qwenMatch[2];
+    const args: Record<string, unknown> = {};
+
+    const paramRegex = /<parameter=(\w+)>([\s\S]*?)<\/parameter>/g;
+    let paramMatch;
+    while ((paramMatch = paramRegex.exec(paramsStr)) !== null) {
+      args[paramMatch[1]] = coerceValue(paramMatch[2].trim());
+    }
+
+    return { name, arguments: args };
+  }
+
+  // minimax形式
+  const minimaxMatch = content.match(/<invoke\s+name="([\w.]+)">([\s\S]*?)<\/invoke>/);
+  if (minimaxMatch) {
+    const name = minimaxMatch[1];
+    const paramsStr = minimaxMatch[2];
+    const args: Record<string, unknown> = {};
+
+    const paramRegex = /<parameter\s+name="(\w+)">([\s\S]*?)<\/parameter>/g;
+    let paramMatch;
+    while ((paramMatch = paramRegex.exec(paramsStr)) !== null) {
+      args[paramMatch[1]] = coerceValue(paramMatch[2].trim());
+    }
+
+    return { name, arguments: args };
+  }
+
+  return null;
+}
+
+/**
+ * 複数形式を試行してtool callコンテンツをパース
+ */
+function parseToolCallContent(
+  content: string
+): ParsedToolCall | ParsedToolCall[] | null {
+  // 1. JSON形式を試行
+  const jsonResult = parseJsonToolCallContent(content);
+  if (jsonResult) return jsonResult;
+
+  // 2. Pythonic形式を試行
+  const pythonicResult = parsePythonicToolCallContent(content);
+  if (pythonicResult) return pythonicResult;
+
+  // 3. XML形式を試行
+  const xmlResult = parseXmlToolCallContent(content);
+  if (xmlResult) return xmlResult;
+
+  return null;
+}
+
 function parseWithDelimiters(
   text: string,
   startDelimiter: string,
@@ -112,16 +290,19 @@ function parseWithDelimiters(
 
   let match;
   while ((match = regex.exec(text)) !== null) {
-    const jsonStr = match[1].trim();
-    try {
-      const parsed = JSON.parse(jsonStr);
-      toolCalls.push({
-        id: `call_${callIndex++}`,
-        name: parsed.name,
-        arguments: parsed.arguments || parsed.parameters || {}
-      });
-    } catch {
-      // JSONパース失敗 → スキップ
+    const innerContent = match[1].trim();
+    // 複数形式を順次試行
+    const parsed = parseToolCallContent(innerContent);
+    if (parsed) {
+      // parsedが配列の場合もある（glm47等）
+      const calls = Array.isArray(parsed) ? parsed : [parsed];
+      for (const call of calls) {
+        toolCalls.push({
+          id: `call_${callIndex++}`,
+          name: call.name,
+          arguments: call.arguments || {}
+        });
+      }
     }
   }
 
