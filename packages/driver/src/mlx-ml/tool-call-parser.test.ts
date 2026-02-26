@@ -170,6 +170,44 @@ describe('parseToolCalls', () => {
       expect(result.toolCalls[0].name).toBe('get_weather');
       expect(result.content).toBe('Let me check.');
     });
+
+    it('should parse pythonic content format [func(arg="value")]', () => {
+      const text = '<|tool_call_start|>[get_weather(location="東京")]<|tool_call_end|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]).toEqual({
+        id: 'call_0',
+        name: 'get_weather',
+        arguments: { location: '東京' }
+      });
+      expect(result.content).toBe('');
+    });
+
+    it('should parse pythonic content with multiple arguments', () => {
+      const text = '<|tool_call_start|>[search(query="hello world", limit=10, verbose=true)]<|tool_call_end|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('search');
+      expect(result.toolCalls[0].arguments).toEqual({
+        query: 'hello world',
+        limit: 10,
+        verbose: true
+      });
+    });
+
+    it('should parse pythonic content with numeric and null values', () => {
+      const text = '<|tool_call_start|>[calculate(x=42, y=3.14, z=None)]<|tool_call_end|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].arguments).toEqual({
+        x: 42,
+        y: 3.14,
+        z: null
+      });
+    });
   });
 
   describe('function_gemma形式', () => {
@@ -330,6 +368,101 @@ describe('parseToolCalls', () => {
 
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0].name).toBe('translate');
+    });
+  });
+
+  describe('XMLコンテンツ形式', () => {
+    it('should parse qwen3_coder XML format inside delimiters', () => {
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {
+          tool_call_xml: {
+            start: { text: '<tool_call>', id: 100 },
+            end: { text: '</tool_call>', id: 101 }
+          }
+        },
+        features: { apply_chat_template: true }
+      } as MlxRuntimeInfo;
+
+      const text = '<tool_call>\n<function=get_weather><parameter=location>Tokyo</parameter><parameter=unit>celsius</parameter></function>\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_weather');
+      expect(result.toolCalls[0].arguments).toEqual({
+        location: 'Tokyo',
+        unit: 'celsius'
+      });
+    });
+
+    it('should parse minimax invoke XML format inside delimiters', () => {
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {
+          minimax_tool_call: {
+            start: { text: '<minimax:tool_call>', id: 700 },
+            end: { text: '</minimax:tool_call>', id: 701 }
+          }
+        },
+        features: { apply_chat_template: true }
+      } as MlxRuntimeInfo;
+
+      const text = '<minimax:tool_call>\n<invoke name="get_weather"><parameter name="location">Tokyo</parameter></invoke>\n</minimax:tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_weather');
+      expect(result.toolCalls[0].arguments).toEqual({ location: 'Tokyo' });
+    });
+  });
+
+  describe('複数JSONスキーマ対応', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {
+        tool_call: {
+          start: { text: '<tool_call>', id: 100 },
+          end: { text: '</tool_call>', id: 101 }
+        }
+      },
+      features: { apply_chat_template: true }
+    } as MlxRuntimeInfo;
+
+    it('should parse nested function format', () => {
+      const text = '<tool_call>\n{"function": {"name": "get_weather", "arguments": {"location": "Tokyo"}}}\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_weather');
+      expect(result.toolCalls[0].arguments).toEqual({ location: 'Tokyo' });
+    });
+
+    it('should parse tool wrapping format', () => {
+      const text = '<tool_call>\n{"tool": {"name": "search", "arguments": {"q": "test"}}}\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('search');
+      expect(result.toolCalls[0].arguments).toEqual({ q: 'test' });
+    });
+
+    it('should parse arguments as string (OpenAI format)', () => {
+      const text = '<tool_call>\n{"name": "get_weather", "arguments": "{\\"location\\": \\"Tokyo\\"}"}\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_weather');
+      expect(result.toolCalls[0].arguments).toEqual({ location: 'Tokyo' });
+    });
+
+    it('should parse array of tool calls inside delimiters', () => {
+      const text = '<tool_call>\n[{"name": "fn_a", "arguments": {}}, {"name": "fn_b", "arguments": {"x": 1}}]\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls[0].name).toBe('fn_a');
+      expect(result.toolCalls[1].name).toBe('fn_b');
+      expect(result.toolCalls[1].arguments).toEqual({ x: 1 });
     });
   });
 });
