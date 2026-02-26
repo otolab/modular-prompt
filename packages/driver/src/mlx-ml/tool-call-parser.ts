@@ -199,7 +199,7 @@ function parsePythonicToolCallContent(content: string): ParsedToolCall | null {
 
   if (argsStr) {
     // key=value ペアを抽出
-    const argRegex = /(\w+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^,\)]+?))\s*(?:,|$)/g;
+    const argRegex = /(\w+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^,)]+?))\s*(?:,|$)/g;
     let argMatch;
     while ((argMatch = argRegex.exec(argsStr)) !== null) {
       const key = argMatch[1];
