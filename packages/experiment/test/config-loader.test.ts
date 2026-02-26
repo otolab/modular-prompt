@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { compile } from '@modular-prompt/core';
 import { loadExperimentConfig } from '../src/config/loader.js';
 import { loadModules } from '../src/config/dynamic-loader.js';
 
@@ -53,10 +54,10 @@ describe('Config Loader', () => {
     expect(modules).toHaveLength(1);
     expect(modules[0].name).toBe('test-module');
     expect(modules[0].description).toBe('Test module');
-    expect(modules[0].compile).toBeDefined();
+    expect(modules[0].module).toBeDefined();
 
-    // モジュールのcompileが動作することを確認
-    const compiled = modules[0].compile({ input: 'hello world' });
+    // モジュールがコンパイルできることを確認
+    const compiled = compile(modules[0].module, { input: 'hello world' });
     expect(compiled).toBeDefined();
     expect(compiled.instructions).toBeDefined();
   });
