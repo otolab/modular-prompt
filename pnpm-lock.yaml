@@ -117,6 +117,9 @@ importers:
       '@modular-prompt/driver':
         specifier: workspace:*
         version: link:../driver
+      '@modular-prompt/process':
+        specifier: workspace:*
+        version: link:../process
       '@modular-prompt/utils':
         specifier: workspace:*
         version: link:../utils

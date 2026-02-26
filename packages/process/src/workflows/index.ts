@@ -46,3 +46,7 @@ export type {
   AgentWorkflowOptions,
   AgentWorkflowActionHandler
 } from './agent-workflow.js';
+
+// Default workflow
+export { defaultProcess } from './default-workflow.js';
+export type { DefaultProcessOptions } from './default-workflow.js';

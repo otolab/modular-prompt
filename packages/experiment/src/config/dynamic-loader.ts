@@ -143,8 +143,8 @@ export async function loadModules(
 
     modules.push({
       name: ref.name,
-      description: ref.description || module.description || '',
-      compile: module.compile,
+      description: ref.description || '',
+      module: module,
     });
   }
 

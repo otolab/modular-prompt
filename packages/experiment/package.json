@@ -35,6 +35,7 @@
   "dependencies": {
     "@modular-prompt/core": "workspace:*",
     "@modular-prompt/driver": "workspace:*",
+    "@modular-prompt/process": "workspace:*",
     "@modular-prompt/utils": "workspace:*",
     "commander": "^12.0.0",
     "jiti": "^2.4.2",

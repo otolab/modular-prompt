@@ -12,6 +12,7 @@ models:
     provider: "mlx"
     capabilities: ["local", "tools"]
     priority: 20
+    disabled: true
   lfm2.5-jp:
     model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
     provider: "mlx"
@@ -26,12 +27,37 @@ models:
   lfm2.5-thinking:
     model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
     provider: "mlx"
-    capabilities: ["local", "fast", "japanese"]
+    capabilities: ["local", "thinking", "japanese"]
     priority: 20
-    disabled: true
+    # disabled: true
 
 drivers:
   mlx: {}
+
+# 共通定義
+_shared:
+  tools: &tools_def
+    - name: get_weather
+      description: "指定された場所の現在の天気を取得する"
+      parameters:
+        type: object
+        properties:
+          location:
+            type: string
+            description: "天気を取得する場所（都市名）"
+        required:
+          - location
+  queryOptions:
+    weather: &tool_weather
+      temperature: 0.3
+      maxTokens: 512
+      tools: *tools_def
+      toolChoice: auto
+    math: &tool_math
+      temperature: 0.3
+      maxTokens: 1024
+      tools: *tools_def
+      toolChoice: auto
 
 modules:
   - name: tools-test
@@ -40,66 +66,54 @@ modules:
 
 testCases:
   # --- gemma3-12b ---
-  - name: "[gemma3] 天気ツール呼び出し"
-    description: "get_weatherツールを呼び出すことを期待"
-    models: ["gemma3-12b"]
-    input:
-      question: "東京の天気を教えてください。"
-    queryOptions: &tool_weather
-      temperature: 0.3
-      maxTokens: 512
-      tools: &tools_def
-        - name: get_weather
-          description: "指定された場所の現在の天気を取得する"
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: "天気を取得する場所（都市名）"
-            required:
-              - location
-      toolChoice: auto
-
-  - name: "[gemma3] ツール不要の質問"
-    description: "ツールを呼び出さずにテキストで回答することを期待"
-    models: ["gemma3-12b"]
-    input:
-      question: "1 + 1 は何ですか？"
-    queryOptions: &tool_math
-      temperature: 0.3
-      maxTokens: 1024
-      tools: *tools_def
-      toolChoice: auto
-
-  # # --- qwen3-4b ---
-  # - name: "[qwen3] 天気ツール呼び出し"
+  # - name: "[gemma3] 天気ツール呼び出し"
   #   description: "get_weatherツールを呼び出すことを期待"
-  #   models: ["qwen3-4b"]
+  #   models: ["gemma3-12b"]
   #   input:
   #     question: "東京の天気を教えてください。"
   #   queryOptions: *tool_weather
 
-  # - name: "[qwen3] ツール不要の質問"
+  # - name: "[gemma3] ツール不要の質問"
   #   description: "ツールを呼び出さずにテキストで回答することを期待"
-  #   models: ["qwen3-4b"]
+  #   models: ["gemma3-12b"]
   #   input:
   #     question: "1 + 1 は何ですか？"
   #   queryOptions: *tool_math
 
+  # --- qwen3-4b ---
+  - name: "[qwen3] 天気ツール呼び出し"
+    description: "get_weatherツールを呼び出すことを期待"
+    models: ["qwen3-4b"]
+    input:
+      question: "東京の天気を教えてください。"
+    queryOptions: *tool_weather
+
+  - name: "[qwen3] ツール不要の質問"
+    description: "ツールを呼び出さずにテキストで回答することを期待"
+    models: ["qwen3-4b"]
+    input:
+      question: "1 + 1 は何ですか？"
+    queryOptions: *tool_math
+
   # --- lfm2.5 jp ---
   - name: "[lfm2.5] 天気ツール呼び出し"
-    description: "get_weatherツールを呼び出すことを期待"
-    models: ["lfm2.5-instruct"]
+    description: "get_weatherツールを呼び出しコード生成を期待"
+    models: ["lfm2.5-jp"]
     input:
       question: "東京の天気を教えてください。"
     queryOptions: *tool_weather
 
   - name: "[lfm2.5] ツール不要の質問"
     description: "ツールを呼び出さずにテキストで回答することを期待"
-    models: ["lfm2.5-instruct"]
+    models: ["lfm2.5-jp"]
     input:
       question: "1 + 1 は何ですか？"
     queryOptions: *tool_math
 
-evaluators: []
+evaluators:
+  - name: llm-requirement-fulfillment
+
+evaluation:
+  enabled: true
+  provider: mlx
+  model: lfm2.5-thinking

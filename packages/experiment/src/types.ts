@@ -60,7 +60,7 @@ export interface ExperimentOptions {
 export interface ModuleDefinition {
   name: string;
   description: string;
-  compile: (context: any) => any;
+  module: PromptModule<any>;
 }
 
 /**

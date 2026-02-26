@@ -2,8 +2,11 @@
  * Experiment runner - orchestrates the entire experiment
  */
 
+import { compile } from '@modular-prompt/core';
+import type { PromptModule } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
-import type { AIService, QueryResult, ModelSpec } from '@modular-prompt/driver';
+import type { AIService, QueryResult, ModelSpec, AIDriver } from '@modular-prompt/driver';
+import { defaultProcess } from '@modular-prompt/process';
 import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult } from '../types.js';
 import type { DriverManager } from './driver-manager.js';
 import type { LoadedEvaluator } from '../config/dynamic-loader.js';
@@ -45,24 +48,20 @@ export class ExperimentRunner {
       console.log('─'.repeat(80));
       console.log();
 
-      // Compile all modules with testCase.input as context
-      const compiledModules = this.modules.map(module => {
-        logger.verbose(`Compiling prompt for module: ${module.name}`);
-        const compiled = module.compile(testCase.input);
+      // Prepare modules for this test case
+      const preparedModules = this.modules.map(module => {
+        logger.verbose(`Preparing module: ${module.name}`);
+        // compile for logging purposes
+        const compiled = compile(module.module, testCase.input);
         const prompt = formatCompletionPrompt(compiled);
         logger.verbose(`Prompt length for ${module.name}: ${prompt.length} chars`);
 
         return {
           name: module.name,
-          compiled,
+          module: module.module,
           prompt,
         };
       });
-
-      // Compare prompts if multiple modules
-      if (compiledModules.length > 1) {
-        this.comparePrompts(compiledModules);
-      }
 
       // Determine which models to test with this testCase
       const modelsToTest: Array<{ name: string; spec: ModelSpec }> = testCase.models
@@ -105,8 +104,8 @@ export class ExperimentRunner {
         activeModelName = modelName;
 
         // Test each module
-        for (const { name, compiled, prompt } of compiledModules) {
-          const runs = await this.runModuleTest(name, compiled, driver, testCase);
+        for (const { name, module: promptModule, prompt } of preparedModules) {
+          const runs = await this.runModuleTest(name, promptModule, driver, testCase);
 
           allResults.push({
             testCase: testCase.name,
@@ -148,8 +147,8 @@ export class ExperimentRunner {
    */
   private async runModuleTest(
     moduleName: string,
-    compiled: any,
-    driver: any,
+    module: PromptModule<any>,
+    driver: AIDriver,
     testCase: TestCase
   ): Promise<Array<{ success: boolean; elapsed: number; queryResult?: QueryResult; error?: string }>> {
     logger.verbose(`Running ${this.repeatCount} time(s) for module: ${moduleName}`);
@@ -161,17 +160,26 @@ export class ExperimentRunner {
 
       const startTime = Date.now();
       try {
-        const result = await driver.query(compiled, {
-          temperature: 0.7,
-          maxTokens: 2048,
-          ...testCase.queryOptions,
+        const workflowResult = await defaultProcess(driver, module, testCase.input, {
+          queryOptions: {
+            temperature: 0.7,
+            maxTokens: 2048,
+            ...testCase.queryOptions,
+          },
         });
         const elapsed = Date.now() - startTime;
+
+        // Convert workflow result to QueryResult-like structure
+        const result: QueryResult = {
+          content: workflowResult.output,
+          toolCalls: workflowResult.metadata?.toolCalls as any,
+          finishReason: workflowResult.metadata?.finishReason as any,
+          usage: workflowResult.metadata?.usage as any,
+        };
 
         logger.verbose(`Module ${moduleName} run ${i + 1}: Success (${elapsed}ms)`);
 
         // Display result summary (思考ブロックはプレビューから除外)
-        // パターン: <think>...</think> または 先頭から</think>まで（テンプレートが<think>を付与する場合）
         const displayContent = result.content
           .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
           .replace(/^[\s\S]*?<\/think>\s*/g, '');
@@ -238,40 +246,4 @@ export class ExperimentRunner {
     evaluatorRunner.displayResults(allEvaluations, this.evaluators);
   }
 
-  /**
-   * Compare prompts across modules
-   */
-  private comparePrompts(compiledModules: Array<{ name: string; prompt: string }>): void {
-    console.log('📊 Prompt Comparison:');
-
-    for (let i = 0; i < compiledModules.length; i++) {
-      const module1 = compiledModules[i];
-
-      for (let j = i + 1; j < compiledModules.length; j++) {
-        const module2 = compiledModules[j];
-
-        if (module1.prompt === module2.prompt) {
-          console.log(`   ✅ [${module1.name}] and [${module2.name}] are identical`);
-        } else {
-          console.log(`   ⚠️  [${module1.name}] and [${module2.name}] differ`);
-          logger.verbose(`Prompt comparison details:`);
-          logger.verbose(`  ${module1.name}: ${module1.prompt.length} chars`);
-          logger.verbose(`  ${module2.name}: ${module2.prompt.length} chars`);
-          logger.verbose(`  Diff: ${module2.prompt.length - module1.prompt.length} chars`);
-
-          // Find first difference (verbose only)
-          for (let k = 0; k < Math.max(module1.prompt.length, module2.prompt.length); k++) {
-            if (module1.prompt[k] !== module2.prompt[k]) {
-              logger.verbose(`  First diff at position ${k}:`);
-              logger.verbose(`    ${module1.name}: ${JSON.stringify(module1.prompt.substring(k, k + 50))}`);
-              logger.verbose(`    ${module2.name}: ${JSON.stringify(module2.prompt.substring(k, k + 50))}`);
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    console.log();
-  }
 }
