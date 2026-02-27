@@ -15,6 +15,14 @@ import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('runner');
 
+interface TestPlanItem {
+  testCase: TestCase;
+  modelName: string;
+  modelSpec: ModelSpec;
+  module: ModuleDefinition;
+  prompt: string;
+}
+
 export class ExperimentRunner {
   constructor(
     private aiService: AIService,
@@ -33,37 +41,32 @@ export class ExperimentRunner {
    * @returns Array of TestResult
    */
   async run(): Promise<TestResult[]> {
-    const allResults: TestResult[] = [];
-    const evaluationContexts: EvaluationContext[] = [];
+    // Phase 1: テスト計画の生成
+    const plan = this.buildTestPlan();
+    if (plan.length === 0) {
+      console.log('No test plan items generated.');
+      return [];
+    }
 
-    // ドライバー切り替えをテストケースをまたいでトラッキング
-    let activeModelName: string | null = null;
+    // Phase 2: モデルごとにグループ化して実行
+    const { results, evaluationContexts } = await this.executePlan(plan);
+
+    // Phase 3: 評価フェーズ
+    if (this.evaluators && this.evaluators.length > 0 && this.evaluatorModel) {
+      await this.runEvaluationPhase(evaluationContexts);
+    }
+
+    return results;
+  }
+
+  /**
+   * Build test plan: expand all testCase × model × module combinations
+   */
+  private buildTestPlan(): TestPlanItem[] {
+    const plan: TestPlanItem[] = [];
 
     for (const testCase of this.testCases) {
-      console.log('─'.repeat(80));
-      console.log(`Test Case: ${testCase.name}`);
-      if (testCase.description) {
-        console.log(`Description: ${testCase.description}`);
-      }
-      console.log('─'.repeat(80));
-      console.log();
-
-      // Prepare modules for this test case
-      const preparedModules = this.modules.map(module => {
-        logger.verbose(`Preparing module: ${module.name}`);
-        // compile for logging purposes
-        const compiled = compile(module.module, testCase.input);
-        const prompt = formatCompletionPrompt(compiled);
-        logger.verbose(`Prompt length for ${module.name}: ${prompt.length} chars`);
-
-        return {
-          name: module.name,
-          module: module.module,
-          prompt,
-        };
-      });
-
-      // Determine which models to test with this testCase
+      // テストケースで使うモデルを決定
       const modelsToTest: Array<{ name: string; spec: ModelSpec }> = testCase.models
         ? testCase.models.map(name => {
             const spec = this.models[name];
@@ -77,69 +80,98 @@ export class ExperimentRunner {
             .filter(([_, spec]) => !spec.disabled)
             .map(([name, spec]) => ({ name, spec }));
 
-      if (modelsToTest.length === 0) {
-        console.log('⚠️  No models to test for this test case, skipping');
-        console.log();
-        continue;
-      }
-
-      // Test with each model
       for (const { name: modelName, spec: modelSpec } of modelsToTest) {
-        // モデル切り替え: 前のドライバーをクローズしてから新しいモデルを起動
-        if (activeModelName && activeModelName !== modelName) {
-          logger.info(`Closing driver: ${activeModelName} (switching to ${modelName})`);
-          await this.driverManager.close(activeModelName);
-          activeModelName = null;
-        }
+        for (const module of this.modules) {
+          // compile for logging/evaluation purposes
+          const compiled = compile(module.module, testCase.input);
+          const prompt = formatCompletionPrompt(compiled);
 
-        if (activeModelName === modelName) {
-          logger.verbose(`Reusing driver for ${modelName}`);
-        } else {
-          logger.info(`Creating new driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
-        }
-        console.log(`🤖 Testing with ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
-
-        // Get or create driver for this model
-        const driver = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
-        activeModelName = modelName;
-
-        // Test each module
-        for (const { name, module: promptModule, prompt } of preparedModules) {
-          const runs = await this.runModuleTest(name, promptModule, driver, testCase);
-
-          allResults.push({
-            testCase: testCase.name,
-            model: modelName,
-            module: name,
-            runs: runs.map(r => ({
-              success: r.success,
-              elapsed: r.elapsed,
-              content: r.queryResult?.content || '',
-              toolCalls: r.queryResult?.toolCalls,
-              finishReason: r.queryResult?.finishReason,
-              error: r.error,
-            })),
+          plan.push({
+            testCase,
+            modelName,
+            modelSpec,
+            module,
+            prompt,
           });
-
-          // Collect for evaluation (if all runs succeeded)
-          const successfulRuns = runs.filter(r => r.success);
-          if (successfulRuns.length > 0) {
-            evaluationContexts.push({
-              moduleName: name,
-              prompt,
-              runs: successfulRuns.map(r => ({ queryResult: r.queryResult! })),
-            });
-          }
         }
       }
     }
 
-    // Run evaluation phase if evaluators are provided
-    if (this.evaluators && this.evaluators.length > 0 && this.evaluatorModel) {
-      await this.runEvaluationPhase(evaluationContexts);
+    logger.info(`Test plan: ${plan.length} items (${this.testCases.length} test cases × models × ${this.modules.length} modules)`);
+    return plan;
+  }
+
+  /**
+   * Execute test plan grouped by model
+   */
+  private async executePlan(plan: TestPlanItem[]): Promise<{
+    results: TestResult[];
+    evaluationContexts: EvaluationContext[];
+  }> {
+    const allResults: TestResult[] = [];
+    const evaluationContexts: EvaluationContext[] = [];
+
+    // モデルごとにグループ化（出現順を維持）
+    const modelGroups = new Map<string, TestPlanItem[]>();
+    for (const item of plan) {
+      const group = modelGroups.get(item.modelName);
+      if (group) {
+        group.push(item);
+      } else {
+        modelGroups.set(item.modelName, [item]);
+      }
     }
 
-    return allResults;
+    // モデルごとに実行
+    for (const [modelName, items] of modelGroups) {
+      const modelSpec = items[0].modelSpec;
+      console.log('='.repeat(80));
+      console.log(`🤖 Model: ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
+      console.log('='.repeat(80));
+
+      logger.info(`Creating driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
+      const driver = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
+
+      for (const item of items) {
+        console.log(`  ── ${item.testCase.name} ──`);
+        if (item.testCase.description) {
+          console.log(`     ${item.testCase.description}`);
+        }
+
+        const runs = await this.runModuleTest(item.module.name, item.module.module, driver, item.testCase);
+
+        allResults.push({
+          testCase: item.testCase.name,
+          model: modelName,
+          module: item.module.name,
+          runs: runs.map(r => ({
+            success: r.success,
+            elapsed: r.elapsed,
+            content: r.queryResult?.content || '',
+            toolCalls: r.queryResult?.toolCalls,
+            finishReason: r.queryResult?.finishReason,
+            error: r.error,
+          })),
+        });
+
+        // Collect for evaluation
+        const successfulRuns = runs.filter(r => r.success);
+        if (successfulRuns.length > 0) {
+          evaluationContexts.push({
+            moduleName: item.module.name,
+            prompt: item.prompt,
+            runs: successfulRuns.map(r => ({ queryResult: r.queryResult! })),
+          });
+        }
+      }
+
+      // モデルの全テスト完了後にドライバーをクローズ
+      logger.info(`Closing driver: ${modelName}`);
+      await this.driverManager.close(modelName);
+      console.log();
+    }
+
+    return { results: allResults, evaluationContexts };
   }
 
   /**
