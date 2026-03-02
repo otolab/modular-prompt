@@ -93,18 +93,21 @@ evaluation:
 
 ### モジュールファイルの作成
 
-テスト対象のモジュールファイルでは、`compile` 関数がテストケースの `input` をコンテキストとして受け取り、CompiledPrompt を返す。
+テスト対象のモジュールファイルでは、PromptModule を直接 default export する。テストケースの `input` は実行時にコンテキストとして注入される。
 
 ```typescript
 // modules/baseline.ts
-import { compile } from '@modular-prompt/core';
-import { myPromptModule } from './prompts.js';
+import type { PromptModule } from '@modular-prompt/core';
 
-export default {
-  name: 'Baseline Module',
-  description: 'ベースラインのプロンプト構造',
-  compile: (context: any) => compile(myPromptModule, context),
+const module: PromptModule<{ query: string }> = {
+  objective: ['ユーザーの質問に回答する'],
+  instructions: [
+    '- 正確で分かりやすい説明を心がける',
+    (ctx) => `質問: ${ctx.query}`,
+  ],
 };
+
+export default module;
 ```
 
 ### CLIでの実行
@@ -236,6 +239,16 @@ const results = await runner.run();
 await driverManager.cleanup();
 ```
 
+### 実験の実行フロー
+
+実験は3つのフェーズに分けて実行される:
+
+1. **テスト計画の生成**: テストケース × モデル × モジュール の全組み合わせを展開し、順序番号を付与
+2. **実行フェーズ**: モデルごとにグループ化して実行（モデル切り替えコストの最小化）。実行後は元の定義順にソート
+3. **評価フェーズ**: 評価器が有効な場合のみ、各モジュールの出力を採点
+
+モジュールの実行には `defaultProcess` が使用され、compile + driver.query() の最小ワークフローで処理される。
+
 ### 活用例: ツール呼び出しの動作検証
 
 異なるモデルでのtool calling対応を比較検証する例:
@@ -254,6 +267,18 @@ models:
 drivers:
   mlx: {}
 
+_shared:
+  tools: &tools_def
+    - name: get_weather
+      description: "指定された場所の現在の天気を取得する"
+      parameters:
+        type: object
+        properties:
+          location:
+            type: string
+            description: "天気を取得する場所（都市名）"
+        required: [location]
+
 modules:
   - name: tools-test
     path: ./tools-test-module.mjs
@@ -267,16 +292,7 @@ testCases:
     queryOptions:
       temperature: 0.3
       maxTokens: 512
-      tools:
-        - name: get_weather
-          description: "指定された場所の現在の天気を取得する"
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: "天気を取得する場所（都市名）"
-            required: [location]
+      tools: *tools_def
       toolChoice: auto
 
   - name: ツール不要の質問
@@ -286,15 +302,7 @@ testCases:
     queryOptions:
       temperature: 0.3
       maxTokens: 1024
-      tools:
-        - name: get_weather
-          description: "指定された場所の現在の天気を取得する"
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-            required: [location]
+      tools: *tools_def
       toolChoice: auto
 ```
 

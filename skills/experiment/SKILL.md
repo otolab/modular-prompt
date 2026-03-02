@@ -133,20 +133,23 @@ evaluation:
 
 ## モジュール定義
 
-テスト対象のモジュールファイル:
+テスト対象のモジュールファイルでは、PromptModule を直接 default export する:
 
 ```typescript
-import { compile } from '@modular-prompt/core';
-import { myPromptModule } from './prompts.js';
+import type { PromptModule } from '@modular-prompt/core';
 
-export default {
-  name: 'My Module',
-  description: 'テスト対象のプロンプトモジュール',
-  compile: (context: any) => compile(myPromptModule, context),
+const module: PromptModule<{ query: string }> = {
+  objective: ['ユーザーの質問に回答する'],
+  instructions: [
+    '- 正確で分かりやすい説明を心がける',
+    (ctx) => `質問: ${ctx.query}`,
+  ],
 };
+
+export default module;
 ```
 
-`compile` 関数はテストケースの `input` をコンテキストとして受け取り、CompiledPrompt を返す。
+テストケースの `input` は実行時にコンテキストとして注入される。runner 内部で `defaultProcess` を使用してコンパイル・実行が行われる。
 
 ## 評価器
 
@@ -283,10 +286,28 @@ await driverManager.cleanup();
 
 ## 実験フロー
 
-```
-設定ロード → モジュール・評価器ロード → テストケースごとに:
-  全モジュールをコンパイル → プロンプト比較 → 各モデルで実行（繰り返し対応）
-→ 評価フェーズ（オプション） → 統計レポート生成 → クリーンアップ
-```
+実験は3つのフェーズに分けて実行される:
 
-DriverManagerがモデル名をキーにドライバーをキャッシュし、同じモデルであればドライバーを再利用する。異なるモデルに切り替わると前のドライバーをcloseできる。これはローカルLLM（MLX等）のメモリ消費を抑えるための設計。
+### Phase 1: テスト計画の生成 (buildTestPlan)
+- テストケース × モデル × モジュール の全組み合わせを展開
+- 各組み合わせに順序番号（order）を付与して計画リストを作成
+- コンパイル済みプロンプトを事前生成（ログ・評価用）
+
+### Phase 2: 実行フェーズ (executePlan)
+- **モデルごとにグループ化して実行**（モデル切り替えコストの最小化）
+- 各モデルグループで:
+  - ドライバーを作成
+  - テストケース × モジュール の組み合わせを実行（`defaultProcess` を使用）
+  - モデルのテスト完了後にドライバーをクローズ
+- **実行完了後、元の定義順にソート** (retire)
+
+### Phase 3: 評価フェーズ (runEvaluationPhase)
+- 評価器が有効な場合のみ実行
+- 各モジュールの出力を評価器で採点
+- 評価結果を表示
+
+### 設計上の特徴
+
+**アウトオブオーダー実行**: モデルごとにグループ化して実行することで、ローカルLLM（MLX等）のモデル切り替えコストを削減。実行後は元の定義順にソートして結果を返す。
+
+**ドライバーキャッシング**: DriverManagerがモデル名をキーにドライバーをキャッシュ。同じモデルであればドライバーを再利用し、異なるモデルに切り替わると前のドライバーをcloseする。
