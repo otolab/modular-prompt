@@ -10,6 +10,12 @@ npm install @modular-prompt/process
 
 ## ワークフロー
 
+### 基本ワークフロー
+
+- **`defaultProcess`** - 最小のワークフロー（compile + driver.query）
+  - すべてのプロセスの基本形
+  - モジュールをコンパイルしてドライバーで実行するだけのシンプルな処理
+
 ### チャンク処理ワークフロー
 
 - **`streamProcess`** - ステートを保持しながらチャンクを逐次処理
@@ -29,6 +35,35 @@ npm install @modular-prompt/process
 - **`agenticモジュール群`** - エージェント型ワークフロー用モジュール
 
 ## 使用例
+
+### 基本ワークフロー
+
+```typescript
+import { defaultProcess } from '@modular-prompt/process';
+import type { PromptModule } from '@modular-prompt/core';
+import { OpenAIDriver } from '@modular-prompt/driver';
+
+const driver = new OpenAIDriver({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o'
+});
+
+const module: PromptModule<{ query: string }> = {
+  objective: ['ユーザーの質問に回答する'],
+  instructions: [
+    (ctx) => `質問: ${ctx.query}`,
+  ],
+};
+
+const result = await defaultProcess(
+  driver,
+  module,
+  { query: 'TypeScriptとは何ですか？' },
+  { queryOptions: { temperature: 0.7 } }
+);
+
+console.log(result.output);  // AIの応答
+```
 
 ### チャンク処理
 

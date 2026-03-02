@@ -54,6 +54,46 @@ const aiService = new AIService({
 
 ## プロセスモジュールを使う
 
+### 基本的なワークフロー
+
+最もシンプルなワークフロー `defaultProcess` を使って、プロンプトモジュールをコンパイル・実行：
+
+```typescript
+import { defaultProcess } from '@modular-prompt/process';
+import type { PromptModule } from '@modular-prompt/core';
+
+// プロンプトモジュールを定義
+const qaModule: PromptModule<{ query: string }> = {
+  objective: ['ユーザーの質問に回答する'],
+  instructions: [
+    '- 正確で分かりやすい説明を心がける',
+    (ctx) => `質問: ${ctx.query}`,
+  ],
+};
+
+async function answerQuestion(question: string) {
+  // ドライバーを取得
+  const driver = await aiService.createDriverFromCapabilities(['japanese', 'fast']);
+  if (!driver) {
+    throw new Error('No suitable driver found');
+  }
+
+  // defaultProcessで実行
+  const result = await defaultProcess(
+    driver,
+    qaModule,
+    { query: question },
+    { queryOptions: { temperature: 0.7, maxTokens: 2048 } }
+  );
+
+  return result.output;
+}
+
+// 使用例
+const answer = await answerQuestion('TypeScriptとは何ですか？');
+console.log('回答:', answer);
+```
+
 ### 大量の文章を要約する
 
 streamProcessワークフローを使って、長い文章を分割して要約：

@@ -48,12 +48,16 @@ evaluators: []
 
 ```typescript
 // my-module.ts
-import { compile } from '@modular-prompt/core';
+import type { PromptModule } from '@modular-prompt/core';
 
-export default {
-  name: 'My Module',
-  compile: (context: any) => compile(myPromptModule, context),
+const module: PromptModule<{ query: string }> = {
+  objective: ['ユーザーの質問に回答する'],
+  instructions: [
+    (ctx) => `質問: ${ctx.query}`,
+  ],
 };
+
+export default module;
 ```
 
 ### 3. 実行
