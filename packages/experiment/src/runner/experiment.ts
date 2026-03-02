@@ -16,6 +16,7 @@ import { logger as baseLogger } from '../logger.js';
 const logger = baseLogger.context('runner');
 
 interface TestPlanItem {
+  order: number;  // 元の定義順（retire時のソート用）
   testCase: TestCase;
   modelName: string;
   modelSpec: ModelSpec;
@@ -64,6 +65,7 @@ export class ExperimentRunner {
    */
   private buildTestPlan(): TestPlanItem[] {
     const plan: TestPlanItem[] = [];
+    let order = 0;
 
     for (const testCase of this.testCases) {
       // テストケースで使うモデルを決定
@@ -87,6 +89,7 @@ export class ExperimentRunner {
           const prompt = formatCompletionPrompt(compiled);
 
           plan.push({
+            order: order++,
             testCase,
             modelName,
             modelSpec,
@@ -108,8 +111,8 @@ export class ExperimentRunner {
     results: TestResult[];
     evaluationContexts: EvaluationContext[];
   }> {
-    const allResults: TestResult[] = [];
-    const evaluationContexts: EvaluationContext[] = [];
+    const allResults: Array<{ order: number; result: TestResult }> = [];
+    const allEvalContexts: Array<{ order: number; context: EvaluationContext }> = [];
 
     // モデルごとにグループ化（出現順を維持）
     const modelGroups = new Map<string, TestPlanItem[]>();
@@ -141,26 +144,32 @@ export class ExperimentRunner {
         const runs = await this.runModuleTest(item.module.name, item.module.module, driver, item.testCase);
 
         allResults.push({
-          testCase: item.testCase.name,
-          model: modelName,
-          module: item.module.name,
-          runs: runs.map(r => ({
-            success: r.success,
-            elapsed: r.elapsed,
-            content: r.queryResult?.content || '',
-            toolCalls: r.queryResult?.toolCalls,
-            finishReason: r.queryResult?.finishReason,
-            error: r.error,
-          })),
+          order: item.order,
+          result: {
+            testCase: item.testCase.name,
+            model: modelName,
+            module: item.module.name,
+            runs: runs.map(r => ({
+              success: r.success,
+              elapsed: r.elapsed,
+              content: r.queryResult?.content || '',
+              toolCalls: r.queryResult?.toolCalls,
+              finishReason: r.queryResult?.finishReason,
+              error: r.error,
+            })),
+          },
         });
 
         // Collect for evaluation
         const successfulRuns = runs.filter(r => r.success);
         if (successfulRuns.length > 0) {
-          evaluationContexts.push({
-            moduleName: item.module.name,
-            prompt: item.prompt,
-            runs: successfulRuns.map(r => ({ queryResult: r.queryResult! })),
+          allEvalContexts.push({
+            order: item.order,
+            context: {
+              moduleName: item.module.name,
+              prompt: item.prompt,
+              runs: successfulRuns.map(r => ({ queryResult: r.queryResult! })),
+            },
           });
         }
       }
@@ -171,7 +180,14 @@ export class ExperimentRunner {
       console.log();
     }
 
-    return { results: allResults, evaluationContexts };
+    // Retire: 元の定義順にソートして返す
+    allResults.sort((a, b) => a.order - b.order);
+    allEvalContexts.sort((a, b) => a.order - b.order);
+
+    return {
+      results: allResults.map(r => r.result),
+      evaluationContexts: allEvalContexts.map(e => e.context),
+    };
   }
 
   /**
