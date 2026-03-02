@@ -1,5 +1,17 @@
 # @modular-prompt/driver
 
+## 0.8.2
+
+### Patch Changes
+
+- 23886fc: MLX ドライバのツールサポート検出・パース改善
+
+  - KNOWN_TOOL_PARSERS 逆引きテーブルによる tool_parser_type 対応（9 種類）
+  - special tokens 検出の命名規則拡張（\_start/\_end、XML 形式等）
+  - hasNativeToolSupport()のマルチシグナル判定
+  - parseToolCalls()の複数パーサー形式対応
+  - formatToolDefinitionsAsText()のパラメータ簡潔化
+
 ## 0.8.1
 
 ### Patch Changes
