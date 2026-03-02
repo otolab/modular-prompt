@@ -1,5 +1,17 @@
 # @modular-prompt/process
 
+## 0.1.24
+
+### Patch Changes
+
+- 4b476dc: defaultProcess ワークフローの追加
+
+  - compile + driver.query()の最小ワークフロー
+  - 全プロセスの基本形として使用
+
+- Updated dependencies [23886fc]
+  - @modular-prompt/driver@0.8.2
+
 ## 0.1.23
 
 ### Patch Changes

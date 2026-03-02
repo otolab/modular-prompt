@@ -1,5 +1,21 @@
 # @modular-prompt/experiment
 
+## 0.3.2
+
+### Patch Changes
+
+- 4b476dc: 実験ランナーのリファクタリング
+
+  - テスト実行をモデルごとにグループ化（アウトオブオーダー実行）
+  - モジュール定義を PromptModule 直接エクスポートに変更
+  - defaultProcess による実行に統一
+  - 実行結果を元の定義順にソートして返す（retire phase）
+
+- Updated dependencies [4b476dc]
+- Updated dependencies [23886fc]
+  - @modular-prompt/process@0.1.24
+  - @modular-prompt/driver@0.8.2
+
 ## 0.3.1
 
 ### Patch Changes
