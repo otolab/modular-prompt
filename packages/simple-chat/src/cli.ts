@@ -32,6 +32,7 @@ program
   .option('-m, --model <model>', 'Override model name')
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
+  .option('-i, --image <path...>', 'Image file paths for VLM models')
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
@@ -69,6 +70,7 @@ program
         model: options.model,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
+        images: options.image,
       };
       
       await runChat(chatOptions);

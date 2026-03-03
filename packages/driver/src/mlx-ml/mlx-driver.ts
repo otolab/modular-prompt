@@ -10,6 +10,7 @@ import { createModelSpecificProcessor } from './process/model-specific.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON, Logger } from '@modular-prompt/utils';
 import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
+import { contentToString, extractImagePaths } from '../content-utils.js';
 
 const logger = new Logger({ prefix: 'MLX', context: 'driver' });
 
@@ -54,7 +55,7 @@ export function hasMessageElement(prompt: CompiledPrompt): boolean {
 export function convertMessages(messages: ChatMessage[]): MlxMessage[] {
   return messages.map(msg => ({
     role: msg.role as 'system' | 'user' | 'assistant',
-    content: msg.content
+    content: contentToString(msg.content)
   }));
 }
 
@@ -69,6 +70,8 @@ export interface MlxDriverConfig {
   model: string;
   defaultOptions?: Partial<MlxMlModelOptions>;
   formatterOptions?: FormatterOptions;
+  /** VLM画像の最大辺ピクセル数（デフォルト: 768） */
+  maxImageSize?: number;
 }
 
 /**
@@ -117,6 +120,7 @@ export class MlxDriver implements AIDriver {
   private runtimeInfo: MlxRuntimeInfo | null = null;
   private modelProcessor;
   private formatterOptions: FormatterOptions;
+  private maxImageSize: number;
 
   get defaultOptions(): Partial<MlxMlModelOptions> {
     return this._defaultOptions;
@@ -130,6 +134,7 @@ export class MlxDriver implements AIDriver {
     this.model = config.model;
     this._defaultOptions = config.defaultOptions || {};
     this.formatterOptions = config.formatterOptions || {};
+    this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model);
     this.modelProcessor = createModelSpecificProcessor(config.model);
   }
@@ -154,6 +159,13 @@ export class MlxDriver implements AIDriver {
         logger.error('Failed to get MLX runtime info:', error);
       }
     }
+  }
+
+  /**
+   * VLMモデルかどうかを判定
+   */
+  private isVLM(): boolean {
+    return this.runtimeInfo?.model_kind === 'vlm';
   }
 
   /**
@@ -253,7 +265,11 @@ export class MlxDriver implements AIDriver {
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
       // nativeツール対応の場合のみPythonにtoolsを渡す
       const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools);
+      // VLMの場合は画像パスを抽出
+      const images = this.isVLM()
+        ? messages.flatMap(m => extractImagePaths(m.content))
+        : [];
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined);
     }
 
     return stream;

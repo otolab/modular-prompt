@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatCompletionPrompt, formatPromptAsMessages, defaultFormatterTexts } from './converter.js';
 import { DefaultFormatter } from './formatter.js';
-import type { CompiledPrompt, Element } from '@modular-prompt/core';
+import type { CompiledPrompt, Element, Attachment } from '@modular-prompt/core';
 
 describe('preamble and section descriptions', () => {
   it('should add preamble when provided', () => {
@@ -657,7 +657,7 @@ describe('formatPromptAsMessages', () => {
         return super.format(element);
       }
     }
-    
+
     const prompt: CompiledPrompt = {
       instructions: [
         {
@@ -669,11 +669,77 @@ describe('formatPromptAsMessages', () => {
       data: [],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       formatter: new CustomFormatter()
     });
-    
+
     expect(messages[1].content).toBe('CUSTOM SECTION: Test Section');
+  });
+
+  it('should preserve Attachment[] content in StandardMessageElement', () => {
+    const attachments: Attachment[] = [
+      { type: 'text', text: 'この画像を分析して' },
+      { type: 'image_url', image_url: { url: '/path/to/image.jpg' } }
+    ];
+
+    const prompt: CompiledPrompt = {
+      instructions: [],
+      data: [
+        {
+          type: 'message',
+          role: 'user',
+          content: attachments
+        }
+      ],
+      output: []
+    };
+
+    const messages = formatPromptAsMessages(prompt, {
+      sectionDescriptions: {} // Disable section descriptions for basic test
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toEqual({
+      role: 'system',
+      content: '# Data'
+    });
+    expect(messages[1]).toEqual({
+      role: 'user',
+      content: attachments
+    });
+    // Verify content is Attachment[] not string
+    expect(Array.isArray(messages[1].content)).toBe(true);
+    expect(messages[1].content).toHaveLength(2);
+  });
+
+  it('should preserve string content in StandardMessageElement (regression test)', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [],
+      data: [
+        {
+          type: 'message',
+          role: 'user',
+          content: 'Simple text content'
+        }
+      ],
+      output: []
+    };
+
+    const messages = formatPromptAsMessages(prompt, {
+      sectionDescriptions: {} // Disable section descriptions for basic test
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toEqual({
+      role: 'system',
+      content: '# Data'
+    });
+    expect(messages[1]).toEqual({
+      role: 'user',
+      content: 'Simple text content'
+    });
+    // Verify content is string
+    expect(typeof messages[1].content).toBe('string');
   });
 });

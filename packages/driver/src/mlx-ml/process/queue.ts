@@ -64,7 +64,7 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[]): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
@@ -72,7 +72,8 @@ export class QueueManager {
           messages,
           primer,
           tools,
-          options: mapOptionsToPython(options, true)  // strict mode: true
+          options: mapOptionsToPython(options, true),  // strict mode: true
+          ...(images?.length ? { images, maxImageSize } : {})
         };
         this.queue.push({
           request,

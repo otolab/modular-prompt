@@ -2,7 +2,7 @@
  * AI chat functionality using Moduler Prompt
  */
 
-import type { PromptModule } from '@modular-prompt/core';
+import type { PromptModule, Attachment } from '@modular-prompt/core';
 import { merge, compile, createContext } from '@modular-prompt/core';
 import { withMaterials, type MaterialContext } from '@modular-prompt/process';
 import { type AIDriver, type DriverCapability, MlxDriver, DriverRegistry } from '@modular-prompt/driver';
@@ -19,7 +19,7 @@ const DEFAULT_DRIVER = 'LiquidAI/LFM2.5-1.2B-JP-MLX-4bit';
  * Chat context interface
  */
 export interface ChatContext {
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: string; content: string | Attachment[] }>;
   userMessage: string;
   systemPrompt?: string;
 }
@@ -181,6 +181,7 @@ export async function performAIChat(
   chatLog: ChatLog,
   userMessage: string,
   materials?: MaterialContext['materials'],
+  images?: string[],
   customRegistry?: DriverRegistry
 ): Promise<{ response: string; driver: AIDriver }> {
   const spinner = new Spinner();
@@ -197,7 +198,18 @@ export async function performAIChat(
     const context = createContext(chatPromptModule);
 
     // Populate context with actual data
-    context.messages = chatLog.messages.filter(m => m.role !== 'system');
+    context.messages = chatLog.messages
+      .filter(m => m.role !== 'system')
+      .map(m => {
+        if (m.images && m.images.length > 0) {
+          const attachments: Attachment[] = [
+            { type: 'text', text: m.content },
+            ...m.images.map(p => ({ type: 'image_url' as const, image_url: { url: p } }))
+          ];
+          return { role: m.role, content: attachments };
+        }
+        return { role: m.role, content: m.content };
+      });
     context.userMessage = userMessage;
     context.materials = materials;
     context.systemPrompt = profile.systemPrompt;

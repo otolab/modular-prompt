@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
+import { contentToString } from '../content-utils.js';
 import type {
   ChatCompletionCreateParams,
   ChatCompletionMessageParam
@@ -73,7 +74,7 @@ export class OpenAIDriver implements AIDriver {
       // AssistantToolCallMessage
       return {
         role: 'assistant',
-        content: message.content || null,
+        content: contentToString(message.content) || null,
         tool_calls: message.toolCalls.map(tc => ({
           id: tc.id,
           type: 'function' as const,
@@ -103,7 +104,7 @@ export class OpenAIDriver implements AIDriver {
       // StandardChatMessage
       return {
         role: message.role,
-        content: message.content
+        content: contentToString(message.content)
       };
     }
   }
@@ -147,7 +148,7 @@ export class OpenAIDriver implements AIDriver {
             } else if ('toolCalls' in el && el.toolCalls) {
               messages.push({
                 role: 'assistant',
-                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content),
+                content: contentToString(el.content),
                 tool_calls: el.toolCalls.map((tc: ToolCall) => ({
                   id: tc.id,
                   type: 'function' as const,
@@ -157,7 +158,7 @@ export class OpenAIDriver implements AIDriver {
             } else {
               messages.push({
                 role: el.role as 'system' | 'user' | 'assistant',
-                content: typeof el.content === 'string' ? el.content : JSON.stringify(el.content)
+                content: contentToString(el.content)
               });
             }
           } else if (el.type === 'section' || el.type === 'subsection') {

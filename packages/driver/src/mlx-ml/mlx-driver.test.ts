@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MlxDriver } from './mlx-driver.js';
+import { MlxDriver, convertMessages } from './mlx-driver.js';
+import type { ChatMessage } from '../formatter/types.js';
 
 // Mock the MlxProcess
 vi.mock('./process/index.js', () => ({
@@ -97,5 +98,77 @@ describe('MlxDriver', () => {
       consoleSpy.mockRestore();
     });
 
+  });
+
+  describe('convertMessages', () => {
+    it('should convert messages with string content', () => {
+      const input: ChatMessage[] = [
+        { role: 'user', content: 'こんにちは' },
+        { role: 'assistant', content: 'はい、どうぞ' }
+      ];
+
+      const result = convertMessages(input);
+
+      expect(result).toEqual([
+        { role: 'user', content: 'こんにちは' },
+        { role: 'assistant', content: 'はい、どうぞ' }
+      ]);
+    });
+
+    it('should convert messages with Attachment[] content, extracting only text', () => {
+      const input: ChatMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'text' as const, text: 'この画像は何ですか？' },
+            { type: 'image_url' as const, image_url: { url: '/path/to/image.jpg' } }
+          ]
+        }
+      ];
+
+      const result = convertMessages(input);
+
+      expect(result).toEqual([
+        { role: 'user', content: 'この画像は何ですか？' }
+      ]);
+    });
+
+    it('should handle multiple text attachments by joining with newline', () => {
+      const input: ChatMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'text' as const, text: '最初のテキスト' },
+            { type: 'text' as const, text: '2番目のテキスト' }
+          ]
+        }
+      ];
+
+      const result = convertMessages(input);
+
+      expect(result).toEqual([
+        { role: 'user', content: '最初のテキスト\n2番目のテキスト' }
+      ]);
+    });
+
+    it('should handle mixed content with text and images', () => {
+      const input: ChatMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'text' as const, text: 'テキスト1' },
+            { type: 'image_url' as const, image_url: { url: '/image1.jpg' } },
+            { type: 'text' as const, text: 'テキスト2' },
+            { type: 'image_url' as const, image_url: { url: '/image2.jpg' } }
+          ]
+        }
+      ];
+
+      const result = convertMessages(input);
+
+      expect(result).toEqual([
+        { role: 'user', content: 'テキスト1\nテキスト2' }
+      ]);
+    });
   });
 });

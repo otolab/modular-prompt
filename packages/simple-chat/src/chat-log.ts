@@ -48,18 +48,23 @@ export function addMessage(
   chatLog: ChatLog,
   role: 'system' | 'user' | 'assistant',
   content: string,
-  resourceFiles?: string[]
+  resourceFiles?: string[],
+  images?: string[]
 ): void {
   const entry: ChatLogEntry = {
     role,
     content,
     timestamp: new Date().toISOString(),
   };
-  
+
   if (resourceFiles && resourceFiles.length > 0) {
     entry.resourceFiles = resourceFiles;
   }
-  
+
+  if (images && images.length > 0) {
+    entry.images = images;
+  }
+
   chatLog.messages.push(entry);
 }
 
