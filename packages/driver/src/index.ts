@@ -7,6 +7,7 @@ export type {
   ToolResultMessage,
   QueryResult,
   QueryOptions,
+  QueryMode,
   DriverConfig,
   Role,
   ToolDefinition,
