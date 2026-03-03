@@ -353,7 +353,8 @@ export class GoogleGenAIDriver implements AIDriver {
         topK: mergedOptions.topK,
         candidateCount: mergedOptions.candidateCount,
         stopSequences: mergedOptions.stopSequences,
-        thinkingConfig: mergedOptions.thinkingConfig,
+        thinkingConfig: mergedOptions.thinkingConfig ??
+          (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
       };
 
       // Add system instruction if present
@@ -473,7 +474,8 @@ export class GoogleGenAIDriver implements AIDriver {
       topK: mergedOptions.topK,
       candidateCount: mergedOptions.candidateCount,
       stopSequences: mergedOptions.stopSequences,
-      thinkingConfig: mergedOptions.thinkingConfig,
+      thinkingConfig: mergedOptions.thinkingConfig ??
+        (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
     };
 
     // Add system instruction if present

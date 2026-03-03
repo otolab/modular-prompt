@@ -26,6 +26,8 @@ export interface AnthropicQueryOptions extends QueryOptions {
   stopSequences?: string[];
   tools?: ToolDefinition[];
   toolChoice?: ToolChoice;
+  /** Extended Thinking configuration (requires mode: 'thinking') */
+  thinking?: { budgetTokens: number };
 }
 
 /**
@@ -284,20 +286,26 @@ export class AnthropicDriver implements AIDriver {
     // Convert prompt
     const { system, messages } = this.compiledPromptToAnthropic(prompt);
 
+    // Extended Thinking: mode === 'thinking' with thinking config
+    const useThinking = mergedOptions.mode === 'thinking' && mergedOptions.thinking;
+
     // Build API params
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const params: Record<string, any> = {
       model: mergedOptions.model || this.defaultModel,
       messages,
       max_tokens: mergedOptions.maxTokens || 4096,
-      temperature: mergedOptions.temperature,
+      temperature: useThinking ? undefined : mergedOptions.temperature,
       top_p: mergedOptions.topP,
       top_k: mergedOptions.topK,
       stop_sequences: mergedOptions.stopSequences,
       system,
       tools: mergedOptions.tools ? convertTools(mergedOptions.tools) : undefined,
       tool_choice: mergedOptions.toolChoice ? convertToolChoice(mergedOptions.toolChoice) : undefined,
-      stream: true
+      stream: true,
+      ...(useThinking && {
+        thinking: { type: 'enabled', budget_tokens: mergedOptions.thinking!.budgetTokens }
+      })
     };
 
     // Remove undefined values

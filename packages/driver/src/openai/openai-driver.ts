@@ -36,6 +36,8 @@ export interface OpenAIQueryOptions extends QueryOptions {
   seed?: number;
   tools?: ToolDefinition[];
   toolChoice?: ToolChoice;
+  /** Reasoning effort for o-series models (requires mode: 'thinking') */
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 /**
@@ -277,6 +279,11 @@ export class OpenAIDriver implements AIDriver {
         tool_choice,
         stream: true
       };
+
+      // Apply reasoning effort for thinking mode
+      if (mergedOptions.mode === 'thinking' && mergedOptions.reasoningEffort) {
+        (params as unknown as Record<string, unknown>).reasoning_effort = mergedOptions.reasoningEffort;
+      }
 
       // Remove undefined values
       Object.keys(params).forEach(key => {

@@ -117,9 +117,20 @@ export interface QueryResult {
 export type FinishReason = 'stop' | 'length' | 'error' | 'tool_calls';
 
 /**
+ * Query execution mode
+ * - 'default': Standard execution (no special behavior)
+ * - 'thinking': Enable extended thinking / reasoning mode
+ * - 'instruct': Instruction-following mode (completion-based)
+ * - 'chat': Conversational chat mode
+ */
+export type QueryMode = 'default' | 'thinking' | 'instruct' | 'chat';
+
+/**
  * Options for querying AI model
  */
 export interface QueryOptions {
+  /** Query execution mode. Drivers that don't support a mode will ignore it. */
+  mode?: QueryMode;
   temperature?: number;
   maxTokens?: number;
   topP?: number;

@@ -166,6 +166,10 @@ export class MlxDriver implements AIDriver {
     if (strategy === 'force-completion') return 'completion';
     if (strategy === 'force-chat') return 'chat';
 
+    // mode-based selection (when apiStrategy is 'auto')
+    if (options?.mode === 'instruct') return 'completion';
+    if (options?.mode === 'chat') return 'chat';
+
     // auto: use chat if chat template is available
     return this.runtimeInfo?.features.apply_chat_template ? 'chat' : 'completion';
   }
