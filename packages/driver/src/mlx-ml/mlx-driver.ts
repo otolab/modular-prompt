@@ -4,7 +4,7 @@ import type { FormatterOptions, ChatMessage } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
 import { MlxProcess } from './process/index.js';
-import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities } from './types.js';
+import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities, MlxContentPart } from './types.js';
 import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
 import { createModelSpecificProcessor } from './process/model-specific.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
@@ -51,12 +51,28 @@ export function hasMessageElement(prompt: CompiledPrompt): boolean {
 
 /**
  * Convert ChatMessage format to MLX format
+ * VLM mode preserves image placeholders as structured content parts
  */
-export function convertMessages(messages: ChatMessage[]): MlxMessage[] {
-  return messages.map(msg => ({
-    role: msg.role as 'system' | 'user' | 'assistant',
-    content: contentToString(msg.content)
-  }));
+export function convertMessages(messages: ChatMessage[], vlm: boolean = false): MlxMessage[] {
+  return messages.map(msg => {
+    if (vlm && Array.isArray(msg.content)) {
+      const parts: MlxContentPart[] = [];
+      for (const att of msg.content) {
+        if (att.type === 'image_url' && att.image_url?.url) {
+          parts.push({ type: 'image' });
+        } else if (att.type === 'text' && att.text) {
+          parts.push({ type: 'text', text: att.text });
+        }
+      }
+      if (parts.length > 0) {
+        return { role: msg.role as 'system' | 'user' | 'assistant', content: parts };
+      }
+    }
+    return {
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: contentToString(msg.content)
+    };
+  });
 }
 
 // ========================================================================
@@ -155,6 +171,12 @@ export class MlxDriver implements AIDriver {
         if (this.runtimeInfo.special_tokens) {
           this.formatterOptions.specialTokens = this.runtimeInfo.special_tokens;
         }
+
+        // Update model processor with runtime context
+        this.modelProcessor.setRuntimeContext({
+          chatRestrictions: this.runtimeInfo.chat_restrictions,
+          modelKind: this.runtimeInfo.model_kind,
+        });
       } catch (error) {
         logger.error('Failed to get MLX runtime info:', error);
       }
@@ -260,13 +282,14 @@ export class MlxDriver implements AIDriver {
     } else {
       // chat APIを使用 - メッセージ変換して処理
       const messages = formatPromptAsMessages(augmentedPrompt, this.formatterOptions);
-      let mlxMessages = convertMessages(messages);
+      const vlm = this.isVLM();
+      let mlxMessages = convertMessages(messages, vlm);
       // chat APIではチャット処理を適用
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
       // nativeツール対応の場合のみPythonにtoolsを渡す
       const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
-      // VLMの場合は画像パスを抽出
-      const images = this.isVLM()
+      // VLMの場合は画像パスを抽出（ファイル読み込み用）
+      const images = vlm
         ? messages.flatMap(m => extractImagePaths(m.content))
         : [];
       stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined);

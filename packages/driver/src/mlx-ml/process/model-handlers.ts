@@ -10,19 +10,26 @@ import type { MlxMessage } from './types.js';
  * システムメッセージをマージ（末尾の改行をtrim）
  */
 export function mergeSystemMessages(msgs: MlxMessage[]): MlxMessage[] {
-  let systemContent = '';
+  const systemParts: string[] = [];
   const conversation: MlxMessage[] = [];
 
   for (const msg of msgs) {
     if (msg.role === 'system') {
-      systemContent += msg.content + '\n\n';
+      if (typeof msg.content === 'string') {
+        systemParts.push(msg.content);
+      } else {
+        // MlxContentPart[] → テキストのみ抽出
+        systemParts.push(
+          msg.content.filter(p => p.type === 'text').map(p => (p as { type: 'text'; text: string }).text).join('\n')
+        );
+      }
     } else {
       conversation.push(msg);
     }
   }
 
-  if (systemContent) {
-    const systemMessage: MlxMessage = { role: 'system', content: systemContent.trim() };
+  if (systemParts.length > 0) {
+    const systemMessage: MlxMessage = { role: 'system', content: systemParts.join('\n\n') };
     return [systemMessage, ...conversation];
   }
   return conversation;
@@ -37,7 +44,7 @@ function mergeSystemMessagesRaw(msgs: MlxMessage[]): MlxMessage[] {
 
   for (const msg of msgs) {
     if (msg.role === 'system') {
-      systemMessages.push(msg.content);
+      systemMessages.push(typeof msg.content === 'string' ? msg.content : msg.content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('\n'));
     } else {
       conversation.push(msg);
     }

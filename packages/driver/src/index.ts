@@ -62,7 +62,8 @@ export {
 } from './mlx-ml/process/index.js';
 
 export type {
-  MlxMessage
+  MlxMessage,
+  MlxContentPart
 } from './mlx-ml/types.js';
 
 // VertexAI driver

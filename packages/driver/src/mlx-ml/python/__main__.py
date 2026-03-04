@@ -10,7 +10,6 @@ model_kind = detect_model_kind(model_name)
 
 if model_kind == "vlm":
     from mlx_vlm import load as vlm_load, stream_generate as vlm_stream_generate
-    from mlx_vlm import apply_chat_template as vlm_apply_chat_template
     model, processor = vlm_load(model_name)
     tokenizer = processor  # capabilities取得用（VLMのprocessorもtokenizer互換）
 else:
@@ -238,21 +237,29 @@ def handle_completion(prompt, options=None):
 
 
 def handle_chat_vlm(messages, images, options=None, max_image_size=768):
-    """VLMモデル用のチャット処理"""
+    """VLMモデル用のチャット処理
+
+    messages: TypeScript側で画像プレースホルダー({type: "image"})が挿入済み
+    images: 画像ファイルパスの配列（プレースホルダーと位置が対応）
+    """
     if options is None:
         options = {}
 
-    # チャットテンプレートの適用
-    formatted_prompt = vlm_apply_chat_template(
-        processor, model.config, messages,
+    # processorのapply_chat_templateを直接使用
+    # systemメッセージのマージはTypeScript側でchat_restrictionsに基づき処理済み
+    formatted_prompt = processor.apply_chat_template(
+        messages,
         add_generation_prompt=True,
-        num_images=len(images)
+        tokenize=False,
     )
 
     # 画像ファイルを読み込み・リサイズ
     pil_images = load_and_resize_images(images, max_image_size)
 
-    sys.stderr.write(f"--- vlm prompt (images: {len(pil_images)}, max_size: {max_image_size})\n{formatted_prompt[:200]}\n")
+    # image_padトークンを省略して表示（大量のパディングで読みづらいため）
+    import re
+    display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', formatted_prompt)
+    sys.stderr.write(f"--- vlm prompt (images: {len(pil_images)}, max_size: {max_image_size})\n{display_prompt}\n")
 
     generate_text_vlm(formatted_prompt, pil_images, options)
 

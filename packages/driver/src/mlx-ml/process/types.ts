@@ -6,9 +6,14 @@ import type { SpecialToken, SpecialTokenPair } from '../../formatter/types.js';
 
 export type { MlxMlModelOptions };
 
+/** VLM content part for structured message content */
+export type MlxContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image' };
+
 export interface MlxMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | MlxContentPart[];
 }
 
 // API v2.0 リクエスト型定義

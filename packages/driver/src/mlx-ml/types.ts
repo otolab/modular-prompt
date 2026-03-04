@@ -8,11 +8,18 @@ import type { SpecialToken, SpecialTokenPair } from '../formatter/types.js';
 import type { ChatRestrictions, ApiStrategy } from './model-spec/index.js';
 
 /**
+ * VLM content part for structured message content
+ */
+export type MlxContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image' };
+
+/**
  * MLX message format
  */
 export interface MlxMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | MlxContentPart[];
 }
 
 /**

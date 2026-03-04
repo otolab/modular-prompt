@@ -5,8 +5,10 @@
  * Python側のapply_model_specific_processingをTypeScript側に移行
  */
 
-import type { MlxMessage } from './types.js';
-import { selectChatProcessor, selectCompletionProcessor } from './model-handlers.js';
+import type { MlxMessage, MlxRuntimeInfo } from './types.js';
+import { mergeSystemMessages, selectChatProcessor, selectCompletionProcessor } from './model-handlers.js';
+
+type ChatRestrictions = MlxRuntimeInfo['chat_restrictions'];
 
 export interface ModelSpecificProcessor {
   /**
@@ -20,11 +22,35 @@ export interface ModelSpecificProcessor {
    * プロンプト文字列を受け取り、モデルに最適化されたプロンプトを返す
    */
   applyCompletionSpecificProcessing(prompt: string): string;
+
+  /**
+   * runtimeInfo取得後に制約・モデル情報を反映
+   */
+  setRuntimeContext(context: { chatRestrictions?: ChatRestrictions; modelKind?: 'lm' | 'vlm' }): void;
 }
 
 
 export class DefaultModelSpecificProcessor implements ModelSpecificProcessor {
+  private chatRestrictions: ChatRestrictions;
+  private modelKind: 'lm' | 'vlm' | undefined;
+
   constructor(private modelName: string) {
+  }
+
+  setRuntimeContext(context: { chatRestrictions?: ChatRestrictions; modelKind?: 'lm' | 'vlm' }): void {
+    this.chatRestrictions = context.chatRestrictions;
+    this.modelKind = context.modelKind;
+  }
+
+  /**
+   * systemメッセージのマージが必要か判定
+   * - chat_restrictionsで検出された場合
+   * - VLMモデルの場合（processorが複数systemを黙って落とすことがあるため）
+   */
+  private needsSystemMerge(): boolean {
+    if (this.chatRestrictions?.single_system_at_start) return true;
+    if (this.modelKind === 'vlm') return true;
+    return false;
   }
 
   /**
@@ -33,7 +59,17 @@ export class DefaultModelSpecificProcessor implements ModelSpecificProcessor {
    */
   applyChatSpecificProcessing(messages: MlxMessage[]): MlxMessage[] {
     const processor = selectChatProcessor(this.modelName);
-    return processor ? processor(messages) : messages;
+    if (processor) {
+      // モデル固有ハンドラは内部でmergeSystemMessagesを呼ぶ
+      return processor(messages);
+    }
+
+    // モデル固有ハンドラがない場合、制約に基づいて汎用処理
+    if (this.needsSystemMerge()) {
+      return mergeSystemMessages(messages);
+    }
+
+    return messages;
   }
 
   /**
