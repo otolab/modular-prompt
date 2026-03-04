@@ -1,5 +1,25 @@
 # @modular-prompt/driver
 
+## 0.9.0
+
+### Minor Changes
+
+- d78df1b: MLX ドライバーで mlx-vlm に対応
+
+  - ChatMessage.content を string | Attachment[]に拡張（全ドライバー共通）
+  - contentToString/extractImagePaths 共通ユーティリティ追加
+  - model_type 動的 import による VLM/LM 自動判定
+  - VLM ストリーミング生成（mlx_vlm.stream_generate）
+  - 画像自動リサイズ（maxImageSize、デフォルト 768px）
+
+- 9d23d3f: QueryOptions に mode プロパティを追加
+
+  - クエリ実行モード（default/thinking/instruct/chat）をドライバー非依存で指定可能に
+  - Anthropic: thinking オプションと組み合わせて Extended Thinking を有効化
+  - OpenAI: reasoningEffort オプションと組み合わせて reasoning を有効化
+  - Google GenAI: mode=thinking で thinkingConfig を自動適用
+  - MLX: instruct/chat で API 選択に反映
+
 ## 0.8.2
 
 ### Patch Changes
