@@ -36,11 +36,14 @@ program
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
+  .option('--debug', 'Show debug output (includes MLX process logs)')
   .action(async (messageArgs: string[], options) => {
     try {
       // Configure log level
       if (options.quiet) {
         Logger.configure({ level: 'error' });
+      } else if (options.debug) {
+        Logger.configure({ level: 'debug' });
       } else if (options.verbose) {
         Logger.configure({ level: 'verbose' });
       }
