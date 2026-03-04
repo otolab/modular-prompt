@@ -13,6 +13,7 @@ import type { Part } from '@google-cloud/vertexai';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
+import { contentToString } from '../content-utils.js';
 
 /**
  * VertexAI driver configuration
@@ -128,7 +129,7 @@ export class VertexAIDriver implements AIDriver {
               });
             } else if ('toolCalls' in el && el.toolCalls) {
               const parts: Part[] = [];
-              const content = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
+              const content = contentToString(el.content);
               if (content) parts.push({ text: content });
               for (const tc of el.toolCalls) {
                 parts.push({ functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } });
@@ -138,7 +139,7 @@ export class VertexAIDriver implements AIDriver {
               // Standard message
               result.push({
                 role: el.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: typeof el.content === 'string' ? el.content : JSON.stringify(el.content) }]
+                parts: [{ text: contentToString(el.content) }]
               });
             }
           } else if ('content' in el) {
@@ -207,7 +208,7 @@ export class VertexAIDriver implements AIDriver {
       // AssistantToolCallMessage
       const parts: Part[] = [];
       if (message.content) {
-        parts.push({ text: message.content });
+        parts.push({ text: contentToString(message.content) });
       }
       for (const tc of message.toolCalls) {
         parts.push({
@@ -243,7 +244,7 @@ export class VertexAIDriver implements AIDriver {
       // StandardChatMessage
       return {
         role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: message.content }]
+        parts: [{ text: contentToString(message.content) }]
       };
     }
   }

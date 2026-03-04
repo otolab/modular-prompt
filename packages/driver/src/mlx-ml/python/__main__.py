@@ -1,15 +1,25 @@
 import sys
 import json
-from mlx_lm import load, stream_generate
-from mlx_lm.sample_utils import make_sampler
+from vlm_utils import detect_model_kind, load_and_resize_images
 from token_utils import get_capabilities, is_eod_token
 
 model_name = sys.argv[1] if len(sys.argv) > 1 else "mlx-community/gemma-3-270m-it-qat-4bit"
 
-model, tokenizer = load(model_name)
+# モデル種別の判定とロード
+model_kind = detect_model_kind(model_name)
+
+if model_kind == "vlm":
+    from mlx_vlm import load as vlm_load, stream_generate as vlm_stream_generate
+    model, processor = vlm_load(model_name)
+    tokenizer = processor  # capabilities取得用（VLMのprocessorもtokenizer互換）
+else:
+    from mlx_lm import load, stream_generate
+    from mlx_lm.sample_utils import make_sampler
+    model, tokenizer = load(model_name)
 
 # Capabilities情報の取得
 capabilities = get_capabilities(tokenizer)
+capabilities["model_kind"] = model_kind
 
 def read():
     lines = []
@@ -220,10 +230,54 @@ def handle_completion(prompt, options=None):
     """completion API の処理"""
     if options is None:
         options = {}
-    
+
     # promptはTypeScript側で既にモデル固有処理済み
-    
+
     generate_text(prompt, options)
+
+
+def handle_chat_vlm(messages, images, options=None, max_image_size=768):
+    """VLMモデル用のチャット処理
+
+    messages: TypeScript側で画像プレースホルダー({type: "image"})が挿入済み
+    images: 画像ファイルパスの配列（プレースホルダーと位置が対応）
+    """
+    if options is None:
+        options = {}
+
+    # processorのapply_chat_templateを直接使用
+    # systemメッセージのマージはTypeScript側でchat_restrictionsに基づき処理済み
+    formatted_prompt = processor.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=False,
+    )
+
+    # 画像ファイルを読み込み・リサイズ
+    pil_images = load_and_resize_images(images, max_image_size)
+
+    # image_padトークンを省略して表示（大量のパディングで読みづらいため）
+    import re
+    display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', formatted_prompt)
+    sys.stderr.write(f"--- vlm prompt (images: {len(pil_images)}, max_size: {max_image_size})\n{display_prompt}\n")
+
+    generate_text_vlm(formatted_prompt, pil_images, options)
+
+
+def generate_text_vlm(prompt, images, options):
+    """VLMストリーミング生成"""
+    temperature = options.pop('temperature', 1.0) if 'temperature' in options else 1.0
+    max_tokens = options.pop('max_tokens', 1000) if 'max_tokens' in options else 1000
+
+    for response in vlm_stream_generate(
+        model, processor, prompt,
+        image=images,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    ):
+        print(response.text.replace('\0', ''), end='', flush=True)
+
+    print('\n', end='\0', flush=True)
 
 
 def generate_text(prompt, options):
@@ -302,7 +356,13 @@ def main():
                 primer = req.get('primer')
                 options = req.get('options', {})
                 tools = req.get('tools')
-                handle_chat(messages, primer, options, tools)
+                images = req.get('images', [])
+
+                if model_kind == "vlm" and images:
+                    max_image_size = req.get('maxImageSize', 768)
+                    handle_chat_vlm(messages, images, options, max_image_size)
+                else:
+                    handle_chat(messages, primer, options, tools)
             
             elif method == 'completion':
                 prompt = req.get('prompt')

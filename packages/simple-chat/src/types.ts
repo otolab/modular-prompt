@@ -31,6 +31,8 @@ export interface ChatLogEntry {
   timestamp: string;
   /** Resource files used (for user messages) */
   resourceFiles?: string[];
+  /** Image file paths (for user messages) */
+  images?: string[];
 }
 
 export interface ChatLog {
@@ -63,4 +65,6 @@ export interface SimpleChatOptions {
   temperature?: number;
   /** Override max tokens */
   maxTokens?: number;
+  /** Image file paths for VLM */
+  images?: string[];
 }

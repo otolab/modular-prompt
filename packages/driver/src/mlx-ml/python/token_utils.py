@@ -74,11 +74,12 @@ def get_special_tokens(tokenizer):
     special_tokens = {}
     
     # 標準的なspecial tokens（tokenizerに定義されているもの）
+    # VLM processorではこれらの属性がない場合があるためgetattr使用
     standard_tokens = {
-        "eod": tokenizer.eos_token,  # End of Document/Sequence
-        "bos": tokenizer.bos_token,  # Beginning of Sequence  
-        "unk": tokenizer.unk_token,  # Unknown token
-        "pad": tokenizer.pad_token,  # Padding token
+        "eod": getattr(tokenizer, "eos_token", None),  # End of Document/Sequence
+        "bos": getattr(tokenizer, "bos_token", None),  # Beginning of Sequence
+        "unk": getattr(tokenizer, "unk_token", None),  # Unknown token
+        "pad": getattr(tokenizer, "pad_token", None),  # Padding token
     }
     
     for name, token in standard_tokens.items():
@@ -157,24 +158,30 @@ def get_special_tokens(tokenizer):
         "tool_calls_marker": "[TOOL_CALLS]",
     }
     
+    # VLM processorではconvert_tokens_to_idsがない場合がある
+    if not hasattr(tokenizer, 'convert_tokens_to_ids'):
+        return special_tokens
+
+    unk_token_id = getattr(tokenizer, "unk_token_id", None)
+
     # ペアトークンの処理
     for name, (start_token, end_token) in pair_tokens.items():
         start_id = tokenizer.convert_tokens_to_ids(start_token)
         end_id = tokenizer.convert_tokens_to_ids(end_token)
-        
+
         # unk_tokenでない場合のみ追加
-        if start_id != tokenizer.unk_token_id and end_id != tokenizer.unk_token_id:
+        if start_id != unk_token_id and end_id != unk_token_id:
             special_tokens[name] = {
                 "start": {"text": start_token, "id": start_id},
                 "end": {"text": end_token, "id": end_id}
             }
-    
+
     # 単体トークンの処理
     for name, token_text in single_tokens.items():
         token_id = tokenizer.convert_tokens_to_ids(token_text)
-        
+
         # unk_tokenでない場合のみ追加
-        if token_id != tokenizer.unk_token_id:
+        if token_id != unk_token_id:
             special_tokens[name] = {"text": token_text, "id": token_id}
     
     return special_tokens
@@ -337,7 +344,7 @@ def get_tokenizer_features(tokenizer):
     """
     features = {
         "apply_chat_template": hasattr(tokenizer, 'apply_chat_template'),
-        "vocab_size": tokenizer.vocab_size,
+        "vocab_size": getattr(tokenizer, 'vocab_size', None),
         "model_max_length": getattr(tokenizer, 'model_max_length', None)
     }
     

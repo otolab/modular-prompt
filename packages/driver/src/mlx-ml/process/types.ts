@@ -6,9 +6,14 @@ import type { SpecialToken, SpecialTokenPair } from '../../formatter/types.js';
 
 export type { MlxMlModelOptions };
 
+/** VLM content part for structured message content */
+export type MlxContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image' };
+
 export interface MlxMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | MlxContentPart[];
 }
 
 // API v2.0 リクエスト型定義
@@ -44,6 +49,8 @@ export interface MlxChatRequest extends MlxBaseRequest {
   primer?: string;
   tools?: MlxToolDefinition[];
   options?: MlxMlModelOptions;
+  images?: string[];  // ファイルパス配列（VLM用）
+  maxImageSize?: number;  // 画像の最大辺ピクセル数
 }
 
 export interface MlxCompletionRequest extends MlxBaseRequest {
@@ -103,6 +110,7 @@ export interface MlxRuntimeInfo {
     requires_user_last?: boolean;
     allow_empty_messages?: boolean;
   };
+  model_kind?: 'lm' | 'vlm';
 }
 
 export interface MlxFormatTestResult {

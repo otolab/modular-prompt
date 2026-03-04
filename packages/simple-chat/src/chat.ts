@@ -2,7 +2,8 @@
  * Main chat processing
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 import chalk from 'chalk';
 import type {
   DialogProfile,
@@ -74,6 +75,10 @@ function displayChatLog(chatLog: ChatLog): void {
     if (message.resourceFiles && message.resourceFiles.length > 0) {
       logger.info(chalk.gray(`  Resources: ${message.resourceFiles.join(', ')}`));
     }
+
+    if (message.images && message.images.length > 0) {
+      logger.info(chalk.gray(`  Images: ${message.images.join(', ')}`));
+    }
   }
 }
 
@@ -135,7 +140,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   
   // Get user message
   const userMessage = await getUserMessage(options);
-  
+
   // Load resource files as materials
   let materials: MaterialContext['materials'];
   let loadedFiles: string[] = [];
@@ -155,9 +160,23 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
       logger.info(chalk.gray(`✓ Loaded ${loadedFiles.length} resource file(s)`));
     }
   }
-  
+
+  // Validate and resolve image paths
+  let resolvedImages: string[] | undefined;
+  if (options.images && options.images.length > 0) {
+    resolvedImages = [];
+    for (const imagePath of options.images) {
+      const resolved = resolve(imagePath);
+      if (!existsSync(resolved)) {
+        throw new Error(`Image file not found: ${imagePath}`);
+      }
+      resolvedImages.push(resolved);
+    }
+    logger.info(chalk.gray(`🖼 ${resolvedImages.length} image(s) attached`));
+  }
+
   // Add user message to log
-  addMessage(chatLog, 'user', userMessage, loadedFiles);
+  addMessage(chatLog, 'user', userMessage, loadedFiles, resolvedImages);
   logger.info(chalk.green('User: ') + userMessage);
   
   // Perform AI chat with optional custom drivers config
@@ -166,6 +185,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     chatLog,
     userMessage,
     materials,
+    resolvedImages,
     undefined  // customRegistry
   );
   

@@ -4,6 +4,7 @@ import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition, ChatMessage } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
 import { hasToolCalls, isToolResult } from '../types.js';
+import { contentToString } from '../content-utils.js';
 
 /**
  * Anthropic driver configuration
@@ -91,7 +92,7 @@ export class AnthropicDriver implements AIDriver {
       // AssistantToolCallMessage
       const blocks: unknown[] = [];
       if (message.content) {
-        blocks.push({ type: 'text', text: message.content });
+        blocks.push({ type: 'text', text: contentToString(message.content) });
       }
       for (const tc of message.toolCalls) {
         blocks.push({
@@ -125,7 +126,7 @@ export class AnthropicDriver implements AIDriver {
       // StandardChatMessage (system role is not expected in options.messages)
       return {
         role: message.role as 'user' | 'assistant',
-        content: message.content
+        content: contentToString(message.content)
       };
     }
   }
@@ -177,7 +178,7 @@ export class AnthropicDriver implements AIDriver {
                 }]
               });
             } else if ('toolCalls' in el && el.toolCalls) {
-              const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
+              const messageContent = contentToString(el.content);
               const blocks: unknown[] = [];
               if (messageContent) blocks.push({ type: 'text', text: messageContent });
               for (const tc of el.toolCalls) {
@@ -185,7 +186,7 @@ export class AnthropicDriver implements AIDriver {
               }
               messages.push({ role: 'assistant', content: blocks });
             } else {
-              const messageContent = typeof el.content === 'string' ? el.content : JSON.stringify(el.content);
+              const messageContent = contentToString(el.content);
               const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
               if (role === 'system') {
                 system = system ? `${system}\n\n${messageContent}` : messageContent;

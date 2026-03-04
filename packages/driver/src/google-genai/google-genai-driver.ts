@@ -3,6 +3,7 @@ import type { Part, Content, FunctionDeclaration, FunctionCallingConfig } from '
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
+import { contentToString } from '../content-utils.js';
 
 /**
  * GoogleGenAI driver configuration
@@ -78,24 +79,6 @@ export class GoogleGenAIDriver implements AIDriver {
   }
 
   /**
-   * Convert content (string or Attachment[]) to string
-   */
-  private contentToString(content: string | unknown[]): string {
-    if (typeof content === 'string') {
-      return content;
-    }
-    // For Attachment[], extract text content
-    // TODO: In the future, handle image_url and file attachments for multimodal support
-    return content
-      .filter((att: unknown) => {
-        const a = att as { type?: string; text?: string };
-        return a.type === 'text' && a.text;
-      })
-      .map((att: unknown) => (att as { text: string }).text)
-      .join('\n');
-  }
-
-  /**
    * Convert Element to Part (flat text conversion)
    * Used for systemInstruction and simple data
    */
@@ -116,17 +99,17 @@ export class GoogleGenAIDriver implements AIDriver {
           const textValue = toolResultEl.kind === 'text' ? String(toolResultEl.value) : JSON.stringify(toolResultEl.value);
           return { text: `${element.role}: ${textValue}` };
         }
-        const messageContent = this.contentToString((element as { content: string | unknown[] }).content);
+        const messageContent = contentToString(element.content);
         return { text: `${element.role}: ${messageContent}` };
       }
 
       case 'material': {
-        const materialContent = this.contentToString(element.content);
+        const materialContent = contentToString(element.content);
         return { text: `# ${element.title}\n${materialContent}` };
       }
 
       case 'chunk': {
-        const chunkContent = this.contentToString(element.content);
+        const chunkContent = contentToString(element.content);
         const chunkHeader = element.index !== undefined && element.total !== undefined
           ? `[Chunk ${element.index + 1}/${element.total} of ${element.partOf}]`
           : `[Chunk of ${element.partOf}]`;
@@ -196,7 +179,7 @@ export class GoogleGenAIDriver implements AIDriver {
         };
       } else if ('toolCalls' in element && element.toolCalls) {
         const parts: Part[] = [];
-        const content = this.contentToString(element.content);
+        const content = contentToString(element.content);
         if (content) parts.push({ text: content });
         for (const tc of element.toolCalls) {
           parts.push({ functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } });
@@ -208,7 +191,7 @@ export class GoogleGenAIDriver implements AIDriver {
         // - system → user (Gemini API doesn't support system role in contents)
         // - user → user
         const role = element.role === 'assistant' ? 'model' : 'user';
-        const messageContent = this.contentToString(element.content);
+        const messageContent = contentToString(element.content);
         return {
           role,
           parts: [{ text: messageContent }]
@@ -229,8 +212,9 @@ export class GoogleGenAIDriver implements AIDriver {
     if (hasToolCalls(message)) {
       // AssistantToolCallMessage
       const parts: Part[] = [];
-      if (message.content) {
-        parts.push({ text: message.content });
+      const textContent = contentToString(message.content);
+      if (textContent) {
+        parts.push({ text: textContent });
       }
       for (const tc of message.toolCalls) {
         parts.push({
@@ -256,7 +240,7 @@ export class GoogleGenAIDriver implements AIDriver {
       // StandardChatMessage
       return {
         role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: message.content }]
+        parts: [{ text: contentToString(message.content) }]
       };
     }
   }

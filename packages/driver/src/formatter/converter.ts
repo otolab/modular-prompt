@@ -4,6 +4,7 @@ import type {
 } from '@modular-prompt/core';
 import type { ChatMessage, FormatterOptions, ElementFormatter } from './types.js';
 import { DefaultFormatter } from './formatter.js';
+import { contentToString } from '../content-utils.js';
 
 // Re-export completion formatter
 export { formatCompletionPrompt, ECHO_SPECIAL_TOKENS } from './completion-formatter.js';
@@ -117,9 +118,9 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       
     case 'message': {
       // Preserve original role
-      let messageContent: string;
       if (element.role === 'tool') {
         // ToolResultMessageElement
+        let messageContent: string;
         switch (element.kind) {
           case 'text':
             messageContent = String(element.value);
@@ -133,16 +134,17 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
           default:
             messageContent = String(element.value);
         }
+        return [{
+          role: element.role as 'system' | 'user' | 'assistant',
+          content: messageContent
+        }];
       } else {
-        // StandardMessageElement
-        messageContent = typeof element.content === 'string'
-          ? element.content
-          : JSON.stringify(element.content);
+        // StandardMessageElement - preserve content as-is (string or Attachment[])
+        return [{
+          role: element.role as 'system' | 'user' | 'assistant',
+          content: element.content
+        }];
       }
-      return [{
-        role: element.role as 'system' | 'user' | 'assistant',
-        content: messageContent
-      }];
     }
       
     case 'section': {
@@ -163,9 +165,7 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       
     case 'material': {
       // Format material with clear structure
-      const materialContent = typeof element.content === 'string' 
-        ? element.content 
-        : JSON.stringify(element.content);
+      const materialContent = contentToString(element.content);
       const materialLines: string[] = [`Material: ${element.title}`];
       if (element.id) {
         materialLines.push(`ID: ${element.id}`);
@@ -174,7 +174,7 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
         materialLines.push(`Usage: ${element.usage} tokens`);
       }
       materialLines.push('', materialContent);
-      
+
       return [{
         role: 'system',
         content: materialLines.join('\n')
@@ -183,9 +183,7 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       
     case 'chunk': {
       // Format chunk with partOf, index, and total
-      const chunkContent = typeof element.content === 'string'
-        ? element.content
-        : JSON.stringify(element.content);
+      const chunkContent = contentToString(element.content);
 
       // Format header based on available information
       let chunkHeader: string;

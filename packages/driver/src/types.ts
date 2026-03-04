@@ -1,7 +1,7 @@
-import type { ToolCall, ToolResultKind } from '@modular-prompt/core';
+import type { Attachment, ToolCall, ToolResultKind } from '@modular-prompt/core';
 
 // Re-export from core for convenience
-export type { CompiledPrompt, ToolCall, ToolResultKind } from '@modular-prompt/core';
+export type { Attachment, CompiledPrompt, ToolCall, ToolResultKind } from '@modular-prompt/core';
 
 /**
  * Chat message role
@@ -13,7 +13,7 @@ export type Role = 'system' | 'assistant' | 'user' | 'tool';
  */
 export interface StandardChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | Attachment[];
 }
 
 /**

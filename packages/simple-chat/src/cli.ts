@@ -32,14 +32,18 @@ program
   .option('-m, --model <model>', 'Override model name')
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
+  .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
+  .option('--debug', 'Show debug output (includes MLX process logs)')
   .action(async (messageArgs: string[], options) => {
     try {
       // Configure log level
       if (options.quiet) {
         Logger.configure({ level: 'error' });
+      } else if (options.debug) {
+        Logger.configure({ level: 'debug' });
       } else if (options.verbose) {
         Logger.configure({ level: 'verbose' });
       }
@@ -69,6 +73,7 @@ program
         model: options.model,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
+        images: options.image,
       };
       
       await runChat(chatOptions);
