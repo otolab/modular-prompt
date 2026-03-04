@@ -11,7 +11,7 @@ echo ""
 
 # Test with a simple message
 echo "Testing with: 'こんにちは'"
-echo "こんにちは" | node "$PROJECT_ROOT/packages/simple-chat/dist/cli.js" --stdin --driver mlx
+echo "こんにちは" | exec node --no-deprecation "$PROJECT_ROOT/packages/simple-chat/dist/cli.js" --stdin --driver mlx
 
 echo ""
 echo "Test completed!"

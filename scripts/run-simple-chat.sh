@@ -14,4 +14,4 @@ if [ ! -d "$PROJECT_ROOT/packages/simple-chat/dist" ]; then
 fi
 
 # Run the simple-chat CLI
-node "$PROJECT_ROOT/packages/simple-chat/dist/cli.js" "$@"
+exec node --no-deprecation "$PROJECT_ROOT/packages/simple-chat/dist/cli.js" $@
