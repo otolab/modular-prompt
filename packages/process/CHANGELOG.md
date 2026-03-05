@@ -1,5 +1,12 @@
 # @modular-prompt/process
 
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies [fbf6055]
+  - @modular-prompt/driver@0.9.1
+
 ## 0.1.25
 
 ### Patch Changes
