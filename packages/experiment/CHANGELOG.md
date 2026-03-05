@@ -1,5 +1,13 @@
 # @modular-prompt/experiment
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [fbf6055]
+  - @modular-prompt/driver@0.9.1
+  - @modular-prompt/process@0.1.26
+
 ## 0.3.3
 
 ### Patch Changes

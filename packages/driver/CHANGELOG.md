@@ -1,5 +1,14 @@
 # @modular-prompt/driver
 
+## 0.9.1
+
+### Patch Changes
+
+- fbf6055: VLM モデルで画像なしリクエスト時の make_sampler エラーを修正
+
+  - VLM モデルでも画像なしの場合に常に VLM 用生成パスを使用するよう修正
+  - 画像が空の場合は image=None を渡すよう修正
+
 ## 0.9.0
 
 ### Minor Changes
