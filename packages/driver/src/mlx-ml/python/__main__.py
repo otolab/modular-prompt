@@ -271,7 +271,7 @@ def generate_text_vlm(prompt, images, options):
 
     for response in vlm_stream_generate(
         model, processor, prompt,
-        image=images,
+        image=images if images else None,
         max_tokens=max_tokens,
         temperature=temperature,
     ):
@@ -358,7 +358,7 @@ def main():
                 tools = req.get('tools')
                 images = req.get('images', [])
 
-                if model_kind == "vlm" and images:
+                if model_kind == "vlm":
                     max_image_size = req.get('maxImageSize', 768)
                     handle_chat_vlm(messages, images, options, max_image_size)
                 else:
