@@ -236,22 +236,43 @@ def handle_completion(prompt, options=None):
     generate_text(prompt, options)
 
 
-def handle_chat_vlm(messages, images, options=None, max_image_size=768):
+def handle_chat_vlm(messages, images, options=None, max_image_size=768, tools=None, primer=None):
     """VLMモデル用のチャット処理
 
     messages: TypeScript側で画像プレースホルダー({type: "image"})が挿入済み
     images: 画像ファイルパスの配列（プレースホルダーと位置が対応）
+    tools: ツール定義（テンプレートが対応している場合のみ使用）
+    primer: アシスタント応答のプリフィックス
     """
     if options is None:
         options = {}
 
+    # primer処理
+    add_generation_prompt = True
+    if primer is not None:
+        messages.append({'role': 'assistant', 'content': primer})
+        add_generation_prompt = False
+
     # processorのapply_chat_templateを直接使用
     # systemメッセージのマージはTypeScript側でchat_restrictionsに基づき処理済み
-    formatted_prompt = processor.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        tokenize=False,
-    )
+    # tools対応を試みる（テンプレートが対応していなければtools無しで実行）
+    try:
+        formatted_prompt = processor.apply_chat_template(
+            messages,
+            tools=tools,
+            add_generation_prompt=add_generation_prompt,
+            tokenize=False,
+        )
+    except TypeError:
+        formatted_prompt = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=add_generation_prompt,
+            tokenize=False,
+        )
+
+    if primer is not None:
+        formatted_prompt = primer.join(formatted_prompt.split(primer)[0:-1]) + primer
+        print(primer, end='', flush=True)
 
     # 画像ファイルを読み込み・リサイズ
     pil_images = load_and_resize_images(images, max_image_size)
@@ -360,7 +381,7 @@ def main():
 
                 if model_kind == "vlm":
                     max_image_size = req.get('maxImageSize', 768)
-                    handle_chat_vlm(messages, images, options, max_image_size)
+                    handle_chat_vlm(messages, images, options, max_image_size, tools, primer)
                 else:
                     handle_chat(messages, primer, options, tools)
             
