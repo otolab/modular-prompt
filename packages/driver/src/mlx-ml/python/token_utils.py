@@ -245,8 +245,8 @@ def detect_tool_call_format(tokenizer):
     if template:
         # 複数のtool_call関連パターンを順に試行
         tool_call_patterns = [
-            # <tool_call>...</tool_call>, <|tool_call|>...<|/tool_call|>
-            (r'<\|?tool_call\|?>', r'</?\|?tool_call\|?>|<\|?/tool_call\|?>'),
+            # </tool_call>, <|/tool_call|> (終了タグ専用)
+            (r'<\|?tool_call\|?>', r'</tool_call>|<\|/tool_call\|>'),
             # <|tool_call_start|>...<|tool_call_end|>
             (r'<\|tool_call_start\|>', r'<\|tool_call_end\|>'),
             # <start_function_call>...<end_function_call>
