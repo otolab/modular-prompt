@@ -1,5 +1,21 @@
 # @modular-prompt/driver
 
+## 0.9.2
+
+### Patch Changes
+
+- b57fcec: tool_call 終了タグの正規表現バグを修正
+
+  - `detect_tool_call_format`の終了タグ検出パターンが開始タグにもマッチしていた問題を修正
+  - Qwen3.5 等の`tool_parser_type`を持たないモデルでツールコールのパースが失敗していた
+  - Qwen3.5 の改行を含む XML 形式出力のテストケースを追加
+
+- 708f42c: VLM モデルで tools/primer が無視される問題を修正
+
+  - handle_chat_vlm に tools・primer パラメータを追加
+  - apply_chat_template への tools 渡し（TypeError フォールバック付き）
+  - primer 処理を handle_chat と同じパターンで実装
+
 ## 0.9.1
 
 ### Patch Changes
