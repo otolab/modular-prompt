@@ -218,7 +218,7 @@ function parsePythonicToolCallContent(content: string): ParsedToolCall | null {
  */
 function parseXmlToolCallContent(content: string): ParsedToolCall | null {
   // qwen3_coder形式
-  const qwenMatch = content.match(/<function=([\w.]+)>([\s\S]*?)<\/function>/);
+  const qwenMatch = content.match(/<function=([\w.\-]+)>([\s\S]*?)<\/function>/);
   if (qwenMatch) {
     const name = qwenMatch[1];
     const paramsStr = qwenMatch[2];
