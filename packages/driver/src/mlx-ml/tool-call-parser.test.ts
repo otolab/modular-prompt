@@ -395,6 +395,41 @@ describe('parseToolCalls', () => {
       });
     });
 
+    it('should parse Qwen3.5 XML format with tool_call_format (multiline parameters)', () => {
+      // Qwen3.5の実際のruntimeInfo: tool_parser_typeなし、chat_templateから検出
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {
+          tool_call_xml: {
+            start: { text: '<tool_call>', id: 248058 },
+            end: { text: '</tool_call>', id: 248059 }
+          }
+        },
+        features: {
+          apply_chat_template: true,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant', 'tool'],
+            constraints: {},
+            tool_call_format: {
+              call_start: '<tool_call>',
+              call_end: '</tool_call>',
+              response_start: '<tool_response>',
+              response_end: '</tool_response>'
+            }
+          }
+        }
+      } as MlxRuntimeInfo;
+
+      // Qwen3.5の実際の出力形式（改行を含む）
+      const text = '<tool_call>\n<function=get_weather>\n<parameter=location>\n東京\n</parameter>\n</function>\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_weather');
+      expect(result.toolCalls[0].arguments).toEqual({ location: '東京' });
+      expect(result.content).toBe('');
+    });
+
     it('should parse minimax invoke XML format inside delimiters', () => {
       const runtimeInfo = {
         methods: ['chat'],
