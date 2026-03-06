@@ -1,5 +1,14 @@
 # @modular-prompt/driver
 
+## 0.9.3
+
+### Patch Changes
+
+- a732958: ハイフンを含む関数名のツールコールパースに対応
+
+  - qwen3_coder 形式の関数名正規表現 `[\w.]+` を `[\w.\-]+` に修正
+  - `mcp__coeiro-operator__operator_status` のような関数名が正しくパースされるように
+
 ## 0.9.2
 
 ### Patch Changes
