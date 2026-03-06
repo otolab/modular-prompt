@@ -430,6 +430,39 @@ describe('parseToolCalls', () => {
       expect(result.content).toBe('');
     });
 
+    it('should parse tool_call with hyphenated function name and surrounding tags', () => {
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {
+          tool_call_xml: {
+            start: { text: '<tool_call>', id: 248058 },
+            end: { text: '</tool_call>', id: 248059 }
+          }
+        },
+        features: {
+          apply_chat_template: true,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant', 'tool'],
+            constraints: {},
+            tool_call_format: {
+              call_start: '<tool_call>',
+              call_end: '</tool_call>'
+            }
+          }
+        }
+      } as MlxRuntimeInfo;
+
+      // </think>等の他タグが混在し、関数名にハイフンを含むケース
+      const text = '確認します。\n</think>\n\nオペレータのステータスを確認します。\n\n<tool_call>\n<function=mcp__coeiro-operator__operator_status>\n</function>\n</tool_call>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('mcp__coeiro-operator__operator_status');
+      expect(result.toolCalls[0].arguments).toEqual({});
+      expect(result.content).not.toContain('<tool_call>');
+      expect(result.content).toContain('オペレータのステータスを確認します');
+    });
+
     it('should parse minimax invoke XML format inside delimiters', () => {
       const runtimeInfo = {
         methods: ['chat'],
