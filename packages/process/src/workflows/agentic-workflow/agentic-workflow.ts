@@ -165,11 +165,12 @@ async function executeStep(
   let prompt: CompiledPrompt = originalPrompt;
   const toolConversation: (StandardMessageElement | ToolResultMessageElement)[] = [];
   const toolCallHistory: ToolCallLog[] = [];
-  let queryResult: QueryResult;
-  let toolCallCount = 0;
+  let queryResult!: QueryResult;
+  let toolCallRounds = 0;
 
   try {
-    do {
+    // Tool calling loop: query → toolCalls → execute → re-query (up to maxToolCalls rounds)
+    for (let toolCallCount = 0; toolCallCount <= maxToolCalls; toolCallCount++) {
       queryResult = await driver.query(prompt, {
         tools: toolDefs.length > 0 ? toolDefs : undefined,
         toolChoice: toolDefs.length > 0 ? 'auto' : undefined,
@@ -177,43 +178,43 @@ async function executeStep(
 
       logger?.debug(`Execution step ${step.id} - AI generated:`, queryResult.content);
 
-      if (queryResult.toolCalls && queryResult.toolCalls.length > 0 && toolCallCount < maxToolCalls) {
-        toolCallCount++;
-        logger?.debug(`Step ${step.id} - Tool calls (round ${toolCallCount}):`, queryResult.toolCalls.map(tc => tc.name));
-
-        const toolResults = await executeToolCalls(queryResult.toolCalls, tools);
-
-        // Record history
-        for (let i = 0; i < queryResult.toolCalls.length; i++) {
-          toolCallHistory.push({
-            name: queryResult.toolCalls[i].name,
-            arguments: queryResult.toolCalls[i].arguments,
-            result: toolResults[i].value,
-          });
-        }
-
-        // Build conversation messages
-        toolConversation.push(
-          {
-            type: 'message',
-            role: 'assistant',
-            content: queryResult.content || '',
-            toolCalls: queryResult.toolCalls,
-          } as StandardMessageElement,
-          ...toolResults
-        );
-
-        // Rebuild prompt: tool messages go BEFORE text elements in output
-        // Drivers extract MessageElements during iteration, accumulate text for the end
-        // → messages come before cue/schema text
-        prompt = {
-          ...originalPrompt,
-          output: [...toolConversation as any[], ...(originalPrompt.output || [])],
-        };
-      } else {
+      if (!queryResult.toolCalls || queryResult.toolCalls.length === 0 || toolCallCount === maxToolCalls) {
         break;
       }
-    } while (true);
+
+      toolCallRounds++;
+      logger?.debug(`Step ${step.id} - Tool calls (round ${toolCallRounds}):`, queryResult.toolCalls.map(tc => tc.name));
+
+      const toolResults = await executeToolCalls(queryResult.toolCalls, tools);
+
+      // Record history
+      for (let i = 0; i < queryResult.toolCalls.length; i++) {
+        toolCallHistory.push({
+          name: queryResult.toolCalls[i].name,
+          arguments: queryResult.toolCalls[i].arguments,
+          result: toolResults[i].value,
+        });
+      }
+
+      // Build conversation messages
+      toolConversation.push(
+        {
+          type: 'message',
+          role: 'assistant',
+          content: queryResult.content || '',
+          toolCalls: queryResult.toolCalls,
+        } as StandardMessageElement,
+        ...toolResults
+      );
+
+      // Rebuild prompt: tool messages go BEFORE text elements in output
+      // Drivers extract MessageElements during iteration, accumulate text for the end
+      // → messages come before cue/schema text
+      prompt = {
+        ...originalPrompt,
+        output: [...toolConversation as any[], ...(originalPrompt.output || [])],
+      };
+    }
 
     // Check finish reason (only for non-tool_calls responses)
     if (queryResult.finishReason && queryResult.finishReason !== 'stop' && queryResult.finishReason !== 'tool_calls') {
@@ -259,7 +260,7 @@ async function executeStep(
       toolCalls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
       metadata: {
         usage: queryResult.usage,
-        toolCallRounds: toolCallCount
+        toolCallRounds
       }
     };
 
