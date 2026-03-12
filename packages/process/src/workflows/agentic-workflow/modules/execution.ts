@@ -23,7 +23,7 @@ export const execution: PromptModule<AgenticWorkflowContext> = {
       title: 'Execution Phase Process',
       items: [
         '- Focus solely on completing the current step',
-        '- Utilize action results if available',
+        '- Use available tools if needed to accomplish the step',
         '- Output result and nextState in a structured format'
       ]
     },
@@ -31,7 +31,14 @@ export const execution: PromptModule<AgenticWorkflowContext> = {
       type: 'subsection',
       title: 'Available Tools',
       items: [
-        '- No tools are available'
+        (ctx: AgenticWorkflowContext) => {
+          if (!ctx.availableTools || ctx.availableTools.length === 0) {
+            return '- No tools are available';
+          }
+          return ctx.availableTools.map(t =>
+            `- **${t.name}**${t.description ? `: ${t.description}` : ''}`
+          );
+        }
       ]
     },
     {
@@ -46,18 +53,7 @@ export const execution: PromptModule<AgenticWorkflowContext> = {
           const currentStepId = ctx.currentStep?.id;
 
           return ctx.plan.steps.map((step: AgenticStep) => {
-            const parts: string[] = [];
-
-            // Description
-            parts.push(step.description);
-
-            // Tools
-            if (step.actions && step.actions.length > 0) {
-              const toolNames = step.actions.map(a => a.tool).join(', ');
-              parts.push(`(Tools: ${toolNames})`);
-            }
-
-            const baseText = parts.join(' ');
+            const baseText = step.description;
 
             // For currently executing step, show guidelines/constraints
             if (step.id === currentStepId) {
@@ -103,26 +99,12 @@ export const execution: PromptModule<AgenticWorkflowContext> = {
 
   materials: [
     (ctx) => {
-      if (ctx.actionResult === undefined) {
-        return null;
-      }
-
-      return {
-        type: 'material' as const,
-        id: 'action-result',
-        title: 'Action execution result for current step',
-        content: typeof ctx.actionResult === 'string'
-          ? ctx.actionResult
-          : JSON.stringify(ctx.actionResult, null, 2)
-      };
-    },
-    (ctx) => {
       if (!ctx.executionLog || ctx.executionLog.length === 0 || !ctx.plan) {
         return null;
       }
 
       return ctx.executionLog.map((log) => {
-        // Find the corresponding step to get dos/donts
+        // Find the corresponding step to get guidelines/constraints
         const step = ctx.plan!.steps.find((s: AgenticStep) => s.id === log.stepId);
 
         const contentParts: string[] = [];
@@ -159,13 +141,15 @@ export const execution: PromptModule<AgenticWorkflowContext> = {
 
         contentParts.push(log.result);
 
-        if (log.actionResult !== undefined) {
-          const actionResultStr = typeof log.actionResult === 'string'
-            ? log.actionResult
-            : JSON.stringify(log.actionResult, null, 2);
+        if (log.toolCalls && log.toolCalls.length > 0) {
           contentParts.push('');
-          contentParts.push('**Action Result:**');
-          contentParts.push(actionResultStr);
+          contentParts.push('**Tool Calls:**');
+          for (const tc of log.toolCalls) {
+            const resultStr = typeof tc.result === 'string'
+              ? tc.result
+              : JSON.stringify(tc.result, null, 2);
+            contentParts.push(`- ${tc.name}(${JSON.stringify(tc.arguments)}) → ${resultStr}`);
+          }
         }
 
         return {

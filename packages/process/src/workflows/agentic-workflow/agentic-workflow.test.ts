@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { agenticProcess } from './agentic-workflow.js';
 import { TestDriver } from '@modular-prompt/driver';
-import type { AgenticWorkflowContext, AgenticPlan } from './types.js';
+import type { AgenticWorkflowContext, AgenticPlan, ToolSpec } from './types.js';
 
 describe('agenticProcess', () => {
   it('should execute a simple agent workflow', async () => {
@@ -55,37 +55,48 @@ describe('agenticProcess', () => {
     expect(result.metadata?.executedSteps).toBe(2);
   });
 
-  it('should handle actions in workflow', async () => {
+  it('should handle tools in workflow via tool calling', async () => {
     const plan: AgenticPlan = {
       steps: [
-        {
-          id: 'step-1',
-          description: 'Get data',
-          actions: [
-            {
-              tool: 'getData',
-              params: { id: '123' }
-            }
-          ]
-        },
+        { id: 'step-1', description: 'Get data using tools' },
         { id: 'step-2', description: 'Process data' }
       ]
     };
 
-    let actionCalled = false;
-    const actions = {
-      getData: async (params: any) => {
-        actionCalled = true;
-        expect(params.id).toBe('123');
-        return { result: 'data retrieved' };
+    let toolCalled = false;
+    const tools: ToolSpec[] = [
+      {
+        definition: {
+          name: 'getData',
+          description: 'Retrieve data by ID',
+          parameters: {
+            type: 'object',
+            properties: { id: { type: 'string' } },
+            required: ['id']
+          }
+        },
+        handler: async (args) => {
+          toolCalled = true;
+          expect(args.id).toBe('123');
+          return { result: 'data retrieved' };
+        }
       }
-    };
+    ];
 
     const driver = new TestDriver({
       responses: [
+        // Planning
         JSON.stringify(plan),
+        // Execution step 1: AI calls tool first
+        {
+          content: '',
+          toolCalls: [{ id: 'call-1', name: 'getData', arguments: { id: '123' } }]
+        },
+        // Execution step 1: AI responds after getting tool result
         JSON.stringify({ result: 'Data retrieved and processed', nextState: 'Data available for processing' }),
+        // Execution step 2: no tools
         JSON.stringify({ result: 'Processing complete', nextState: 'Ready for final output' }),
+        // Integration
         'Final output'
       ]
     });
@@ -103,11 +114,184 @@ describe('agenticProcess', () => {
       ]
     };
 
-    const result = await agenticProcess(driver, userModule, context, { actions });
+    const result = await agenticProcess(driver, userModule, context, { tools });
 
-    expect(actionCalled).toBe(true);
-    expect(result.context.executionLog?.[0].actionResult).toEqual({ result: 'data retrieved' });
-    expect(result.metadata?.actionsUsed).toBe(1);
+    expect(toolCalled).toBe(true);
+    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(1);
+    expect(result.context.executionLog?.[0].toolCalls?.[0].name).toBe('getData');
+    expect(result.context.executionLog?.[0].toolCalls?.[0].result).toEqual({ result: 'data retrieved' });
+    expect(result.metadata?.toolCallsUsed).toBe(1);
+  });
+
+  it('should handle multiple tool calling rounds', async () => {
+    const plan: AgenticPlan = {
+      steps: [
+        { id: 'step-1', description: 'Search and analyze' }
+      ]
+    };
+
+    const tools: ToolSpec[] = [
+      {
+        definition: { name: 'search', description: 'Search for information' },
+        handler: async (args) => ({ results: [`result for ${args.query}`] })
+      },
+      {
+        definition: { name: 'analyze', description: 'Analyze data' },
+        handler: async (args) => ({ analysis: `analyzed: ${JSON.stringify(args.data)}` })
+      }
+    ];
+
+    const driver = new TestDriver({
+      responses: [
+        // Planning
+        JSON.stringify(plan),
+        // Execution step 1, round 1: search
+        {
+          content: 'Let me search first',
+          toolCalls: [{ id: 'call-1', name: 'search', arguments: { query: 'test' } }]
+        },
+        // Execution step 1, round 2: analyze
+        {
+          content: 'Now analyze the results',
+          toolCalls: [{ id: 'call-2', name: 'analyze', arguments: { data: ['result for test'] } }]
+        },
+        // Execution step 1, final: produce result
+        JSON.stringify({ result: 'Analysis complete', nextState: 'Done' }),
+        // Integration
+        'Final analysis report'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Search and analyze data'
+    };
+
+    const userModule = {
+      objective: ['データを検索・分析する']
+    };
+
+    const result = await agenticProcess(driver, userModule, context, { tools });
+
+    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(2);
+    expect(result.context.executionLog?.[0].toolCalls?.[0].name).toBe('search');
+    expect(result.context.executionLog?.[0].toolCalls?.[1].name).toBe('analyze');
+    expect(result.metadata?.toolCallsUsed).toBe(2);
+  });
+
+  it('should respect maxToolCalls limit', async () => {
+    const plan: AgenticPlan = {
+      steps: [
+        { id: 'step-1', description: 'Repeat action' }
+      ]
+    };
+
+    let callCount = 0;
+    const tools: ToolSpec[] = [
+      {
+        definition: { name: 'repeat', description: 'Repeating tool' },
+        handler: async () => {
+          callCount++;
+          return { count: callCount };
+        }
+      }
+    ];
+
+    const driver = new TestDriver({
+      responses: [
+        JSON.stringify(plan),
+        // Tool call round 1
+        { content: '', toolCalls: [{ id: 'c1', name: 'repeat', arguments: {} }] },
+        // Tool call round 2
+        { content: '', toolCalls: [{ id: 'c2', name: 'repeat', arguments: {} }] },
+        // After maxToolCalls reached, this would be the next response
+        // but since maxToolCalls=2, the second tool call response breaks the loop
+        // and this becomes the final result
+        JSON.stringify({ result: 'Stopped after limit', nextState: '' }),
+        'Final'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Test tool call limit'
+    };
+
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context, {
+      tools,
+      maxToolCalls: 2
+    });
+
+    expect(callCount).toBe(2);
+    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(2);
+  });
+
+  it('should handle tool errors gracefully', async () => {
+    const plan: AgenticPlan = {
+      steps: [
+        { id: 'step-1', description: 'Use failing tool' }
+      ]
+    };
+
+    const tools: ToolSpec[] = [
+      {
+        definition: { name: 'failingTool', description: 'A tool that fails' },
+        handler: async () => { throw new Error('Tool failed'); }
+      }
+    ];
+
+    const driver = new TestDriver({
+      responses: [
+        JSON.stringify(plan),
+        // AI calls the failing tool
+        { content: '', toolCalls: [{ id: 'c1', name: 'failingTool', arguments: {} }] },
+        // AI receives error and produces final result
+        JSON.stringify({ result: 'Handled error', nextState: '' }),
+        'Final'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Test error handling'
+    };
+
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
+
+    // Tool error is captured and returned to AI, not thrown
+    expect(result.context.executionLog?.[0].toolCalls?.[0].result).toBe('Tool failed');
+    expect(result.context.executionLog?.[0].result).toBe('Handled error');
+  });
+
+  it('should handle unknown tool calls', async () => {
+    const plan: AgenticPlan = {
+      steps: [
+        { id: 'step-1', description: 'Call unknown tool' }
+      ]
+    };
+
+    const tools: ToolSpec[] = [
+      {
+        definition: { name: 'knownTool', description: 'A known tool' },
+        handler: async () => ({ ok: true })
+      }
+    ];
+
+    const driver = new TestDriver({
+      responses: [
+        JSON.stringify(plan),
+        // AI calls a tool that doesn't exist
+        { content: '', toolCalls: [{ id: 'c1', name: 'unknownTool', arguments: {} }] },
+        // AI receives error and produces final result
+        JSON.stringify({ result: 'Handled unknown tool', nextState: '' }),
+        'Final'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Test unknown tool'
+    };
+
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
+
+    expect(result.context.executionLog?.[0].toolCalls?.[0].result).toBe('Unknown tool: unknownTool');
   });
 
   it('should limit steps to maxSteps', async () => {
@@ -240,51 +424,6 @@ describe('agenticProcess', () => {
     }).rejects.toThrow('Step execution failed with reason: error');
   });
 
-  it('should handle action errors', async () => {
-    const plan: AgenticPlan = {
-      steps: [
-        {
-          id: 'step-1',
-          description: 'Action step',
-          actions: [
-            {
-              tool: 'failingAction'
-            }
-          ]
-        }
-      ]
-    };
-
-    const actions = {
-      failingAction: async () => {
-        throw new Error('Action failed');
-      }
-    };
-
-    const driver = new TestDriver({
-      responses: [
-        JSON.stringify(plan)
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Process customer feedback'
-    };
-
-    const userModule = {
-      objective: ['顧客フィードバックを処理する'],
-      instructions: [
-        '- フィードバックを収集する',
-        '- カテゴリ別に分類する',
-        '- 改善提案をまとめる'
-      ]
-    };
-
-    await expect(async () => {
-      await agenticProcess(driver, userModule, context, { actions });
-    }).rejects.toThrow("Tool 'failingAction' failed: Action failed");
-  });
-
   it('should resume from partial execution', async () => {
     const plan: AgenticPlan = {
       steps: [
@@ -296,7 +435,7 @@ describe('agenticProcess', () => {
 
     // Partial execution log (already completed step-1)
     const executionLog = [
-      { stepId: 'step-1', result: 'First step completed' }
+      { stepId: 'step-1', reasoning: '', result: 'First step completed' }
     ];
 
     const driver = new TestDriver({
@@ -332,5 +471,30 @@ describe('agenticProcess', () => {
     expect(result.context.executionLog?.[0].stepId).toBe('step-1');
     expect(result.context.executionLog?.[1].stepId).toBe('step-2');
     expect(result.context.executionLog?.[2].stepId).toBe('step-3');
+  });
+
+  it('should work without any tools', async () => {
+    const plan: AgenticPlan = {
+      steps: [
+        { id: 'step-1', description: 'Simple step' }
+      ]
+    };
+
+    const driver = new TestDriver({
+      responses: [
+        JSON.stringify(plan),
+        JSON.stringify({ result: 'Done', nextState: '' }),
+        'Final'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Simple task'
+    };
+
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
+
+    expect(result.output).toBe('Final');
+    expect(result.metadata?.toolCallsUsed).toBe(0);
   });
 });

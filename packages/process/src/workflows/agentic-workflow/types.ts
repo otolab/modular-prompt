@@ -1,10 +1,12 @@
+import type { ToolDefinition } from '@modular-prompt/driver';
+
 /**
- * Action handler type for agentic workflow
+ * Tool specification: definition for AI + handler for execution
  */
-export type ActionHandler<TContext = any> = (
-  params: any,
-  context: TContext
-) => Promise<any>;
+export interface ToolSpec {
+  definition: ToolDefinition;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
 
 /**
  * Agentic workflow step definition
@@ -14,10 +16,15 @@ export interface AgenticStep {
   description: string;
   guidelines?: string[];  // Actions or principles to follow in this step
   constraints?: string[]; // Limitations or prohibitions for this step
-  actions?: Array<{      // External tools to use (supports multiple tools)
-    tool: string;
-    params?: any;
-  }>;
+}
+
+/**
+ * Tool call log entry
+ */
+export interface ToolCallLog {
+  name: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
 }
 
 /**
@@ -27,7 +34,7 @@ export interface AgenticExecutionLog {
   stepId: string;
   reasoning: string;    // Thought process and analysis
   result: string;       // Execution result
-  actionResult?: any;
+  toolCalls?: ToolCallLog[];
   metadata?: any;
 }
 
@@ -51,7 +58,7 @@ export interface AgenticWorkflowContext {
   plan?: AgenticPlan;               // 実行計画
   executionLog?: AgenticExecutionLog[];  // 実行履歴
   currentStep?: AgenticStep;        // 現在実行中のステップ
-  actionResult?: any;             // 現在のアクション結果
+  availableTools?: ToolDefinition[];  // 利用可能なツール一覧（planningモジュール用）
   phase?: 'planning' | 'execution' | 'integration' | 'complete';
 }
 
@@ -60,7 +67,8 @@ export interface AgenticWorkflowContext {
  */
 export interface AgenticWorkflowOptions {
   maxSteps?: number;              // 最大ステップ数（デフォルト: 5）
-  actions?: Record<string, ActionHandler>;  // 利用可能なアクション
+  tools?: ToolSpec[];             // 利用可能なツール
+  maxToolCalls?: number;          // ステップあたりの最大ツール呼び出し数（デフォルト: 10）
   enablePlanning?: boolean;       // 計画フェーズの有効化（デフォルト: true）
   useFreeformExecution?: boolean; // Use freeform execution module (デフォルト: false)
   logger?: any;                   // Logger instance for debug output

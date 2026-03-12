@@ -1,0 +1,177 @@
+# Agentic Workflow 実験設定
+# Planning/Executionフェーズの出力品質をモデル間で比較
+
+models:
+  qwen3.5-27b:
+    model: "mlx-community/Qwen3.5-27B-4bit"
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 10
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "thinking", "japanese"]
+    priority: 20
+
+drivers:
+  mlx: {}
+
+# 共通定義
+_shared:
+  tools: &tools_def
+    - name: search_documents
+      description: "キーワードでドキュメントを検索する"
+      parameters:
+        type: object
+        properties:
+          query:
+            type: string
+            description: "検索クエリ"
+          limit:
+            type: number
+            description: "取得件数（デフォルト: 5）"
+        required: [query]
+    - name: get_user_info
+      description: "ユーザーIDから情報を取得する"
+      parameters:
+        type: object
+        properties:
+          userId:
+            type: string
+            description: "ユーザーID"
+        required: [userId]
+
+modules:
+  - name: planning
+    path: ./planning-module.ts
+    description: "Planning phase: 実行計画の生成品質"
+
+  - name: execution
+    path: ./execution-module.ts
+    description: "Execution phase: ステップ実行とツール呼び出し判断"
+
+testCases:
+  # ---- Planning phase tests ----
+  - name: "計画生成: ドキュメント分析"
+    description: "適切なステップ分解と構造化されたJSON出力を期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
+    input:
+      objective: "技術仕様書を分析し、主要な要件と制約事項を抽出してレポートを作成する"
+      inputs:
+        documentType: "技術仕様書"
+        pages: 50
+      phase: planning
+      availableTools:
+        - name: search_documents
+          description: "キーワードでドキュメントを検索する"
+        - name: get_user_info
+          description: "ユーザーIDから情報を取得する"
+
+  - name: "計画生成: データ集計"
+    description: "ツール活用を含む計画の生成を期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
+    input:
+      objective: "ユーザーの行動データを分析し、アクティブユーザーの傾向を把握する"
+      inputs:
+        period: "2025-01"
+        targetMetrics: ["DAU", "session_duration", "retention"]
+      phase: planning
+      availableTools:
+        - name: search_documents
+          description: "キーワードでドキュメントを検索する"
+        - name: get_user_info
+          description: "ユーザーIDから情報を取得する"
+
+  # ---- Execution phase tests ----
+  - name: "ステップ実行: ツール呼び出し"
+    description: "search_documentsツールを呼び出すことを期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
+    input:
+      objective: "ドキュメント検索を行い結果を整理する"
+      plan:
+        steps:
+          - id: step-1
+            description: "関連ドキュメントを検索して取得する"
+            guidelines:
+              - "search_documentsツールを使用してドキュメントを検索する"
+              - "検索結果を整理して次のステップに引き継ぐ"
+            constraints:
+              - "検索クエリは具体的にする"
+      currentStep:
+        id: step-1
+        description: "関連ドキュメントを検索して取得する"
+        guidelines:
+          - "search_documentsツールを使用してドキュメントを検索する"
+        constraints:
+          - "検索クエリは具体的にする"
+      phase: execution
+      availableTools:
+        - name: search_documents
+          description: "キーワードでドキュメントを検索する"
+        - name: get_user_info
+          description: "ユーザーIDから情報を取得する"
+    queryOptions:
+      temperature: 0.3
+      maxTokens: 1024
+      tools: *tools_def
+      toolChoice: auto
+
+  - name: "ステップ実行: テキスト応答"
+    description: "ツール不要の分析ステップ。JSON構造化出力を期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
+    input:
+      objective: "収集したデータの分析レポートを作成する"
+      plan:
+        steps:
+          - id: step-1
+            description: "データを分析して主要な発見をまとめる"
+            guidelines:
+              - "データの傾向を特定する"
+              - "重要な数値を強調する"
+            constraints:
+              - "推測は避け、データに基づく分析を行う"
+      currentStep:
+        id: step-1
+        description: "データを分析して主要な発見をまとめる"
+        guidelines:
+          - "データの傾向を特定する"
+          - "重要な数値を強調する"
+        constraints:
+          - "推測は避け、データに基づく分析を行う"
+      inputs:
+        activeUsers: 12500
+        averageSession: "8.3分"
+        retention7d: "42%"
+      phase: execution
+    queryOptions:
+      temperature: 0.3
+      maxTokens: 1024
+
+evaluators:
+  - name: structured-output-presence

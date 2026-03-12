@@ -6,8 +6,6 @@ import type { MaterialContext } from './modules/material';
 import type { StreamProcessingContext } from './modules/stream-processing';
 import { agenticProcess } from './workflows/agentic-workflow/agentic-workflow';
 import type { AgenticWorkflowContext } from './workflows/agentic-workflow/types';
-import { agentProcess } from './workflows/agent-workflow';
-import type { AgentWorkflowContext } from './workflows/agent-workflow';
 import { TestDriver } from '@modular-prompt/driver';
 
 describe('integration tests', () => {
@@ -147,18 +145,12 @@ describe('integration tests', () => {
     expect(result.metadata?.executedSteps).toBe(2);
   });
 
-  it('agenticProcessでアクション付きワークフローが実行できる', async () => {
+  it('agenticProcessでツール呼び出し付きワークフローが実行できる', async () => {
     const plan = {
       steps: [
         {
           id: 'step-1',
-          description: 'データを取得する',
-          actions: [
-            {
-              tool: 'fetchData',
-              params: { source: 'api' }
-            }
-          ]
+          description: 'データを取得する'
         },
         {
           id: 'step-2',
@@ -168,17 +160,34 @@ describe('integration tests', () => {
     };
 
     let fetchCalled = false;
-    const actions = {
-      fetchData: async (params: any) => {
-        fetchCalled = true;
-        expect(params.source).toBe('api');
-        return { data: [1, 2, 3] };
+    const tools = [
+      {
+        definition: {
+          name: 'fetchData',
+          description: 'データを取得する',
+          parameters: {
+            type: 'object',
+            properties: { source: { type: 'string' } },
+            required: ['source']
+          }
+        },
+        handler: async (args: Record<string, unknown>) => {
+          fetchCalled = true;
+          expect(args.source).toBe('api');
+          return { data: [1, 2, 3] };
+        }
       }
-    };
+    ];
 
     const driver = new TestDriver({
       responses: [
         JSON.stringify(plan),
+        // Step 1: AI calls tool
+        {
+          content: '',
+          toolCalls: [{ id: 'call-1', name: 'fetchData', arguments: { source: 'api' } }]
+        },
+        // Step 1: AI processes tool result
         JSON.stringify({
           reasoning: 'データ取得を実行',
           result: 'データ取得完了',
@@ -201,47 +210,12 @@ describe('integration tests', () => {
       objective: ['データを取得して処理する']
     };
 
-    const result = await agenticProcess(driver, userModule, context, { actions });
+    const result = await agenticProcess(driver, userModule, context, { tools });
 
-    // アクションが実行されたことを確認
+    // ツールが実行されたことを確認
     expect(fetchCalled).toBe(true);
-    expect(result.context.executionLog?.[0].actionResult).toEqual({ data: [1, 2, 3] });
-    expect(result.metadata?.actionsUsed).toBe(1);
+    expect(result.context.executionLog?.[0].toolCalls?.[0].result).toEqual({ data: [1, 2, 3] });
+    expect(result.metadata?.toolCallsUsed).toBe(1);
   });
 
-  it('agentProcessで簡易ワークフローが実行できる', async () => {
-    const plan = {
-      steps: [
-        { id: 'step-1', description: '調査結果を収集する' },
-        { id: 'step-2', description: '最終レポートを作成する' }
-      ]
-    };
-
-    const driver = new TestDriver({
-      responses: [
-        JSON.stringify(plan),
-        '一次情報を集めて整理しました。',
-        '集めた情報を元にレポートを作成しました。',
-        '最終レポートを提出します。'
-      ]
-    });
-
-    const context: AgentWorkflowContext = {
-      objective: '簡易レポートを作成する',
-      inputs: {
-        topic: 'テスト市場調査'
-      }
-    };
-
-    const userModule = {
-      objective: ['簡易レポートを作成する']
-    };
-
-    const result = await agentProcess(driver, userModule, context);
-
-    expect(result.output).toBe('最終レポートを提出します。');
-    expect(result.context.phase).toBe('complete');
-    expect(result.metadata?.planSteps).toBe(2);
-    expect(result.metadata?.executedSteps).toBe(2);
-  });
 });

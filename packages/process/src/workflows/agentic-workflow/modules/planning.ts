@@ -25,8 +25,18 @@ export const planning: PromptModule<AgenticWorkflowContext> = {
         '  - **guidelines**: Specific actions or principles to follow in this step',
         '  - **constraints**: Specific limitations or prohibitions for this step',
         '- The steps should accomplish the Instructions in a logical sequence',
-        '- Consider available tools when defining actions (currently none available)',
         '- Ensure logical flow between steps',
+        (ctx: AgenticWorkflowContext) => {
+          if (!ctx.availableTools || ctx.availableTools.length === 0) {
+            return '- No external tools are available';
+          }
+          return [
+            '- The following tools are available during execution. Consider when they might be useful:',
+            ...ctx.availableTools.map(t =>
+              `  - **${t.name}**${t.description ? `: ${t.description}` : ''}`
+            )
+          ];
+        },
         '',
         '**CRITICAL: Output Format**',
         '- Respond ONLY with valid JSON text',
@@ -78,24 +88,6 @@ export const planning: PromptModule<AgenticWorkflowContext> = {
                   type: 'array',
                   items: { type: 'string' },
                   description: 'Specific limitations or prohibitions for this step (1-3 items)'
-                },
-                actions: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      tool: {
-                        type: 'string',
-                        description: 'Tool name from available actions'
-                      },
-                      params: {
-                        type: 'object',
-                        description: 'Tool parameters (optional)'
-                      }
-                    },
-                    required: ['tool']
-                  },
-                  description: 'External tools to use (optional, only if available actions exist)'
                 }
               },
               required: ['id', 'description', 'guidelines', 'constraints']

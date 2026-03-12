@@ -1,14 +1,60 @@
 import { compile, merge } from '@modular-prompt/core';
-import type { PromptModule } from '@modular-prompt/core';
+import type { PromptModule, ToolCall, ToolResultMessageElement, StandardMessageElement, CompiledPrompt } from '@modular-prompt/core';
+import type { QueryResult } from '@modular-prompt/driver';
 import { WorkflowExecutionError } from '../types.js';
 import type { AIDriver, WorkflowResult } from '../types.js';
-import type { AgenticWorkflowContext, AgenticWorkflowOptions, AgenticPlan, AgenticExecutionLog, ActionHandler } from './types.js';
+import type { AgenticWorkflowContext, AgenticWorkflowOptions, AgenticPlan, AgenticExecutionLog, ToolSpec, ToolCallLog } from './types.js';
 import { agentic } from './modules/agentic.js';
 import { planning } from './modules/planning.js';
 import { execution } from './modules/execution.js';
 import { executionFreeform } from './modules/execution-freeform.js';
 import { integration } from './modules/integration.js';
 import { type DriverInput, resolveDriver } from '../driver-input.js';
+
+/**
+ * Execute tool calls and return ToolResultMessageElements
+ */
+async function executeToolCalls(
+  toolCalls: ToolCall[],
+  toolSpecs: ToolSpec[]
+): Promise<ToolResultMessageElement[]> {
+  const results: ToolResultMessageElement[] = [];
+  for (const tc of toolCalls) {
+    const spec = toolSpecs.find(s => s.definition.name === tc.name);
+    if (!spec) {
+      results.push({
+        type: 'message',
+        role: 'tool',
+        toolCallId: tc.id,
+        name: tc.name,
+        kind: 'error',
+        value: `Unknown tool: ${tc.name}`
+      });
+      continue;
+    }
+    try {
+      const result = await spec.handler(tc.arguments);
+      results.push({
+        type: 'message',
+        role: 'tool',
+        toolCallId: tc.id,
+        name: tc.name,
+        kind: typeof result === 'string' ? 'text' : 'data',
+        value: result
+      });
+    } catch (error) {
+      results.push({
+        type: 'message',
+        role: 'tool',
+        toolCallId: tc.id,
+        name: tc.name,
+        kind: 'error',
+        value: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  return results;
+}
 
 /**
  * Execute planning phase
@@ -84,48 +130,23 @@ async function executePlanningPhase(
 }
 
 /**
- * Execute a single step
+ * Execute a single step with tool calling loop
  */
 async function executeStep(
   driver: AIDriver,
   module: PromptModule<AgenticWorkflowContext>,
   context: AgenticWorkflowContext,
   step: AgenticPlan['steps'][number],
-  actions: Record<string, ActionHandler>,
+  tools: ToolSpec[],
   executionLog: AgenticExecutionLog[],
   useFreeform: boolean,
+  maxToolCalls: number,
   logger?: any
 ): Promise<AgenticExecutionLog> {
-  // Execute actions if specified
-  let actionResult: any;
-  if (step.actions && step.actions.length > 0) {
-    for (const action of step.actions) {
-      if (actions[action.tool]) {
-        try {
-          actionResult = await actions[action.tool](action.params, context);
-        } catch (error) {
-          throw new WorkflowExecutionError(
-            `Tool '${action.tool}' failed: ${(error as Error).message}`,
-            {
-              ...context,
-              executionLog,
-              currentStep: step
-            },
-            {
-              phase: 'execution',
-              partialResult: executionLog.map(log => log.result).join('\n\n')
-            }
-          );
-        }
-      }
-    }
-  }
-
-  // Execute step with AI
+  // Select execution module
   const executionPhaseModule = useFreeform ? executionFreeform : execution;
 
   // For freeform mode, omit user's instructions to use plan-based guidelines/constraints instead
-  // For structured mode, use user's instructions as-is
   const userModule = useFreeform
     ? { ...module, instructions: undefined }
     : module;
@@ -134,26 +155,76 @@ async function executeStep(
   const stepContext: AgenticWorkflowContext = {
     ...context,
     currentStep: step,
-    actionResult,
     executionLog
   };
 
-  const prompt = compile(executionModule, stepContext);
+  const originalPrompt = compile(executionModule, stepContext);
+
+  // Tool calling loop
+  const toolDefs = tools.map(t => t.definition);
+  let prompt: CompiledPrompt = originalPrompt;
+  const toolConversation: (StandardMessageElement | ToolResultMessageElement)[] = [];
+  const toolCallHistory: ToolCallLog[] = [];
+  let queryResult!: QueryResult;
+  let toolCallRounds = 0;
 
   try {
-    const stepResult = await driver.query(prompt);
+    // Tool calling loop: query → toolCalls → execute → re-query (up to maxToolCalls rounds)
+    for (let toolCallCount = 0; toolCallCount <= maxToolCalls; toolCallCount++) {
+      queryResult = await driver.query(prompt, {
+        tools: toolDefs.length > 0 ? toolDefs : undefined,
+        toolChoice: toolDefs.length > 0 ? 'auto' : undefined,
+      });
 
-    logger?.debug(`Execution step ${step.id} - AI generated:`, stepResult.content);
+      logger?.debug(`Execution step ${step.id} - AI generated:`, queryResult.content);
 
-    // Check finish reason
-    if (stepResult.finishReason && stepResult.finishReason !== 'stop') {
+      if (!queryResult.toolCalls || queryResult.toolCalls.length === 0 || toolCallCount === maxToolCalls) {
+        break;
+      }
+
+      toolCallRounds++;
+      logger?.debug(`Step ${step.id} - Tool calls (round ${toolCallRounds}):`, queryResult.toolCalls.map(tc => tc.name));
+
+      const toolResults = await executeToolCalls(queryResult.toolCalls, tools);
+
+      // Record history
+      for (let i = 0; i < queryResult.toolCalls.length; i++) {
+        toolCallHistory.push({
+          name: queryResult.toolCalls[i].name,
+          arguments: queryResult.toolCalls[i].arguments,
+          result: toolResults[i].value,
+        });
+      }
+
+      // Build conversation messages
+      toolConversation.push(
+        {
+          type: 'message',
+          role: 'assistant',
+          content: queryResult.content || '',
+          toolCalls: queryResult.toolCalls,
+        } as StandardMessageElement,
+        ...toolResults
+      );
+
+      // Rebuild prompt: tool messages go BEFORE text elements in output
+      // Drivers extract MessageElements during iteration, accumulate text for the end
+      // → messages come before cue/schema text
+      prompt = {
+        ...originalPrompt,
+        output: [...toolConversation as any[], ...(originalPrompt.output || [])],
+      };
+    }
+
+    // Check finish reason (only for non-tool_calls responses)
+    if (queryResult.finishReason && queryResult.finishReason !== 'stop' && queryResult.finishReason !== 'tool_calls') {
       throw new WorkflowExecutionError(
-        `Step execution failed with reason: ${stepResult.finishReason}`,
+        `Step execution failed with reason: ${queryResult.finishReason}`,
         stepContext,
         {
           phase: 'execution',
           partialResult: executionLog.map(log => log.result).join('\n\n'),
-          finishReason: stepResult.finishReason
+          finishReason: queryResult.finishReason
         }
       );
     }
@@ -163,32 +234,33 @@ async function executeStep(
     let result: string;
     let nextState: string;
 
-    if (stepResult.structuredOutput) {
-      const output = stepResult.structuredOutput as { reasoning: string; result: string; nextState: string };
+    if (queryResult.structuredOutput) {
+      const output = queryResult.structuredOutput as { reasoning: string; result: string; nextState: string };
       reasoning = output.reasoning || '';
-      result = output.result || stepResult.content;
+      result = output.result || queryResult.content;
       nextState = output.nextState || '';
     } else {
       // Fallback if structured output is not available
       reasoning = '';
-      result = stepResult.content;
+      result = queryResult.content;
       nextState = '';
     }
 
     // Update context state with nextState for the next step
     context.state = {
       content: nextState,
-      usage: stepResult.usage?.totalTokens
+      usage: queryResult.usage?.totalTokens
     };
 
-    // Create execution log entry (without nextState - it's in context.state now)
+    // Create execution log entry
     return {
       stepId: step.id,
       reasoning,
       result,
-      actionResult,
+      toolCalls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
       metadata: {
-        usage: stepResult.usage
+        usage: queryResult.usage,
+        toolCallRounds
       }
     };
 
@@ -211,8 +283,9 @@ async function executeExecutionPhase(
   module: PromptModule<AgenticWorkflowContext>,
   context: AgenticWorkflowContext,
   plan: AgenticPlan,
-  actions: Record<string, ActionHandler>,
+  tools: ToolSpec[],
   useFreeform: boolean,
+  maxToolCalls: number,
   logger?: any
 ): Promise<AgenticExecutionLog[]> {
   const executionLog = context.executionLog || [];
@@ -223,7 +296,7 @@ async function executeExecutionPhase(
   // Execute each step
   for (let i = startIndex; i < plan.steps.length; i++) {
     const step = plan.steps[i];
-    const logEntry = await executeStep(driver, module, context, step, actions, executionLog, useFreeform, logger);
+    const logEntry = await executeStep(driver, module, context, step, tools, executionLog, useFreeform, maxToolCalls, logger);
     executionLog.push(logEntry);
   }
 
@@ -275,11 +348,11 @@ async function executeIntegrationPhase(
 }
 
 /**
- * Agentic workflow - autonomous multi-step processing with planning
+ * Agentic workflow - autonomous multi-step processing with planning and tool calling
  *
  * Flow:
  * 1. Planning phase: Generate execution plan using structured outputs
- * 2. Execution phase: Execute each step (with optional actions)
+ * 2. Execution phase: Execute each step (with tool calling loop)
  * 3. Integration phase: Integrate results and generate final output
  */
 export async function agenticProcess(
@@ -291,13 +364,20 @@ export async function agenticProcess(
 
   const {
     maxSteps = 5,
-    actions = {},
+    tools = [],
+    maxToolCalls = 10,
     enablePlanning = true,
     useFreeformExecution = false,
     logger
   } = options;
 
   let currentContext = { ...context };
+
+  // Set available tools in context for planning/execution modules
+  if (tools.length > 0) {
+    currentContext.availableTools = tools.map(t => t.definition);
+  }
+
   let plan: AgenticPlan;
 
   // Phase 1: Planning
@@ -312,7 +392,7 @@ export async function agenticProcess(
 
   // Phase 2: Execution
   currentContext.phase = 'execution';
-  const executionLog = await executeExecutionPhase(resolveDriver(driver, 'instruct'), module, currentContext, plan, actions, useFreeformExecution, logger);
+  const executionLog = await executeExecutionPhase(resolveDriver(driver, 'instruct'), module, currentContext, plan, tools, useFreeformExecution, maxToolCalls, logger);
   currentContext.executionLog = executionLog;
 
   // Phase 3: Integration
@@ -325,13 +405,16 @@ export async function agenticProcess(
     phase: 'complete'
   };
 
+  // Count total tool calls across all steps
+  const totalToolCalls = executionLog.reduce((sum, log) => sum + (log.toolCalls?.length || 0), 0);
+
   return {
     output: finalOutput,
     context: finalContext,
     metadata: {
       planSteps: plan.steps.length,
       executedSteps: executionLog.length,
-      actionsUsed: executionLog.filter(log => log.actionResult !== undefined).length
+      toolCallsUsed: totalToolCalls
     }
   };
 }
