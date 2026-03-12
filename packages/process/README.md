@@ -10,6 +10,8 @@ npm install @modular-prompt/process
 
 ## ワークフロー
 
+すべてのワークフロー関数は第1引数として `DriverInput` 型（`AIDriver` または `DriverSet`）を受け入れます。これにより、単一のドライバーまたは役割別の複数ドライバーを柔軟に指定できます。
+
 ### 基本ワークフロー
 
 - **`defaultProcess`** - 最小のワークフロー（compile + driver.query）
@@ -19,7 +21,9 @@ npm install @modular-prompt/process
 ### チャンク処理ワークフロー
 
 - **`streamProcess`** - ステートを保持しながらチャンクを逐次処理
+  - 内部で `streamProcessing` モジュールを自動的にマージ
 - **`concatProcess`** - 各チャンクを独立して処理し、結果を結合
+  - 内部で `concatProcessing` モジュールを自動的にマージ
 
 ### エージェント型ワークフロー
 
@@ -69,14 +73,20 @@ console.log(result.output);  // AIの応答
 
 ```typescript
 import { streamProcess } from '@modular-prompt/process';
-import { streamProcessing } from '@modular-prompt/process';
 import { TestDriver } from '@modular-prompt/driver';
 
 const driver = new TestDriver(['response1', 'response2']);
 
+// streamProcessingモジュールは自動的にマージされるため、
+// ユーザーモジュールのみを渡すことができます
+const userModule = {
+  objective: ['チャンクを順次処理して要約を作成'],
+  instructions: ['各チャンクの内容を前の状態と統合']
+};
+
 const result = await streamProcess(
   driver,
-  streamProcessing,
+  userModule,  // streamProcessingは内部で自動マージ
   {
     chunks: [{ content: 'text1' }, { content: 'text2' }],
     state: { content: '', usage: 0 }

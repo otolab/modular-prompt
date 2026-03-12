@@ -101,6 +101,15 @@ testCases:
     queryOptions:                   # オプション
       temperature: 0.5
 
+  - name: マルチモデルテスト
+    description: 役割別に異なるモデルを使用
+    input:
+      query: "複雑な問題を解決する"
+    models:
+      - default: gpt4o              # インライン DriverSet 定義
+        thinking: gemini            # thinking役割用のモデル
+      - gpt4o                       # 単一モデル指定（従来通り）
+
   - name: ツール呼び出しテスト
     input:
       query: "東京の天気を調べて"
@@ -130,6 +139,25 @@ evaluation:
 ### パス解決
 
 設定ファイル内のパス（modules, evaluators等）は設定ファイルのディレクトリからの相対パスで解決される。`~/` でホームディレクトリ、絶対パスも使用可能。
+
+### テストケースのモデル指定
+
+`testCases[].models` フィールドでは、以下の2種類の指定が可能です:
+
+**1. 文字列（モデル名）**: 単一のドライバーを使用
+```yaml
+models: [gpt4o, gemini]
+```
+
+**2. オブジェクト（DriverSet）**: 役割別に異なるドライバーを指定
+```yaml
+models:
+  - default: gpt4o      # 必須: デフォルトの役割
+    thinking: gemini    # オプション: thinking役割用
+    chat: claude        # オプション: chat役割用
+```
+
+役割は `ModelRole = 'default' | 'thinking' | 'instruct' | 'chat' | 'plan'` から選択できます。未指定の役割は自動的に `default` にフォールバックします。
 
 ## モジュール定義
 
