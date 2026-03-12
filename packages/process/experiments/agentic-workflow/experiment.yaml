@@ -7,6 +7,21 @@ models:
     provider: "mlx"
     capabilities: ["local", "tools"]
     priority: 10
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "fast", "japanese"]
+    priority: 20
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+    capabilities: ["local", "thinking", "japanese"]
+    priority: 20
 
 drivers:
   mlx: {}
@@ -49,6 +64,11 @@ testCases:
   # ---- Planning phase tests ----
   - name: "計画生成: ドキュメント分析"
     description: "適切なステップ分解と構造化されたJSON出力を期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
     input:
       objective: "技術仕様書を分析し、主要な要件と制約事項を抽出してレポートを作成する"
       inputs:
@@ -63,6 +83,11 @@ testCases:
 
   - name: "計画生成: データ集計"
     description: "ツール活用を含む計画の生成を期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
     input:
       objective: "ユーザーの行動データを分析し、アクティブユーザーの傾向を把握する"
       inputs:
@@ -78,6 +103,11 @@ testCases:
   # ---- Execution phase tests ----
   - name: "ステップ実行: ツール呼び出し"
     description: "search_documentsツールを呼び出すことを期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
     input:
       objective: "ドキュメント検索を行い結果を整理する"
       plan:
@@ -110,6 +140,11 @@ testCases:
 
   - name: "ステップ実行: テキスト応答"
     description: "ツール不要の分析ステップ。JSON構造化出力を期待"
+    models:
+      - qwen3.5-27b
+      - default: lfm2.5-jp
+        instruct: lfm2.5-instruct
+        thinking: lfm2.5-thinking
     input:
       objective: "収集したデータの分析レポートを作成する"
       plan:

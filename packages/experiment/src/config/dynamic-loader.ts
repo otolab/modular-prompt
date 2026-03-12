@@ -5,6 +5,7 @@
  */
 
 import { merge } from '@modular-prompt/core';
+import { createJiti } from 'jiti';
 import { pathToFileURL } from 'url';
 import { resolve } from 'path';
 import type {
@@ -18,6 +19,21 @@ import { getBuiltinEvaluator } from '../evaluators/index.js';
 import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('dynamic-loader');
+
+/**
+ * Import a file, using jiti for .ts files
+ */
+async function importFile(filePath: string): Promise<any> {
+  if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+    const jiti = createJiti(import.meta.url, {
+      interopDefault: true,
+      moduleCache: false,
+    });
+    return jiti.import(filePath);
+  }
+  const fileUrl = pathToFileURL(filePath).href;
+  return import(fileUrl);
+}
 
 /**
  * Loaded evaluator (unified type)
@@ -47,10 +63,9 @@ export async function loadEvaluators(
     let evaluator: CodeEvaluator | PromptEvaluator | undefined;
 
     if ('path' in ref) {
-      // External file
+      // External file (supports .ts via jiti)
       const filePath = resolve(basePath, ref.path);
-      const fileUrl = pathToFileURL(filePath).href;
-      const imported = await import(fileUrl);
+      const imported = await importFile(filePath);
       evaluator = imported.default;
 
       if (!evaluator) {
@@ -132,8 +147,7 @@ export async function loadModules(
 
   for (const ref of refs) {
     const filePath = resolve(basePath, ref.path);
-    const fileUrl = pathToFileURL(filePath).href;
-    const imported = await import(fileUrl);
+    const imported = await importFile(filePath);
     const module = imported.default;
 
     if (!module) {
