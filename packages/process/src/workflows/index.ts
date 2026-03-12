@@ -50,3 +50,7 @@ export type {
 // Default workflow
 export { defaultProcess } from './default-workflow.js';
 export type { DefaultProcessOptions } from './default-workflow.js';
+
+// Driver input types
+export { resolveDriver, isAIDriver } from './driver-input.js';
+export type { DriverInput, DriverSet, ModelRole } from './driver-input.js';

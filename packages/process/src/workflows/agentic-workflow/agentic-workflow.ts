@@ -8,6 +8,7 @@ import { planning } from './modules/planning.js';
 import { execution } from './modules/execution.js';
 import { executionFreeform } from './modules/execution-freeform.js';
 import { integration } from './modules/integration.js';
+import { type DriverInput, resolveDriver } from '../driver-input.js';
 
 /**
  * Execute planning phase
@@ -282,7 +283,7 @@ async function executeIntegrationPhase(
  * 3. Integration phase: Integrate results and generate final output
  */
 export async function agenticProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<AgenticWorkflowContext>,
   context: AgenticWorkflowContext,
   options: AgenticWorkflowOptions = {}
@@ -302,7 +303,7 @@ export async function agenticProcess(
   // Phase 1: Planning
   if (enablePlanning && !currentContext.plan) {
     currentContext.phase = 'planning';
-    plan = await executePlanningPhase(driver, module, currentContext, maxSteps, logger);
+    plan = await executePlanningPhase(resolveDriver(driver, 'plan'), module, currentContext, maxSteps, logger);
     currentContext.plan = plan;
   } else {
     // Use existing plan
@@ -311,12 +312,12 @@ export async function agenticProcess(
 
   // Phase 2: Execution
   currentContext.phase = 'execution';
-  const executionLog = await executeExecutionPhase(driver, module, currentContext, plan, actions, useFreeformExecution, logger);
+  const executionLog = await executeExecutionPhase(resolveDriver(driver, 'instruct'), module, currentContext, plan, actions, useFreeformExecution, logger);
   currentContext.executionLog = executionLog;
 
   // Phase 3: Integration
   currentContext.phase = 'integration';
-  const finalOutput = await executeIntegrationPhase(driver, module, currentContext, executionLog, logger);
+  const finalOutput = await executeIntegrationPhase(resolveDriver(driver, 'default'), module, currentContext, executionLog, logger);
 
   // Complete
   const finalContext: AgenticWorkflowContext = {

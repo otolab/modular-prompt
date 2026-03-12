@@ -5,8 +5,8 @@
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
-import type { AIService, QueryResult, ModelSpec, AIDriver } from '@modular-prompt/driver';
-import { defaultProcess } from '@modular-prompt/process';
+import type { AIService, QueryResult, ModelSpec } from '@modular-prompt/driver';
+import { defaultProcess, type DriverInput } from '@modular-prompt/process';
 import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult } from '../types.js';
 import type { DriverManager } from './driver-manager.js';
 import type { LoadedEvaluator } from '../config/dynamic-loader.js';
@@ -16,10 +16,11 @@ import { logger as baseLogger } from '../logger.js';
 const logger = baseLogger.context('runner');
 
 interface TestPlanItem {
-  order: number;  // 元の定義順（retire時のソート用）
+  order: number;
   testCase: TestCase;
-  modelName: string;
-  modelSpec: ModelSpec;
+  modelName: string;       // 表示名（単一モデル名 or セット表示名）
+  modelSpec?: ModelSpec;    // 単一モデルの場合
+  driverSetMapping?: Record<string, string>;  // インラインセットの場合
   module: ModuleDefinition;
   prompt: string;
 }
@@ -69,30 +70,42 @@ export class ExperimentRunner {
 
     for (const testCase of this.testCases) {
       // テストケースで使うモデルを決定
-      const modelsToTest: Array<{ name: string; spec: ModelSpec }> = testCase.models
-        ? testCase.models.map(name => {
-            const spec = this.models[name];
-            if (!spec) {
-              console.warn(`⚠️  Model '${name}' not found in configuration, skipping`);
-              return null;
+      const modelsToTest: Array<{
+        name: string;
+        modelSpec?: ModelSpec;
+        driverSetMapping?: Record<string, string>;
+      }> = testCase.models
+        ? testCase.models.map(entry => {
+            if (typeof entry === 'string') {
+              const spec = this.models[entry];
+              if (!spec) {
+                console.warn(`⚠️  Model '${entry}' not found in configuration, skipping`);
+                return null;
+              }
+              return { name: entry, modelSpec: spec };
+            } else {
+              // Inline DriverSet
+              const name = Object.entries(entry)
+                .map(([role, model]) => `${role}=${model}`)
+                .join(',');
+              return { name: `set(${name})`, driverSetMapping: entry };
             }
-            return { name, spec };
-          }).filter(Boolean) as Array<{ name: string; spec: ModelSpec }>
+          }).filter(Boolean) as any[]
         : Object.entries(this.models)
             .filter(([_, spec]) => !spec.disabled)
-            .map(([name, spec]) => ({ name, spec }));
+            .map(([name, spec]) => ({ name, modelSpec: spec }));
 
-      for (const { name: modelName, spec: modelSpec } of modelsToTest) {
+      for (const model of modelsToTest) {
         for (const module of this.modules) {
-          // compile for logging/evaluation purposes
           const compiled = compile(module.module, testCase.input);
           const prompt = formatCompletionPrompt(compiled);
 
           plan.push({
             order: order++,
             testCase,
-            modelName,
-            modelSpec,
+            modelName: model.name,
+            modelSpec: model.modelSpec,
+            driverSetMapping: model.driverSetMapping,
             module,
             prompt,
           });
@@ -100,7 +113,7 @@ export class ExperimentRunner {
       }
     }
 
-    logger.info(`Test plan: ${plan.length} items (${this.testCases.length} test cases × models × ${this.modules.length} modules)`);
+    logger.info(`Test plan: ${plan.length} items`);
     return plan;
   }
 
@@ -127,13 +140,32 @@ export class ExperimentRunner {
 
     // モデルごとに実行
     for (const [modelName, items] of modelGroups) {
-      const modelSpec = items[0].modelSpec;
-      console.log('='.repeat(80));
-      console.log(`🤖 Model: ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
-      console.log('='.repeat(80));
+      const firstItem = items[0];
 
-      logger.info(`Creating driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
-      const driver = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
+      let driverInput: DriverInput;
+
+      if (firstItem.driverSetMapping) {
+        // Inline DriverSet
+        console.log('='.repeat(80));
+        console.log(`🤖 DriverSet: ${modelName}`);
+        for (const [role, refName] of Object.entries(firstItem.driverSetMapping)) {
+          const refSpec = this.models[refName];
+          console.log(`   ${role}: ${refName} (${refSpec.provider}:${refSpec.model})`);
+        }
+        console.log('='.repeat(80));
+
+        driverInput = await this.driverManager.getOrCreateDriverSet(
+          this.aiService, firstItem.driverSetMapping, this.models
+        );
+      } else {
+        const modelSpec = firstItem.modelSpec!;
+        console.log('='.repeat(80));
+        console.log(`🤖 Model: ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
+        console.log('='.repeat(80));
+
+        logger.info(`Creating driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
+        driverInput = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
+      }
 
       for (const item of items) {
         console.log(`  ── ${item.testCase.name} ──`);
@@ -141,7 +173,7 @@ export class ExperimentRunner {
           console.log(`     ${item.testCase.description}`);
         }
 
-        const runs = await this.runModuleTest(item.module.name, item.module.module, driver, item.testCase);
+        const runs = await this.runModuleTest(item.module.name, item.module.module, driverInput, item.testCase);
 
         allResults.push({
           order: item.order,
@@ -174,9 +206,11 @@ export class ExperimentRunner {
         }
       }
 
-      // モデルの全テスト完了後にドライバーをクローズ
-      logger.info(`Closing driver: ${modelName}`);
-      await this.driverManager.close(modelName);
+      // 単一モデルの場合のみclose（セットの場合はcleanupで処理）
+      if (!firstItem.driverSetMapping) {
+        logger.info(`Closing driver: ${modelName}`);
+        await this.driverManager.close(modelName);
+      }
       console.log();
     }
 
@@ -196,7 +230,7 @@ export class ExperimentRunner {
   private async runModuleTest(
     moduleName: string,
     module: PromptModule<any>,
-    driver: AIDriver,
+    driver: DriverInput,
     testCase: TestCase
   ): Promise<Array<{ success: boolean; elapsed: number; queryResult?: QueryResult; error?: string }>> {
     logger.verbose(`Running ${this.repeatCount} time(s) for module: ${moduleName}`);

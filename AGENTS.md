@@ -122,9 +122,16 @@ npm run lint
   - フォーマッター（テキスト/メッセージ形式変換）
 
 ### 処理パッケージ
-- `@modular-prompt/process` - ストリーム処理
-  - マテリアル管理モジュール
-  - チャンク処理モジュール
+- `@modular-prompt/process` - ワークフロー処理
+  - ワークフロー関数群（defaultProcess、streamProcess、concatProcess、agenticProcess等）
+  - プロセスモジュール（streamProcessing、concatProcessing等）
+  - DriverInput/DriverSet型: 役割別ドライバー指定のサポート
+
+### 実験パッケージ
+- `@modular-prompt/experiment` - プロンプト比較・評価フレームワーク
+  - マルチモデル・マルチモジュールテスト
+  - コード/AI評価器サポート
+  - インライン DriverSet 定義（testCase.models）
 
 ## ドライバーアーキテクチャ
 
@@ -136,6 +143,15 @@ npm run lint
 - `query`: 通常クエリ実行
 - `streamQuery`: ストリーミングクエリ
 - `close`: リソースクリーンアップ
+
+### DriverInput / DriverSet
+ワークフロー関数は `DriverInput` 型（`AIDriver | DriverSet`）を第1引数に受け入れます:
+
+- **AIDriver**: 単一のドライバー（後方互換）
+- **DriverSet**: 役割別ドライバー `{ default: AIDriver, thinking?: AIDriver, chat?: AIDriver, ... }`
+- **ModelRole**: `'default' | 'thinking' | 'instruct' | 'chat' | 'plan'`
+
+未指定の役割は自動的に `default` にフォールバックします。詳細は [プロセスモジュールガイド](./docs/PROCESS_MODULE_GUIDE.md) を参照してください。
 
 ## テスト構成
 - ユニットテスト：`*.test.ts`（実装と同階層）

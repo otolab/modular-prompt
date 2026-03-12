@@ -1,14 +1,15 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
-import { 
-  firstOfTwoPassResponse, 
+import {
+  firstOfTwoPassResponse,
   secondOfTwoPassResponse,
-  withTalkState 
+  withTalkState
 } from '../modules/dialogue.js';
 import { withMaterials } from '../modules/material.js';
 import type { DialogueContext } from '../modules/dialogue.js';
 import type { MaterialContext } from '../modules/material.js';
-import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { WorkflowExecutionError, type WorkflowResult } from './types.js';
+import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**
  * Extended dialogue context with materials and preparation note
@@ -32,7 +33,7 @@ export interface DialogueWorkflowOptions {
  * Dialogue workflow - handles conversational interactions with optional two-pass processing
  */
 export async function dialogueProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<DialogueWorkflowContext>,
   context: DialogueWorkflowContext,
   options: DialogueWorkflowOptions = {}
@@ -58,7 +59,7 @@ export async function dialogueProcess(
     
     let preparationNote: string;
     try {
-      const queryResult = await driver.query(firstPassPrompt);
+      const queryResult = await resolveDriver(driver, 'default').query(firstPassPrompt);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -98,7 +99,7 @@ export async function dialogueProcess(
     
     let response: string;
     try {
-      const queryResult = await driver.query(secondPassPrompt);
+      const queryResult = await resolveDriver(driver, 'default').query(secondPassPrompt);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -149,7 +150,7 @@ export async function dialogueProcess(
     
     let response: string;
     try {
-      const queryResult = await driver.query(prompt);
+      const queryResult = await resolveDriver(driver, 'default').query(prompt);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {

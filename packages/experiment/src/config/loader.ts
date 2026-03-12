@@ -45,6 +45,7 @@ function resolveConfigPath(configDir: string, path: string): string {
   return resolve(configDir, path);
 }
 
+
 /**
  * Load experiment configuration
  *
@@ -123,9 +124,18 @@ export async function loadExperimentConfig(configPath: string): Promise<LoadedCo
   // Validate testCase model references
   for (const testCase of testCases) {
     if (testCase.models) {
-      for (const modelName of testCase.models) {
-        if (!modelNames.has(modelName)) {
-          throw new Error(`❌ TestCase '${testCase.name}' references unknown model '${modelName}'`);
+      for (const entry of testCase.models) {
+        if (typeof entry === 'string') {
+          if (!modelNames.has(entry)) {
+            throw new Error(`❌ TestCase '${testCase.name}' references unknown model '${entry}'`);
+          }
+        } else {
+          // Inline DriverSet: check all referenced models exist
+          for (const [role, refName] of Object.entries(entry)) {
+            if (!modelNames.has(refName)) {
+              throw new Error(`❌ TestCase '${testCase.name}' references unknown model '${refName}' for role '${role}'`);
+            }
+          }
         }
       }
     }
