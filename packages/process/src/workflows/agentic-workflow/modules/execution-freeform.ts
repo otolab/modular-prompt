@@ -52,6 +52,15 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
       }
       items.push('- Concise output is acceptable');
 
+      // Add available tools info
+      if (ctx.availableTools && ctx.availableTools.length > 0) {
+        items.push('');
+        items.push('**Available Tools:**');
+        ctx.availableTools.forEach(t => {
+          items.push(`- **${t.name}**${t.description ? `: ${t.description}` : ''}`);
+        });
+      }
+
       // Add guidelines
       if (ctx.currentStep?.guidelines && ctx.currentStep.guidelines.length > 0) {
         items.push('');
@@ -83,20 +92,6 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
   ],
 
   materials: [
-    (ctx) => {
-      if (ctx.actionResult === undefined) {
-        return null;
-      }
-
-      return {
-        type: 'material' as const,
-        id: 'action-result',
-        title: 'Action execution result for current step',
-        content: typeof ctx.actionResult === 'string'
-          ? ctx.actionResult
-          : JSON.stringify(ctx.actionResult, null, 2)
-      };
-    },
     (ctx) => {
       if (!ctx.executionLog || ctx.executionLog.length === 0) {
         return null;
@@ -138,11 +133,14 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
 
         parts.push(`[Result]\n${log.result}`);
 
-        if (log.actionResult !== undefined) {
-          const actionResultStr = typeof log.actionResult === 'string'
-            ? log.actionResult
-            : JSON.stringify(log.actionResult, null, 2);
-          parts.push(`[Action Result]\n${actionResultStr}`);
+        if (log.toolCalls && log.toolCalls.length > 0) {
+          const toolCallStr = log.toolCalls.map(tc => {
+            const resultStr = typeof tc.result === 'string'
+              ? tc.result
+              : JSON.stringify(tc.result, null, 2);
+            return `- ${tc.name}(${JSON.stringify(tc.arguments)}) → ${resultStr}`;
+          }).join('\n');
+          parts.push(`[Tool Calls]\n${toolCallStr}`);
         }
 
         return {

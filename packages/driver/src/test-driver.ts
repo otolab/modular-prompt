@@ -1,5 +1,5 @@
-import type { CompiledPrompt } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult } from './types.js';
+import type { CompiledPrompt, ToolCall } from '@modular-prompt/core';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, FinishReason } from './types.js';
 import { extractJSON } from '@modular-prompt/utils';
 
 /**
@@ -7,7 +7,8 @@ import { extractJSON } from '@modular-prompt/utils';
  */
 export interface MockResponse {
   content: string;
-  finishReason?: 'stop' | 'length' | 'error';
+  finishReason?: FinishReason;
+  toolCalls?: ToolCall[];
 }
 
 /**
@@ -132,12 +133,13 @@ export class TestDriver implements AIDriver {
       return {
         content: mockResponse.content,
         structuredOutput,
+        toolCalls: mockResponse.toolCalls,
         usage: {
           promptTokens: estimateTokens(formattedPrompt),
           completionTokens: estimateTokens(mockResponse.content),
           totalTokens: estimateTokens(formattedPrompt) + estimateTokens(mockResponse.content)
         },
-        finishReason: mockResponse.finishReason || 'stop'
+        finishReason: mockResponse.finishReason || (mockResponse.toolCalls?.length ? 'tool_calls' : 'stop')
       };
     }
 
@@ -167,15 +169,16 @@ export class TestDriver implements AIDriver {
     return {
       content: mockResponse.content,
       structuredOutput,
+      toolCalls: mockResponse.toolCalls,
       usage: {
         promptTokens: estimateTokens(formattedPrompt),
         completionTokens: estimateTokens(mockResponse.content),
         totalTokens: estimateTokens(formattedPrompt) + estimateTokens(mockResponse.content)
       },
-      finishReason: mockResponse.finishReason || 'stop'
+      finishReason: mockResponse.finishReason || (mockResponse.toolCalls?.length ? 'tool_calls' : 'stop')
     };
   }
-  
+
 
   /**
    * Stream a response character by character.
@@ -233,12 +236,13 @@ export class TestDriver implements AIDriver {
     const resultPromise = Promise.resolve({
       content: mockResponse.content,
       structuredOutput,
+      toolCalls: mockResponse.toolCalls,
       usage: {
         promptTokens: estimateTokens(formattedPrompt),
         completionTokens: estimateTokens(mockResponse.content),
         totalTokens: estimateTokens(formattedPrompt) + estimateTokens(mockResponse.content)
       },
-      finishReason: mockResponse.finishReason || 'stop'
+      finishReason: mockResponse.finishReason || (mockResponse.toolCalls?.length ? 'tool_calls' : 'stop')
     });
 
     return {

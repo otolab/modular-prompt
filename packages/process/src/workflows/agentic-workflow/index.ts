@@ -5,7 +5,7 @@ export { agenticProcess } from './agentic-workflow.js';
 export type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
-  ActionHandler
+  ToolSpec
 } from './types.js';
 
 // Modules

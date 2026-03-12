@@ -35,15 +35,7 @@ export const integration: PromptModule<AgenticWorkflowContext> = {
           }
 
           return ctx.plan.steps.map((step: AgenticStep) => {
-            const parts: string[] = [step.description];
-
-            // Tools
-            if (step.actions && step.actions.length > 0) {
-              const toolNames = step.actions.map(a => a.tool).join(', ');
-              parts.push(`(Tools: ${toolNames})`);
-            }
-
-            return `- ${parts.join(' ')}`;
+            return `- ${step.description}`;
           });
         }
       ]
@@ -76,11 +68,14 @@ export const integration: PromptModule<AgenticWorkflowContext> = {
 
         parts.push(`[Result]\n${log.result}`);
 
-        if (log.actionResult !== undefined) {
-          const actionResultStr = typeof log.actionResult === 'string'
-            ? log.actionResult
-            : JSON.stringify(log.actionResult, null, 2);
-          parts.push(`[Action Result]\n${actionResultStr}`);
+        if (log.toolCalls && log.toolCalls.length > 0) {
+          const toolCallStr = log.toolCalls.map(tc => {
+            const resultStr = typeof tc.result === 'string'
+              ? tc.result
+              : JSON.stringify(tc.result, null, 2);
+            return `- ${tc.name}(${JSON.stringify(tc.arguments)}) → ${resultStr}`;
+          }).join('\n');
+          parts.push(`[Tool Calls]\n${toolCallStr}`);
         }
 
         return {
