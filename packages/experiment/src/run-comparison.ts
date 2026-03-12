@@ -28,6 +28,11 @@ import { ExperimentRunner } from './runner/experiment.js';
 import { StatisticsReporter } from './reporter/statistics.js';
 import { Logger } from '@modular-prompt/utils';
 
+// Helper function to check if an entry is a DriverSetConfig
+function isDriverSetConfig(entry: any): boolean {
+  return entry && typeof entry === 'object' && 'set' in entry && typeof entry.set === 'object';
+}
+
 // Parse CLI arguments
 const options = parseArgs();
 
@@ -72,31 +77,54 @@ const {
 const models = serverConfig.models;
 
 // Display available models for logging
-const modelEntries = Object.entries(models).filter(([_, spec]: [string, any]) =>
-  !spec.disabled && (!spec.role || spec.role === 'test')
-);
+const modelEntries = Object.entries(models).filter(([_, entry]: [string, any]) => {
+  if (isDriverSetConfig(entry)) return !entry.disabled;
+  return !entry.disabled && (!entry.role || entry.role === 'test');
+});
 
 if (options.modelFilter) {
-  const filteredEntries = modelEntries.filter(([_, spec]: [string, any]) =>
-    spec.provider === options.modelFilter
-  );
+  const filteredEntries = modelEntries.filter(([_, entry]: [string, any]) => {
+    if (isDriverSetConfig(entry)) {
+      return Object.values(entry.set).some((spec: any) => spec.provider === options.modelFilter);
+    }
+    return entry.provider === options.modelFilter;
+  });
   if (filteredEntries.length === 0) {
     console.error(`❌ No enabled test models found for provider: ${options.modelFilter}`);
     process.exit(1);
   }
   console.log(`📋 Testing with ${filteredEntries.length} model(s) (filtered by ${options.modelFilter}):`);
-  filteredEntries.forEach(([name, spec]: [string, any]) =>
-    console.log(`  - ${name}: ${spec.model} (${spec.provider})`)
-  );
+  filteredEntries.forEach(([name, entry]: [string, any]) => {
+    if (isDriverSetConfig(entry)) {
+      const roles = Object.entries(entry.set)
+        .map(([role, spec]: [string, any]) => `${role}=${spec.model}`)
+        .join(', ');
+      console.log(`  - ${name}: [set] ${roles}`);
+    } else {
+      console.log(`  - ${name}: ${entry.model} (${entry.provider})`);
+    }
+  });
 } else {
   console.log(`📋 Testing with ${modelEntries.length} model(s):`);
-  modelEntries.forEach(([name, spec]: [string, any]) =>
-    console.log(`  - ${name}: ${spec.model} (${spec.provider})`)
-  );
+  modelEntries.forEach(([name, entry]: [string, any]) => {
+    if (isDriverSetConfig(entry)) {
+      const roles = Object.entries(entry.set)
+        .map(([role, spec]: [string, any]) => `${role}=${spec.model}`)
+        .join(', ');
+      console.log(`  - ${name}: [set] ${roles}`);
+    } else {
+      console.log(`  - ${name}: ${entry.model} (${entry.provider})`);
+    }
+  });
 }
 
 // Warn about MLX resource usage
-const hasMLX = modelEntries.some(([_, spec]: [string, any]) => spec.provider === 'mlx');
+const hasMLX = modelEntries.some(([_, entry]: [string, any]) => {
+  if (isDriverSetConfig(entry)) {
+    return Object.values(entry.set).some((spec: any) => spec.provider === 'mlx');
+  }
+  return entry.provider === 'mlx';
+});
 if (hasMLX) {
   console.log();
   console.log('⚠️  MLX models detected: Running multiple MLX models may consume significant system resources (CPU/Memory)');

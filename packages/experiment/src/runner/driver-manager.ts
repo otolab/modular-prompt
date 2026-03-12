@@ -2,13 +2,15 @@
  * Driver manager for caching and cleanup
  */
 
-import type { AIService, ModelSpec } from '@modular-prompt/driver';
+import type { AIService, ModelSpec, AIDriver } from '@modular-prompt/driver';
+import type { DriverSet } from '@modular-prompt/process';
+import type { DriverSetConfig } from '../types.js';
 import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('driver-manager');
 
 export class DriverManager {
-  private cache = new Map<string, any>();
+  private cache = new Map<string, AIDriver>();
 
   /**
    * Get or create driver for a model
@@ -21,16 +23,39 @@ export class DriverManager {
    * @param modelSpec - Model spec
    * @returns Driver instance
    */
-  async getOrCreate(aiService: AIService, modelName: string, modelSpec: ModelSpec): Promise<any> {
+  async getOrCreate(aiService: AIService, modelName: string, modelSpec: ModelSpec): Promise<AIDriver> {
     if (this.cache.has(modelName)) {
       logger.verbose(`Using cached driver for ${modelName}`);
-      return this.cache.get(modelName);
+      return this.cache.get(modelName)!;
     }
 
     logger.info(`Creating new driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
     const driver = await aiService.createDriver(modelSpec);
     this.cache.set(modelName, driver);
     return driver;
+  }
+
+  /**
+   * Get or create DriverSet
+   *
+   * @param aiService - AIService instance
+   * @param setName - DriverSet name for logging
+   * @param setConfig - DriverSet configuration
+   * @param allModels - All model configurations
+   * @returns DriverSet instance
+   */
+  async getOrCreateDriverSet(
+    aiService: AIService,
+    setName: string,
+    setConfig: DriverSetConfig,
+    allModels: Record<string, any>
+  ): Promise<DriverSet> {
+    const result: Record<string, AIDriver> = {};
+    for (const [role, modelName] of Object.entries(setConfig.set)) {
+      const spec = allModels[modelName] as ModelSpec;
+      result[role] = await this.getOrCreate(aiService, modelName, spec);
+    }
+    return result as unknown as DriverSet;
   }
 
   /**

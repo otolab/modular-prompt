@@ -3,7 +3,8 @@
  */
 
 import type { PromptModule } from '@modular-prompt/core';
-import type { QueryResult, QueryOptions, ToolCall } from '@modular-prompt/driver';
+import type { QueryResult, QueryOptions, ToolCall, ModelSpec } from '@modular-prompt/driver';
+import type { ModelRole } from '@modular-prompt/process';
 
 /**
  * Test case definition
@@ -143,3 +144,16 @@ export interface ExtendedExperimentOptions extends ExperimentOptions {
   logFile?: string;
   verbose?: boolean;
 }
+
+/**
+ * DriverSet configuration: maps roles to model names
+ */
+export interface DriverSetConfig {
+  set: { default: string } & { [K in Exclude<ModelRole, 'default'>]?: string };
+  disabled?: boolean;
+}
+
+/**
+ * Model entry type: either a ModelSpec or DriverSetConfig
+ */
+export type ModelEntry = ModelSpec | DriverSetConfig;

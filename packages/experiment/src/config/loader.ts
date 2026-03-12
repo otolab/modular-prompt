@@ -46,6 +46,13 @@ function resolveConfigPath(configDir: string, path: string): string {
 }
 
 /**
+ * Check if an entry is a DriverSetConfig
+ */
+function isDriverSetConfig(entry: any): boolean {
+  return entry && typeof entry === 'object' && 'set' in entry && typeof entry.set === 'object';
+}
+
+/**
  * Load experiment configuration
  *
  * @param configPath - Path to config file (YAML or TypeScript)
@@ -119,6 +126,21 @@ export async function loadExperimentConfig(configPath: string): Promise<LoadedCo
 
   // Get model names from object keys
   const modelNames = new Set<string>(Object.keys(serverConfig.models));
+
+  // Validate DriverSet references
+  for (const [name, entry] of Object.entries(serverConfig.models)) {
+    if (isDriverSetConfig(entry)) {
+      for (const [role, refName] of Object.entries((entry as any).set)) {
+        if (!modelNames.has(refName as string)) {
+          throw new Error(`❌ DriverSet '${name}' references unknown model '${refName}' for role '${role}'`);
+        }
+        const refEntry = serverConfig.models[refName as string];
+        if (isDriverSetConfig(refEntry)) {
+          throw new Error(`❌ DriverSet '${name}' references another DriverSet '${refName}' (nesting not allowed)`);
+        }
+      }
+    }
+  }
 
   // Validate testCase model references
   for (const testCase of testCases) {
