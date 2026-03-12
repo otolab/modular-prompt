@@ -4,7 +4,9 @@
 
 import type { PromptModule } from '@modular-prompt/core';
 import type { QueryResult, QueryOptions, ToolCall, ModelSpec } from '@modular-prompt/driver';
-import type { ModelRole } from '@modular-prompt/process';
+
+/** テストケースのモデル指定: 文字列はモデル名、オブジェクトはロール→モデル名のマッピング */
+export type TestModelEntry = string | { default: string; [role: string]: string };
 
 /**
  * Test case definition
@@ -17,7 +19,7 @@ export interface TestCase {
   /** Input context (passed to module.compile) */
   input: any;
   /** Model names to use for this test case (optional, uses all enabled models if not specified) */
-  models?: string[];
+  models?: TestModelEntry[];
   /** Query options for this test case (tools, temperature, etc.) */
   queryOptions?: Partial<QueryOptions>;
 }
@@ -144,16 +146,3 @@ export interface ExtendedExperimentOptions extends ExperimentOptions {
   logFile?: string;
   verbose?: boolean;
 }
-
-/**
- * DriverSet configuration: maps roles to model names
- */
-export interface DriverSetConfig {
-  set: { default: string } & { [K in Exclude<ModelRole, 'default'>]?: string };
-  disabled?: boolean;
-}
-
-/**
- * Model entry type: either a ModelSpec or DriverSetConfig
- */
-export type ModelEntry = ModelSpec | DriverSetConfig;

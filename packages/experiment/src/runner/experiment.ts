@@ -7,7 +7,7 @@ import type { PromptModule } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
 import type { AIService, QueryResult, ModelSpec, AIDriver } from '@modular-prompt/driver';
 import { defaultProcess, type DriverInput } from '@modular-prompt/process';
-import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult, DriverSetConfig } from '../types.js';
+import type { ModuleDefinition, TestResult, TestCase, TestModelEntry, EvaluationContext, EvaluationResult } from '../types.js';
 import type { DriverManager } from './driver-manager.js';
 import type { LoadedEvaluator } from '../config/dynamic-loader.js';
 import { EvaluatorRunner } from './evaluator.js';
@@ -15,18 +15,12 @@ import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('runner');
 
-/**
- * Check if an entry is a DriverSetConfig
- */
-function isDriverSetConfig(entry: any): entry is DriverSetConfig {
-  return entry && typeof entry === 'object' && 'set' in entry && typeof entry.set === 'object';
-}
-
 interface TestPlanItem {
-  order: number;  // 元の定義順（retire時のソート用）
+  order: number;
   testCase: TestCase;
-  modelName: string;
-  modelSpec: ModelSpec | DriverSetConfig;
+  modelName: string;       // 表示名（単一モデル名 or セット表示名）
+  modelSpec?: ModelSpec;    // 単一モデルの場合
+  driverSetMapping?: Record<string, string>;  // インラインセットの場合
   module: ModuleDefinition;
   prompt: string;
 }
@@ -37,7 +31,7 @@ export class ExperimentRunner {
     private driverManager: DriverManager,
     private modules: ModuleDefinition[],
     private testCases: TestCase[],
-    private models: Record<string, ModelSpec | DriverSetConfig>,
+    private models: Record<string, ModelSpec>,
     private repeatCount: number,
     private evaluators?: LoadedEvaluator[],
     private evaluatorModel?: { name: string; spec: ModelSpec }
@@ -76,30 +70,42 @@ export class ExperimentRunner {
 
     for (const testCase of this.testCases) {
       // テストケースで使うモデルを決定
-      const modelsToTest: Array<{ name: string; spec: ModelSpec | DriverSetConfig }> = testCase.models
-        ? testCase.models.map(name => {
-            const spec = this.models[name];
-            if (!spec) {
-              console.warn(`⚠️  Model '${name}' not found in configuration, skipping`);
-              return null;
+      const modelsToTest: Array<{
+        name: string;
+        modelSpec?: ModelSpec;
+        driverSetMapping?: Record<string, string>;
+      }> = testCase.models
+        ? testCase.models.map(entry => {
+            if (typeof entry === 'string') {
+              const spec = this.models[entry];
+              if (!spec) {
+                console.warn(`⚠️  Model '${entry}' not found in configuration, skipping`);
+                return null;
+              }
+              return { name: entry, modelSpec: spec };
+            } else {
+              // Inline DriverSet
+              const name = Object.entries(entry)
+                .map(([role, model]) => `${role}=${model}`)
+                .join(',');
+              return { name: `set(${name})`, driverSetMapping: entry };
             }
-            return { name, spec };
-          }).filter(Boolean) as Array<{ name: string; spec: ModelSpec | DriverSetConfig }>
+          }).filter(Boolean) as any[]
         : Object.entries(this.models)
             .filter(([_, spec]) => !spec.disabled)
-            .map(([name, spec]) => ({ name, spec }));
+            .map(([name, spec]) => ({ name, modelSpec: spec }));
 
-      for (const { name: modelName, spec: modelSpec } of modelsToTest) {
+      for (const model of modelsToTest) {
         for (const module of this.modules) {
-          // compile for logging/evaluation purposes
           const compiled = compile(module.module, testCase.input);
           const prompt = formatCompletionPrompt(compiled);
 
           plan.push({
             order: order++,
             testCase,
-            modelName,
-            modelSpec,
+            modelName: model.name,
+            modelSpec: model.modelSpec,
+            driverSetMapping: model.driverSetMapping,
             module,
             prompt,
           });
@@ -107,7 +113,7 @@ export class ExperimentRunner {
       }
     }
 
-    logger.info(`Test plan: ${plan.length} items (${this.testCases.length} test cases × models × ${this.modules.length} modules)`);
+    logger.info(`Test plan: ${plan.length} items`);
     return plan;
   }
 
@@ -134,24 +140,25 @@ export class ExperimentRunner {
 
     // モデルごとに実行
     for (const [modelName, items] of modelGroups) {
-      const modelSpec = items[0].modelSpec;
+      const firstItem = items[0];
 
       let driverInput: DriverInput;
 
-      if (isDriverSetConfig(modelSpec)) {
+      if (firstItem.driverSetMapping) {
+        // Inline DriverSet
         console.log('='.repeat(80));
         console.log(`🤖 DriverSet: ${modelName}`);
-        for (const [role, refName] of Object.entries(modelSpec.set)) {
-          const refSpec = this.models[refName] as ModelSpec;
+        for (const [role, refName] of Object.entries(firstItem.driverSetMapping)) {
+          const refSpec = this.models[refName];
           console.log(`   ${role}: ${refName} (${refSpec.provider}:${refSpec.model})`);
         }
         console.log('='.repeat(80));
 
-        logger.info(`Creating DriverSet for ${modelName}`);
         driverInput = await this.driverManager.getOrCreateDriverSet(
-          this.aiService, modelName, modelSpec, this.models
+          this.aiService, firstItem.driverSetMapping, this.models
         );
       } else {
+        const modelSpec = firstItem.modelSpec!;
         console.log('='.repeat(80));
         console.log(`🤖 Model: ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
         console.log('='.repeat(80));
@@ -199,8 +206,8 @@ export class ExperimentRunner {
         }
       }
 
-      // DriverSetの場合はclose不要（cleanup時に個別ドライバーがクローズされる）
-      if (!isDriverSetConfig(modelSpec)) {
+      // 単一モデルの場合のみclose（セットの場合はcleanupで処理）
+      if (!firstItem.driverSetMapping) {
         logger.info(`Closing driver: ${modelName}`);
         await this.driverManager.close(modelName);
       }

@@ -4,7 +4,6 @@
 
 import type { AIService, ModelSpec, AIDriver } from '@modular-prompt/driver';
 import type { DriverSet } from '@modular-prompt/process';
-import type { DriverSetConfig } from '../types.js';
 import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('driver-manager');
@@ -39,20 +38,18 @@ export class DriverManager {
    * Get or create DriverSet
    *
    * @param aiService - AIService instance
-   * @param setName - DriverSet name for logging
-   * @param setConfig - DriverSet configuration
+   * @param roleMapping - Role to model name mapping
    * @param allModels - All model configurations
    * @returns DriverSet instance
    */
   async getOrCreateDriverSet(
     aiService: AIService,
-    setName: string,
-    setConfig: DriverSetConfig,
-    allModels: Record<string, any>
+    roleMapping: Record<string, string>,
+    allModels: Record<string, ModelSpec>
   ): Promise<DriverSet> {
     const result: Record<string, AIDriver> = {};
-    for (const [role, modelName] of Object.entries(setConfig.set)) {
-      const spec = allModels[modelName] as ModelSpec;
+    for (const [role, modelName] of Object.entries(roleMapping)) {
+      const spec = allModels[modelName];
       result[role] = await this.getOrCreate(aiService, modelName, spec);
     }
     return result as unknown as DriverSet;
