@@ -1,4 +1,4 @@
-import { compile } from '@modular-prompt/core';
+import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
@@ -26,6 +26,33 @@ export interface ConcatProcessOptions {
   separator?: string;
   parallel?: boolean;
 }
+
+/**
+ * Base module for concat processing
+ */
+const concatProcessing: PromptModule<ConcatProcessContext> = {
+  objective: [
+    'The assistant processes each provided chunk independently and produces output for it.',
+    'Each chunk is a self-contained unit - process it without depending on other chunks.',
+  ],
+  methodology: [
+    'Read the provided Input Chunk(s) carefully.',
+    'Apply the specified processing to each chunk independently.',
+    'Output the processing result directly.',
+  ],
+  materials: [
+    (ctx) => {
+      if (!ctx.chunks || ctx.chunks.length === 0) return null;
+      return ctx.chunks.map((chunk, index) => ({
+        type: 'chunk' as const,
+        content: chunk.content,
+        partOf: chunk.partOf || 'input',
+        index,
+        usage: chunk.usage
+      }));
+    }
+  ],
+};
 
 /**
  * Concat processing workflow - processes chunks independently and concatenates results
@@ -64,7 +91,7 @@ export async function concatProcess(
         processedCount: startIndex + index
       };
 
-      const prompt = compile(module, chunkContext);
+      const prompt = compile(merge(concatProcessing, module), chunkContext);
 
       try {
         const result = await resolveDriver(driver, 'default').query(prompt);
@@ -117,7 +144,7 @@ export async function concatProcess(
         processedCount: startIndex + i
       };
 
-      const prompt = compile(module, batchContext);
+      const prompt = compile(merge(concatProcessing, module), batchContext);
 
       try {
         const queryResult = await resolveDriver(driver, 'default').query(prompt);

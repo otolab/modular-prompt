@@ -1,6 +1,7 @@
-import { compile } from '@modular-prompt/core';
+import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { streamProcessing } from '../modules/stream-processing.js';
 import type { StreamProcessingContext } from '../modules/stream-processing.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
@@ -103,7 +104,7 @@ export async function streamProcess(
       targetTokens
     };
 
-    const prompt = compile(module, iterationContext);
+    const prompt = compile(merge(streamProcessing, module), iterationContext);
     
     let nextStateContent: string;
     let nextStateUsage: number;
