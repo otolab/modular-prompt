@@ -8,7 +8,7 @@ import {
 import { withMaterials } from '../modules/material.js';
 import type { DialogueContext } from '../modules/dialogue.js';
 import type { MaterialContext } from '../modules/material.js';
-import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**

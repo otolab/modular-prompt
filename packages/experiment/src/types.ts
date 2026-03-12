@@ -3,7 +3,7 @@
  */
 
 import type { PromptModule } from '@modular-prompt/core';
-import type { QueryResult, QueryOptions, ToolCall, ModelSpec } from '@modular-prompt/driver';
+import type { QueryResult, QueryOptions, ToolCall } from '@modular-prompt/driver';
 
 /** テストケースのモデル指定: 文字列はモデル名、オブジェクトはロール→モデル名のマッピング */
 export type TestModelEntry = string | { default: string; [role: string]: string };

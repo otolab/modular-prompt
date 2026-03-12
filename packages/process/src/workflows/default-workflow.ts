@@ -1,7 +1,7 @@
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import type { QueryOptions } from '@modular-prompt/driver';
-import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**

@@ -5,9 +5,9 @@
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
-import type { AIService, QueryResult, ModelSpec, AIDriver } from '@modular-prompt/driver';
+import type { AIService, QueryResult, ModelSpec } from '@modular-prompt/driver';
 import { defaultProcess, type DriverInput } from '@modular-prompt/process';
-import type { ModuleDefinition, TestResult, TestCase, TestModelEntry, EvaluationContext, EvaluationResult } from '../types.js';
+import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult } from '../types.js';
 import type { DriverManager } from './driver-manager.js';
 import type { LoadedEvaluator } from '../config/dynamic-loader.js';
 import { EvaluatorRunner } from './evaluator.js';

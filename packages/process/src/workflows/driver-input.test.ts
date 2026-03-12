@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isAIDriver, resolveDriver } from './driver-input.js';
-import type { DriverInput, DriverSet } from './driver-input.js';
+import type { DriverSet } from './driver-input.js';
 import type { AIDriver } from '@modular-prompt/driver';
 
 // モックドライバー作成ヘルパー

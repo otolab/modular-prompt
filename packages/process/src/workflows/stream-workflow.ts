@@ -1,6 +1,6 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
-import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { streamProcessing } from '../modules/stream-processing.js';
 import type { StreamProcessingContext } from '../modules/stream-processing.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';

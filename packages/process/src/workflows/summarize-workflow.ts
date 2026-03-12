@@ -2,7 +2,7 @@ import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { streamProcessing } from '../modules/stream-processing.js';
 import { analyzeForSummary, contentSummarize } from '../modules/summarize.js';
-import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**
