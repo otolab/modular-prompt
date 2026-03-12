@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 import { planning } from './modules/planning.js';
 import { integration } from './modules/integration.js';
+import { type DriverInput, resolveDriver } from '../driver-input.js';
 
 /**
  * Base module for self-prompting workflow
@@ -280,7 +281,7 @@ async function executeIntegrationPhase(
  * @returns Workflow result with final output and updated context
  */
 export async function selfPromptingProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<SelfPromptingWorkflowContext>,
   context: SelfPromptingWorkflowContext,
   options: SelfPromptingWorkflowOptions = {}
@@ -301,7 +302,7 @@ export async function selfPromptingProcess(
       logger.info('Starting planning phase');
     }
     currentContext.phase = 'planning';
-    plan = await executePlanningPhase(driver, module, currentContext, maxSteps, logger);
+    plan = await executePlanningPhase(resolveDriver(driver, 'plan'), module, currentContext, maxSteps, logger);
     currentContext.plan = plan;
     if (logger) {
       logger.info(`Planning completed: ${plan.steps.length} steps`);
@@ -321,7 +322,7 @@ export async function selfPromptingProcess(
     logger.info('Starting execution phase');
   }
   currentContext.phase = 'execution';
-  const executionLog = await executeExecutionPhase(driver, module, currentContext, plan, actions);
+  const executionLog = await executeExecutionPhase(resolveDriver(driver, 'instruct'), module, currentContext, plan, actions);
   currentContext.executionLog = executionLog;
   if (logger) {
     logger.info(`Execution completed: ${executionLog.length} steps`);
@@ -332,7 +333,7 @@ export async function selfPromptingProcess(
     logger.info('Starting integration phase');
   }
   currentContext.phase = 'integration';
-  const finalOutput = await executeIntegrationPhase(driver, module, currentContext);
+  const finalOutput = await executeIntegrationPhase(resolveDriver(driver, 'default'), module, currentContext);
   if (logger) {
     logger.info('Integration completed');
   }

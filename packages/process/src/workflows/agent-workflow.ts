@@ -2,6 +2,7 @@ import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { WorkflowExecutionError } from './types.js';
 import type { AIDriver, WorkflowResult } from './types.js';
+import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**
  * Agent workflow plan step definition
@@ -438,7 +439,7 @@ async function executeIntegrationPhase(
  * Agent workflow - simple planning/execution/integration pipeline
  */
 export async function agentProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<AgentWorkflowContext>,
   context: AgentWorkflowContext,
   options: AgentWorkflowOptions = {}
@@ -454,7 +455,7 @@ export async function agentProcess(
 
   if (enablePlanning || !plan) {
     currentContext.phase = 'planning';
-    plan = await executePlanningPhase(driver, module, currentContext, maxSteps);
+    plan = await executePlanningPhase(resolveDriver(driver, 'plan'), module, currentContext, maxSteps);
     currentContext.plan = plan;
   }
 
@@ -467,11 +468,11 @@ export async function agentProcess(
   }
 
   currentContext.phase = 'execution';
-  const executionLog = await executeExecutionPhase(driver, module, currentContext, plan, actions);
+  const executionLog = await executeExecutionPhase(resolveDriver(driver, 'instruct'), module, currentContext, plan, actions);
   currentContext.executionLog = executionLog;
 
   currentContext.phase = 'integration';
-  const finalOutput = await executeIntegrationPhase(driver, module, currentContext);
+  const finalOutput = await executeIntegrationPhase(resolveDriver(driver, 'default'), module, currentContext);
 
   const finalContext: AgentWorkflowContext = {
     ...currentContext,

@@ -1,6 +1,7 @@
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { type DriverInput, resolveDriver } from './driver-input.js';
 
 
 /**
@@ -31,7 +32,7 @@ export interface ConcatProcessOptions {
  * Unlike stream processing which maintains state, concat treats each chunk independently
  */
 export async function concatProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<ConcatProcessContext>,
   context: ConcatProcessContext,
   options: ConcatProcessOptions = {}
@@ -64,9 +65,9 @@ export async function concatProcess(
       };
 
       const prompt = compile(module, chunkContext);
-      
+
       try {
-        const result = await driver.query(prompt);
+        const result = await resolveDriver(driver, 'default').query(prompt);
         
         // Check finish reason for dynamic failures
         if (result.finishReason && result.finishReason !== 'stop') {
@@ -117,9 +118,9 @@ export async function concatProcess(
       };
 
       const prompt = compile(module, batchContext);
-      
+
       try {
-        const queryResult = await driver.query(prompt);
+        const queryResult = await resolveDriver(driver, 'default').query(prompt);
         
         // Check finish reason for dynamic failures
         if (queryResult.finishReason && queryResult.finishReason !== 'stop') {

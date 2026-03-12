@@ -3,6 +3,7 @@ import type { PromptModule } from '@modular-prompt/core';
 import { streamProcessing } from '../modules/stream-processing.js';
 import { analyzeForSummary, contentSummarize } from '../modules/summarize.js';
 import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**
  * Simple token estimation (roughly 4 characters per token)
@@ -49,7 +50,7 @@ export interface SummarizeWorkflowOptions {
  * Summarization workflow - performs analysis and summarization with stream processing
  */
 export async function summarizeProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<SummarizeWorkflowContext>,
   context: SummarizeWorkflowContext,
   options: SummarizeWorkflowOptions
@@ -83,9 +84,9 @@ export async function summarizeProcess(
       };
       
       const prompt = compile(analysisModule, batchContext);
-      
+
       try {
-        const queryResult = await driver.query(prompt);
+        const queryResult = await resolveDriver(driver, 'default').query(prompt);
         
         // Check finish reason for dynamic failures
         if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -159,9 +160,9 @@ export async function summarizeProcess(
     };
     
     const prompt = compile(summarizeModule, batchContext);
-    
+
     try {
-      const queryResult = await driver.query(prompt);
+      const queryResult = await resolveDriver(driver, 'default').query(prompt);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {

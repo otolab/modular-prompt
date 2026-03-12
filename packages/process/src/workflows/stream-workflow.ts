@@ -2,6 +2,7 @@ import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
 import type { StreamProcessingContext } from '../modules/stream-processing.js';
+import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**
  * Simple token estimation (roughly 4 characters per token)
@@ -69,7 +70,7 @@ function getNextRange(
  * Each iteration processes a range of chunks and updates the state
  */
 export async function streamProcess(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<StreamProcessingContext>,
   context: StreamProcessingContext,
   options: StreamWorkflowOptions = {}
@@ -107,7 +108,7 @@ export async function streamProcess(
     let nextStateContent: string;
     let nextStateUsage: number;
     try {
-      const result = await driver.query(prompt);
+      const result = await resolveDriver(driver, 'default').query(prompt);
       
       // Check finish reason for dynamic failures
       if (result.finishReason && result.finishReason !== 'stop') {

@@ -2,6 +2,7 @@ import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import type { QueryOptions } from '@modular-prompt/driver';
 import { WorkflowExecutionError, type AIDriver, type WorkflowResult } from './types.js';
+import { type DriverInput, resolveDriver } from './driver-input.js';
 
 /**
  * Options for default workflow
@@ -15,14 +16,14 @@ export interface DefaultProcessOptions {
  * This is the simplest process, wrapping compile + driver.query().
  */
 export async function defaultProcess<TContext extends Record<string, any>>(
-  driver: AIDriver,
+  driver: DriverInput,
   module: PromptModule<TContext>,
   context: TContext,
   options: DefaultProcessOptions = {}
 ): Promise<WorkflowResult<TContext>> {
   try {
     const compiled = compile(module, context);
-    const result = await driver.query(compiled, options.queryOptions);
+    const result = await resolveDriver(driver, 'default').query(compiled, options.queryOptions);
 
     return {
       output: result.content,
