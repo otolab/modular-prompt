@@ -6,7 +6,7 @@ import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
 import { MlxProcess } from './process/index.js';
 import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities, MlxContentPart } from './types.js';
 import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
-import { createModelSpecificProcessor } from './process/model-specific.js';
+import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON, Logger } from '@modular-prompt/utils';
 import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
@@ -195,17 +195,12 @@ export class MlxDriver implements AIDriver {
    * Simple logic based on runtime info only
    */
   private determineApi(options?: QueryOptions): 'chat' | 'completion' {
-    const strategy = options?.apiStrategy || 'auto';
-
-    if (strategy === 'force-completion') return 'completion';
-    if (strategy === 'force-chat') return 'chat';
-
-    // mode-based selection (when apiStrategy is 'auto')
-    if (options?.mode === 'instruct') return 'completion';
-    if (options?.mode === 'chat') return 'chat';
-
-    // auto: use chat if chat template is available
-    return this.runtimeInfo?.features.apply_chat_template ? 'chat' : 'completion';
+    return selectApi(
+      options?.apiStrategy || 'auto',
+      options?.mode,
+      !!this.runtimeInfo?.features.apply_chat_template,
+      this.modelProcessor.hasCompletionProcessor()
+    );
   }
 
   /**

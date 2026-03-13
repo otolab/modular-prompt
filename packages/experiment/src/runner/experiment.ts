@@ -96,7 +96,12 @@ export class ExperimentRunner {
             .map(([name, spec]) => ({ name, modelSpec: spec }));
 
       for (const model of modelsToTest) {
-        for (const module of this.modules) {
+        // テストケースで使うモジュールを決定
+        const modulesToTest = testCase.modules
+          ? this.modules.filter(m => testCase.modules!.includes(m.name))
+          : this.modules;
+
+        for (const module of modulesToTest) {
           const compiled = compile(module.module, testCase.input);
           const prompt = formatCompletionPrompt(compiled);
 

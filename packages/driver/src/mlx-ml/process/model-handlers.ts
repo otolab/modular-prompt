@@ -96,32 +96,18 @@ export function processTanukiChat(messages: MlxMessage[]): MlxMessage[] {
 
 /**
  * CodeLlama用のChat処理
+ * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
 export function processCodeLlamaChat(messages: MlxMessage[]): MlxMessage[] {
-  const processedMessages = mergeSystemMessages(messages);
-  // userがない場合は必要
-  if (processedMessages[processedMessages.length - 1].role !== 'user') {
-    processedMessages.push({
-      role: 'user',
-      content: 'Read the system prompt and output the appropriate content.',
-    } as const);
-  }
-  return processedMessages;
+  return mergeSystemMessages(messages);
 }
 
 /**
  * Gemma-3用のChat処理
+ * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
 export function processGemmaChat(messages: MlxMessage[]): MlxMessage[] {
-  const processedMessages = mergeSystemMessages(messages);
-  // (system) => user => assistant => user => ... と、きれいに並んでいないとエラーになる。
-  if (processedMessages[processedMessages.length - 1].role !== 'user') {
-    processedMessages.push({
-      role: 'user',
-      content: 'Read the system prompt and output the appropriate content.',
-    } as const);
-  }
-  return processedMessages;
+  return mergeSystemMessages(messages);
 }
 
 /**

@@ -20,6 +20,8 @@ export interface TestCase {
   input: any;
   /** Model names to use for this test case (optional, uses all enabled models if not specified) */
   models?: TestModelEntry[];
+  /** Module names to use for this test case (optional, uses all modules if not specified) */
+  modules?: string[];
   /** Query options for this test case (tools, temperature, etc.) */
   queryOptions?: Partial<QueryOptions>;
 }

@@ -13,7 +13,7 @@ models:
     provider: "mlx"
     capabilities: ["local", "tools"]
     priority: 10
-    # disabled: true
+    disabled: true
   gemma3-12b:
     model: "mlx-community/gemma-3-12b-it-qat-4bit"
     provider: "mlx"
@@ -25,19 +25,19 @@ models:
     provider: "mlx"
     capabilities: ["local", "fast", "japanese"]
     priority: 20
-    disabled: true
+    # disabled: true
   lfm2.5-instruct:
     model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
     provider: "mlx"
     capabilities: ["local", "fast", "japanese"]
     priority: 20
-    disabled: true
+    # disabled: true
   lfm2.5-thinking:
     model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
     provider: "mlx"
     capabilities: ["local", "thinking", "japanese"]
     priority: 20
-    disabled: true
+    # disabled: true
 
 drivers:
   mlx: {}
