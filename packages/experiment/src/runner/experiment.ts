@@ -6,14 +6,35 @@ import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
 import type { AIService, QueryResult, ModelSpec } from '@modular-prompt/driver';
-import { defaultProcess, type DriverInput } from '@modular-prompt/process';
-import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult } from '../types.js';
+import {
+  defaultProcess, streamProcess, concatProcess, dialogueProcess,
+  summarizeProcess, agenticProcess,
+  type DriverInput
+} from '@modular-prompt/process';
+import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult, ProcessFunction, BuiltinProcessName } from '../types.js';
 import type { DriverManager } from './driver-manager.js';
 import type { LoadedEvaluator } from '../config/dynamic-loader.js';
 import { EvaluatorRunner } from './evaluator.js';
 import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('runner');
+
+const builtinProcesses: Record<BuiltinProcessName, ProcessFunction> = {
+  defaultProcess,
+  streamProcess,
+  concatProcess,
+  dialogueProcess,
+  summarizeProcess,
+  agenticProcess,
+};
+
+function resolveProcess(process: ProcessFunction | BuiltinProcessName | undefined): ProcessFunction {
+  if (!process) return defaultProcess;
+  if (typeof process === 'function') return process;
+  const fn = builtinProcesses[process];
+  if (!fn) throw new Error(`Unknown builtin process: '${process}'`);
+  return fn;
+}
 
 interface TestPlanItem {
   order: number;
@@ -247,13 +268,17 @@ export class ExperimentRunner {
 
       const startTime = Date.now();
       try {
-        const workflowResult = await defaultProcess(driver, module, testCase.input, {
-          queryOptions: {
-            temperature: 0.7,
-            maxTokens: 2048,
-            ...testCase.queryOptions,
-          },
-        });
+        const processFn = resolveProcess(testCase.process);
+        const processOptions = testCase.process
+          ? testCase.processOptions
+          : {
+              queryOptions: {
+                temperature: 0.7,
+                maxTokens: 2048,
+                ...testCase.queryOptions,
+              },
+            };
+        const workflowResult = await processFn(driver, module, testCase.input, processOptions);
         const elapsed = Date.now() - startTime;
 
         // Convert workflow result to QueryResult-like structure
