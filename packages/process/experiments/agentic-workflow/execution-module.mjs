@@ -1,17 +1,39 @@
 /**
- * Agentic Workflow - Execution Phase Module
+ * Agentic Workflow v2 - Think タスクタイプのプロンプトテスト用
  *
- * agenticProcess内部で実際に使われるプロンプトをそのまま利用。
- * merge(agentic, execution, userModule) と同じ構成。
- * input: { objective, plan, currentTask, executionLog?, state?, inputs? }
+ * think タスクのプロンプト構造を defaultProcess 経由でテストする。
+ * input: { objective, taskList?, currentTaskIndex?, executionLog?, inputs? }
  */
-import { merge } from '@modular-prompt/core';
-import { agentic, execution } from '@modular-prompt/process';
-
-const userModule = {
+const module = {
   objective: [
-    (ctx) => ctx.objective || '実行計画のステップに従って作業を実行してください。',
+    (ctx) => ctx.objective || '実行計画のタスクに従って作業を実行してください。',
   ],
+
+  methodology: [
+    (ctx) => {
+      const taskList = ctx.taskList || [];
+      const currentIndex = ctx.currentTaskIndex ?? 0;
+      const lines = taskList.map((t, i) => {
+        const status = i < currentIndex ? '[completed]' : i === currentIndex ? '[current]' : '[pending]';
+        return `- Task ${t.id} (${t.taskType}): ${t.description} ${status}`;
+      });
+      return `**Current Phase: Execution (Think)**\n\nTask List:\n${lines.join('\n')}`;
+    },
+  ],
+
+  instructions: [
+    (ctx) => {
+      const currentTask = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      if (!currentTask) return null;
+      return {
+        type: 'subsection',
+        title: 'Task Instructions',
+        items: [currentTask.description],
+      };
+    },
+  ],
+
+  inputs: [(ctx) => (ctx.inputs ? JSON.stringify(ctx.inputs, null, 2) : null)],
 };
 
-export default merge(agentic, execution, userModule);
+export default module;

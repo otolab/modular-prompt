@@ -1,8 +1,8 @@
 /**
- * Agentic Workflow - エンドツーエンドテスト用モジュール
+ * Agentic Workflow v2 - エンドツーエンドテスト用モジュール
  *
- * agenticProcessに渡すユーザーモジュール。
- * Planning/Execution/Integrationの各フェーズに distributeModule で分配される。
+ * agenticProcess に渡すユーザーモジュール。
+ * 各タスクタイプが buildModule で必要なセクションを取得する。
  * input: { objective, inputs? }
  */
 const module = {
