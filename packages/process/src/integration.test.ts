@@ -80,50 +80,31 @@ describe('integration tests', () => {
   });
 
   it('agenticProcessでエンドツーエンドのワークフローが実行できる', async () => {
-    // 計画、実行、統合の3フェーズを含む完全なワークフローをテスト
-    const plan = {
-      steps: [
-        {
-          id: 'step-1',
-          description: '入力データを分析する',
-          dos: ['データの形式を確認', '主要な項目を特定'],
-          donts: ['データを変更しない']
-        },
-        {
-          id: 'step-2',
-          description: '分析結果をまとめる',
-          dos: ['重要な発見を整理', '次のステップを提案'],
-          donts: ['結論を急がない']
-        }
-      ]
-    };
-
+    // 計画（__task tool call）、実行（テキスト出力）、統合の3フェーズ
     const driver = new TestDriver({
       responses: [
-        // Planning phase response
-        JSON.stringify(plan),
-        // Execution step-1 response (structured output)
-        JSON.stringify({
-          reasoning: 'データを確認しました',
-          result: 'データは正しい形式です',
-          nextState: 'データ分析完了'
-        }),
-        // Execution step-2 response (structured output)
-        JSON.stringify({
-          reasoning: '分析結果を整理しました',
-          result: '重要な発見: データ品質が良好',
-          nextState: 'まとめ完了'
-        }),
-        // Integration phase response
+        // Planning: __task で2タスク登録
+        {
+          content: '',
+          toolCalls: [
+            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: '入力データを分析する' } },
+            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: '分析結果をまとめる' } },
+          ]
+        },
+        // Planning: ツール結果受け取り後に終了
+        'Plan complete.',
+        // Execution task-1: テキスト出力が result
+        'データは正しい形式です',
+        // Execution task-2: テキスト出力が result
+        '重要な発見: データ品質が良好',
+        // Integration
         'データ分析とまとめが完了しました。データ品質は良好で、次のステップに進む準備が整いました。'
       ]
     });
 
     const context: AgenticWorkflowContext = {
       objective: 'サンプルデータを分析する',
-      inputs: {
-        data: [1, 2, 3, 4, 5]
-      }
+      inputs: { data: [1, 2, 3, 4, 5] }
     };
 
     const userModule = {
@@ -137,28 +118,14 @@ describe('integration tests', () => {
 
     const result = await agenticProcess(driver, userModule, context);
 
-    // ワークフローが正常に完了することを確認
     expect(result.output).toBeDefined();
     expect(result.context.phase).toBe('complete');
     expect(result.context.executionLog).toHaveLength(2);
-    expect(result.metadata?.planSteps).toBe(2);
-    expect(result.metadata?.executedSteps).toBe(2);
+    expect(result.metadata?.planTasks).toBe(2);
+    expect(result.metadata?.executedTasks).toBe(2);
   });
 
   it('agenticProcessでツール呼び出し付きワークフローが実行できる', async () => {
-    const plan = {
-      steps: [
-        {
-          id: 'step-1',
-          description: 'データを取得する'
-        },
-        {
-          id: 'step-2',
-          description: 'データを処理する'
-        }
-      ]
-    };
-
     let fetchCalled = false;
     const tools = [
       {
@@ -181,23 +148,25 @@ describe('integration tests', () => {
 
     const driver = new TestDriver({
       responses: [
-        JSON.stringify(plan),
-        // Step 1: AI calls tool
+        // Planning: __task で2タスク登録
+        {
+          content: '',
+          toolCalls: [
+            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'データを取得する' } },
+            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: 'データを処理する' } },
+          ]
+        },
+        'Plan done.',
+        // Execution task-1: AI calls external tool
         {
           content: '',
           toolCalls: [{ id: 'call-1', name: 'fetchData', arguments: { source: 'api' } }]
         },
-        // Step 1: AI processes tool result
-        JSON.stringify({
-          reasoning: 'データ取得を実行',
-          result: 'データ取得完了',
-          nextState: 'データ準備完了'
-        }),
-        JSON.stringify({
-          reasoning: 'データ処理を実行',
-          result: '処理完了',
-          nextState: '全工程完了'
-        }),
+        // Execution task-1: AI produces text result after tool
+        'データ取得完了',
+        // Execution task-2: テキスト出力のみ
+        '処理完了',
+        // Integration
         '全ての処理が完了しました'
       ]
     });
@@ -212,7 +181,6 @@ describe('integration tests', () => {
 
     const result = await agenticProcess(driver, userModule, context, { tools });
 
-    // ツールが実行されたことを確認
     expect(fetchCalled).toBe(true);
     expect(result.context.executionLog?.[0].toolCalls?.[0].result).toEqual({ data: [1, 2, 3] });
     expect(result.metadata?.toolCallsUsed).toBe(1);

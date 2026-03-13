@@ -1,5 +1,6 @@
 import type { PromptModule } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
+import { formatLogContentParts, formatTaskDetails } from '../format-helpers.js';
 
 /**
  * Execution phase module (freeform version) for agent workflow
@@ -15,27 +16,28 @@ import type { AgenticWorkflowContext } from '../types.js';
 export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
   methodology: [
     (ctx: AgenticWorkflowContext) => {
-      const currentStepIndex = (ctx.executionLog?.length || 0) + 1;
-      const totalSteps = ctx.plan?.steps.length || 0;
+      const currentTaskIndex = (ctx.executionLog?.length || 0) + 1;
+      const totalTasks = ctx.plan?.tasks.length || 0;
       return [
-        `- **Current Phase: Execution (Step ${currentStepIndex}/${totalSteps})**`,
-        '  - Execute only the current step of the execution plan.',
-        '  - Follow the dos/don\'ts specified in the plan.',
-        '  - Output the reasoning process and results as natural text.',
+        `- **Current Phase: Execution (Task ${currentTaskIndex}/${totalTasks})**`,
+        '  - Execute only the current task of the execution plan.',
+        '  - Follow the guidelines/constraints specified in the plan.',
+        '  - Your text response becomes the task result.',
+        '  - Use `__updateState` tool to pass information to the next task if needed.',
         ''
       ];
     }
   ],
 
-  // Replace user's instructions with plan-based dos/donts
+  // Replace user's instructions with plan-based guidelines/constraints
   // Note: User's original instructions are omitted in agentic-workflow.ts
   instructions: [
     (ctx: AgenticWorkflowContext) => {
       const items: string[] = [];
 
-      // Add current step description first
-      if (ctx.currentStep?.description) {
-        items.push(ctx.currentStep.description);
+      // Add current task description first
+      if (ctx.currentTask?.description) {
+        items.push(ctx.currentTask.description);
         items.push('');
       }
 
@@ -43,36 +45,21 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
       items.push('');
       items.push('**Requirements:**');
       if (ctx.executionLog && ctx.executionLog.length > 0) {
-        items.push('- Read and understand the previous step\'s decisions (shown in Data section below)');
-        items.push('- Use that understanding to complete THIS step\'s task');
-        items.push('- Produce only NEW content for this step');
+        items.push('- Read and understand the previous task\'s decisions (shown in Data section below)');
+        items.push('- Use that understanding to complete THIS task');
+        items.push('- Produce only NEW content for this task');
         items.push('- Do NOT copy or reproduce the previous outputs');
       } else {
-        items.push('- Focus on the current step instructions only');
+        items.push('- Focus on the current task instructions only');
       }
       items.push('- Concise output is acceptable');
 
-      // Add available tools info
-      if (ctx.availableTools && ctx.availableTools.length > 0) {
-        items.push('');
-        items.push('**Available Tools:**');
-        ctx.availableTools.forEach(t => {
-          items.push(`- **${t.name}**${t.description ? `: ${t.description}` : ''}`);
-        });
-      }
-
-      // Add guidelines
-      if (ctx.currentStep?.guidelines && ctx.currentStep.guidelines.length > 0) {
-        items.push('');
-        items.push('**Guidelines:**');
-        ctx.currentStep.guidelines.forEach((item: string) => items.push(`- ${item}`));
-      }
-
-      // Add constraints
-      if (ctx.currentStep?.constraints && ctx.currentStep.constraints.length > 0) {
-        items.push('');
-        items.push('**Constraints:**');
-        ctx.currentStep.constraints.forEach((item: string) => items.push(`- ${item}`));
+      // Add guidelines and constraints
+      if (ctx.currentTask) {
+        const details = formatTaskDetails(ctx.currentTask);
+        if (details.length > 0) {
+          items.push('', ...details);
+        }
       }
 
       return items;
@@ -82,13 +69,9 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
   state: [
     (ctx) => {
       const completed = ctx.executionLog?.length || 0;
-      const total = ctx.plan?.steps.length || 0;
-      return `Progress: ${completed}/${total} steps completed`;
+      const total = ctx.plan?.tasks.length || 0;
+      return `Progress: ${completed}/${total} tasks completed`;
     },
-  ],
-
-  inputs: [
-    (ctx) => ctx.inputs ? JSON.stringify(ctx.inputs, null, 2) : null
   ],
 
   materials: [
@@ -100,53 +83,28 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
       return ctx.executionLog.map((log, index) => {
         const parts: string[] = [];
 
-        // Add the step's instructions first
-        const stepIndex = index;
-        if (ctx.plan?.steps[stepIndex]) {
-          const step = ctx.plan.steps[stepIndex];
+        // Add the task's instructions first
+        const task = ctx.plan?.tasks[index];
+        if (task) {
           const instructionsParts: string[] = [];
-
-          if (step.description) {
-            instructionsParts.push(step.description);
+          if (task.description) {
+            instructionsParts.push(task.description);
           }
-
-          if (step.guidelines && step.guidelines.length > 0) {
-            instructionsParts.push('');
-            instructionsParts.push('**Guidelines:**');
-            step.guidelines.forEach((item: string) => instructionsParts.push(`- ${item}`));
+          const details = formatTaskDetails(task);
+          if (details.length > 0) {
+            instructionsParts.push('', ...details);
           }
-
-          if (step.constraints && step.constraints.length > 0) {
-            instructionsParts.push('');
-            instructionsParts.push('**Constraints:**');
-            step.constraints.forEach((item: string) => instructionsParts.push(`- ${item}`));
-          }
-
           if (instructionsParts.length > 0) {
             parts.push(`[Instructions]\n${instructionsParts.join('\n')}`);
           }
         }
 
-        if (log.reasoning) {
-          parts.push(`[Reasoning]\n${log.reasoning}`);
-        }
-
-        parts.push(`[Result]\n${log.result}`);
-
-        if (log.toolCalls && log.toolCalls.length > 0) {
-          const toolCallStr = log.toolCalls.map(tc => {
-            const resultStr = typeof tc.result === 'string'
-              ? tc.result
-              : JSON.stringify(tc.result, null, 2);
-            return `- ${tc.name}(${JSON.stringify(tc.arguments)}) → ${resultStr}`;
-          }).join('\n');
-          parts.push(`[Tool Calls]\n${toolCallStr}`);
-        }
+        parts.push(...formatLogContentParts(log));
 
         return {
           type: 'material' as const,
-          id: `execution-decision-${log.stepId}`,
-          title: `Previous step decision: ${log.stepId}`,
+          id: `execution-decision-${log.taskId}`,
+          title: `Previous task decision: ${log.taskId}`,
           content: parts.join('\n\n')
         };
       });
@@ -155,6 +113,6 @@ export const executionFreeform: PromptModule<AgenticWorkflowContext> = {
 
   cue: [
     'IMPORTANT: Follow the Instructions above carefully.',
-    'Output only what is required for THIS step based on the Requirements.'
+    'Output only what is required for THIS task based on the Requirements.'
   ]
 };

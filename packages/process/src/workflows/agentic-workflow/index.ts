@@ -5,8 +5,15 @@ export { agenticProcess } from './agentic-workflow.js';
 export type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
+  AgenticTask,
+  AgenticTaskPlan,
+  AgenticTaskExecutionLog,
+  BuiltinTaskType,
   ToolSpec
 } from './types.js';
+
+// Builtin tools
+export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './builtin-tools.js';
 
 // Modules
 export {

@@ -21,5 +21,9 @@ export const agentic: PromptModule<AgenticWorkflowContext> = {
     '  - Planning: analyzes the objective to create an execution plan.',
     '  - Execution: processes each step sequentially, recording results.',
     '  - Integration: combines all results into the final output.'
+  ],
+
+  inputs: [
+    (ctx) => ctx.inputs ? JSON.stringify(ctx.inputs, null, 2) : null
   ]
 };

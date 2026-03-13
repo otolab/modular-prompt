@@ -9,13 +9,19 @@ export interface ToolSpec {
 }
 
 /**
- * Agentic workflow step definition
+ * 組み込みタスクの種類
  */
-export interface AgenticStep {
+export type BuiltinTaskType = 'think' | 'context' | 'character' | 'summarize' | 'custom';
+
+/**
+ * Agentic workflow task definition
+ */
+export interface AgenticTask {
   id: string;
   description: string;
-  guidelines?: string[];  // Actions or principles to follow in this step
-  constraints?: string[]; // Limitations or prohibitions for this step
+  taskType?: BuiltinTaskType;
+  guidelines?: string[];
+  constraints?: string[];
 }
 
 /**
@@ -28,37 +34,37 @@ export interface ToolCallLog {
 }
 
 /**
- * Agentic workflow execution log entry
+ * Agentic workflow task execution log entry
  */
-export interface AgenticExecutionLog {
-  stepId: string;
-  reasoning: string;    // Thought process and analysis
-  result: string;       // Execution result
+export interface AgenticTaskExecutionLog {
+  taskId: string;
+  taskType?: BuiltinTaskType;
+  result: string;              // テキスト出力がそのまま入る
   toolCalls?: ToolCallLog[];
+  state?: string;              // __updateState() で設定された値
   metadata?: any;
 }
 
 /**
- * Agentic workflow plan (structured output from planning phase)
+ * Agentic workflow task plan
  */
-export interface AgenticPlan {
-  steps: AgenticStep[];
+export interface AgenticTaskPlan {
+  tasks: AgenticTask[];
 }
 
 /**
  * Context for agentic workflow
  */
 export interface AgenticWorkflowContext {
-  objective: string;              // 達成目標
-  inputs?: any;                   // 入力データ
-  state?: {                       // 前ステップからの申し送り事項
+  objective: string;
+  inputs?: any;
+  state?: {
     content: string;
     usage?: number;
   };
-  plan?: AgenticPlan;               // 実行計画
-  executionLog?: AgenticExecutionLog[];  // 実行履歴
-  currentStep?: AgenticStep;        // 現在実行中のステップ
-  availableTools?: ToolDefinition[];  // 利用可能なツール一覧（planningモジュール用）
+  plan?: AgenticTaskPlan;
+  executionLog?: AgenticTaskExecutionLog[];
+  currentTask?: AgenticTask;
   phase?: 'planning' | 'execution' | 'integration' | 'complete';
 }
 
@@ -66,10 +72,10 @@ export interface AgenticWorkflowContext {
  * Options for agentic workflow
  */
 export interface AgenticWorkflowOptions {
-  maxSteps?: number;              // 最大ステップ数（デフォルト: 5）
-  tools?: ToolSpec[];             // 利用可能なツール
-  maxToolCalls?: number;          // ステップあたりの最大ツール呼び出し数（デフォルト: 10）
+  maxTasks?: number;              // 最大タスク数（デフォルト: 5）
+  tools?: ToolSpec[];             // 利用可能な外部ツール
+  maxToolCalls?: number;          // タスクあたりの最大ツール呼び出し数（デフォルト: 10）
   enablePlanning?: boolean;       // 計画フェーズの有効化（デフォルト: true）
   useFreeformExecution?: boolean; // Use freeform execution module (デフォルト: false)
-  logger?: any;                   // Logger instance for debug output
+  logger?: any;
 }

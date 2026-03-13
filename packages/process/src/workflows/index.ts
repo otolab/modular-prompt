@@ -33,9 +33,14 @@ export type {
 
 // Agentic workflow
 export { agenticProcess } from './agentic-workflow/index.js';
+export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './agentic-workflow/index.js';
 export type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
+  AgenticTask,
+  AgenticTaskPlan,
+  AgenticTaskExecutionLog,
+  BuiltinTaskType,
   ToolSpec
 } from './agentic-workflow/index.js';
 
