@@ -110,7 +110,7 @@ export class DefaultModelSpecificProcessor implements ModelSpecificProcessor {
     if (!processed.some(m => m.role === 'user')) {
       processed.push({
         role: 'user',
-        content: 'Read the system prompt and output the appropriate content.',
+        content: 'Read the system prompt and follow the instructions.',
       });
     }
 

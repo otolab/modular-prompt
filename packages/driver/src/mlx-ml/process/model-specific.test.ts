@@ -93,7 +93,7 @@ describe('ModelSpecificProcessor', () => {
 
       expect(result[result.length - 1].role).toBe('user');
       expect(result[result.length - 1].content).toBe(
-        'Read the system prompt and output the appropriate content.'
+        'Read the system prompt and follow the instructions.'
       );
     });
 

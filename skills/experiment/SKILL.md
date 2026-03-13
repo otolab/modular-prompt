@@ -179,6 +179,27 @@ export default module;
 
 テストケースの `input` は実行時にコンテキストとして注入される。runner 内部で `defaultProcess` を使用してコンパイル・実行が行われる。
 
+### 制限事項: ワークフロー関数の固定
+
+現状、`ExperimentRunner` は **`defaultProcess` がハードコード**されており、`agenticProcess` や `streamProcess` などの別のワークフロー関数に差し替える機能は実装されていません。
+
+**現在の実装** (`packages/experiment/src/runner/experiment.ts` L250):
+- `defaultProcess` が直接呼び出される
+- `TestCase`, `ModuleDefinition`, `ExperimentRunner` のいずれにもワークフロー指定フィールドなし
+- YAML設定でもワークフロー関数を指定する手段なし
+
+**今後の拡張方向**:
+異なるワークフロー（agenticProcess等）を実験フレームワークで使用可能にするには、以下の機能追加が必要です:
+
+1. **`TestCase` または `ModuleDefinition` に `process` フィールドを追加**
+   - YAML設定で `process: "./workflows/my-workflow.ts"` のようにパス指定
+2. **`ExperimentRunner.runModuleTest()` でワークフロー関数を選択可能にする**
+   - デフォルトは `defaultProcess` を維持（後方互換）
+3. **ワークフロー関数のロード機構**
+   - evaluator/moduleと同様に外部ファイルから関数をimport
+
+この拡張により、実験フレームワーク上で異なる処理戦略（エージェント型、ストリーム処理等）を比較検証できるようになります。
+
 ## 評価器
 
 ### ビルトイン評価器
