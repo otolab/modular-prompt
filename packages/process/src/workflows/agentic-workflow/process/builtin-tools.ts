@@ -1,11 +1,13 @@
 /**
- * Agentic workflow 組み込みツール定義
+ * Agentic workflow 組み込みツール定義 (v2)
  *
- * Planning: __task でタスク登録
- * Execution: __updateState で状態引き継ぎ
+ * - __task: タスク登録（全タスクから利用可能）
+ * - __time: 現在時刻取得
  */
 
-import type { ToolSpec, AgenticTask, BuiltinTaskType } from '../types.js';
+import type { ToolSpec, AgenticTask, TaskType } from '../types.js';
+import { DEFAULT_DRIVER_ROLE } from '../types.js';
+import type { ModelRole } from '../../driver-input.js';
 
 export const BUILTIN_TOOL_PREFIX = '__';
 
@@ -17,45 +19,83 @@ export function isBuiltinTool(name: string): boolean {
 }
 
 /**
+ * taskList 内の最大 id + 1 を返す（自動採番）
+ */
+function nextTaskId(taskList: AgenticTask[]): number {
+  return taskList.length > 0 ? Math.max(...taskList.map(t => t.id)) + 1 : 1;
+}
+
+/**
+ * output タスクの直前のインデックスを返す
+ */
+function findDefaultInsertIndex(taskList: AgenticTask[]): number {
+  const lastIndex = taskList.length - 1;
+  const lastTask = taskList[lastIndex];
+  if (lastTask && (lastTask.taskType === 'outputMessage' || lastTask.taskType === 'outputStructured')) {
+    return lastIndex;
+  }
+  return taskList.length;
+}
+
+/**
  * Planning フェーズ用の組み込みツールを生成
  */
-export function createPlanningTools(registeredTasks: AgenticTask[]): ToolSpec[] {
+export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
   return [{
     definition: {
       name: '__task',
-      description: 'Register an execution task in the plan. Call this multiple times to build the task list.',
+      description: 'Register a task in the workflow. Call this multiple times to build the task list. Tasks are inserted before the output task by default.',
       parameters: {
         type: 'object',
         properties: {
-          id: { type: 'string', description: 'Unique task ID (e.g., task-1, task-2)' },
           description: { type: 'string', description: 'What this task should accomplish' },
           taskType: {
             type: 'string',
-            enum: ['think', 'context', 'character', 'summarize', 'custom'],
-            description: 'Type of task: think=analysis, context=aggregation, character=persona message, summarize=summarization, custom=general',
+            enum: ['planning', 'think', 'extractContext', 'outputMessage', 'outputStructured'],
+            description: 'Type of task. Default: think',
           },
-          guidelines: {
-            type: 'array', items: { type: 'string' },
-            description: 'Actions or principles to follow (2-4 items)',
+          driverRole: {
+            type: 'string',
+            enum: ['default', 'thinking', 'instruct', 'chat', 'plan'],
+            description: 'Driver role override. Defaults per task type.',
           },
-          constraints: {
-            type: 'array', items: { type: 'string' },
-            description: 'Limitations or prohibitions (1-3 items)',
+          withInputs: {
+            type: 'boolean',
+            description: 'Include ctx.inputs in data. Defaults per task type.',
+          },
+          withMessages: {
+            type: 'boolean',
+            description: 'Include ctx.messages in data. Defaults per task type.',
+          },
+          withMaterials: {
+            type: 'boolean',
+            description: 'Include ctx.materials in data. Defaults per task type.',
+          },
+          insertAt: {
+            type: 'number',
+            description: 'Index to insert at. Defaults to just before the output task.',
           },
         },
-        required: ['id', 'description'],
+        required: ['description'],
       },
     },
     handler: async (args) => {
+      const taskType = (args.taskType as TaskType) || 'think';
+      const id = nextTaskId(taskList);
       const task: AgenticTask = {
-        id: args.id as string,
+        id,
         description: args.description as string,
-        taskType: (args.taskType as BuiltinTaskType) || 'custom',
-        guidelines: args.guidelines as string[] | undefined,
-        constraints: args.constraints as string[] | undefined,
+        taskType,
+        driverRole: args.driverRole as ModelRole | undefined,
+        withInputs: args.withInputs as boolean | undefined,
+        withMessages: args.withMessages as boolean | undefined,
+        withMaterials: args.withMaterials as boolean | undefined,
       };
-      registeredTasks.push(task);
-      return `Task '${task.id}' registered: ${task.description}`;
+
+      const insertAt = typeof args.insertAt === 'number' ? args.insertAt : findDefaultInsertIndex(taskList);
+      taskList.splice(insertAt, 0, task);
+
+      return `Task ${id} registered: ${task.description}`;
     },
   }];
 }
@@ -81,26 +121,10 @@ const timeTool: ToolSpec = {
  * Execution フェーズ用の組み込みツールを生成
  */
 export function createExecutionBuiltinTools(
-  stateRef: { current: string | undefined }
+  taskList: AgenticTask[]
 ): ToolSpec[] {
   return [
-    {
-      definition: {
-        name: '__updateState',
-        description: 'Save state information to pass to the next task. Call this before finishing if there is context to carry over.',
-        parameters: {
-          type: 'object',
-          properties: {
-            content: { type: 'string', description: 'State information to hand over to the next task' },
-          },
-          required: ['content'],
-        },
-      },
-      handler: async (args) => {
-        stateRef.current = args.content as string;
-        return 'State updated successfully';
-      },
-    },
+    createPlanningTools(taskList)[0], // __task
     timeTool,
   ];
 }

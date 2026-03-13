@@ -1,49 +1,148 @@
 /**
- * Agentic workflow - main flow control
+ * Agentic workflow v2 - task sequence based processing
+ *
+ * Fixed phases are replaced by a task sequence.
+ * Each task type has its own prompt construction and input contract.
+ *
+ * Flow:
+ * 1. Bootstrap: Generate initial task list [planning, outputXxx]
+ * 2. Task loop: Execute each task sequentially
+ * 3. Output: Last task (outputMessage/outputStructured) result is the final output
  */
 
+import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
+import type { FinishReason } from '@modular-prompt/driver';
 import type { WorkflowResult } from '../types.js';
-import type { AgenticWorkflowContext, AgenticWorkflowOptions, AgenticTaskPlan } from './types.js';
+import type {
+  AgenticWorkflowContext,
+  AgenticWorkflowOptions,
+  AgenticTask,
+  AgenticTaskExecutionLog,
+  TaskType,
+  ToolSpec,
+  AgenticLogger,
+} from './types.js';
+import { DEFAULT_DRIVER_ROLE } from './types.js';
 import { type DriverInput, resolveDriver } from '../driver-input.js';
-import { runPlanning } from './phases/planning.js';
-import { runTask } from './phases/execution.js';
-import { runIntegration } from './phases/integration.js';
+import { getTaskTypeConfig } from './task-types/index.js';
+import {
+  createPlanningTools,
+  createExecutionBuiltinTools,
+} from './process/builtin-tools.js';
+import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 
 // ---------------------------------------------------------------------------
-// Module distribution
+// Bootstrap
 // ---------------------------------------------------------------------------
 
 /**
- * Distribute user module sections to the appropriate phase.
- * Not all sections are relevant to every phase.
+ * Generate the initial task list based on the user module.
+ * - Always starts with a planning task.
+ * - Ends with outputStructured (if schema) or outputMessage.
  */
-export function distributeModule<T extends AgenticWorkflowContext>(
-  userModule: PromptModule<T>,
-  phase: 'planning' | 'execution' | 'integration'
-): PromptModule<T> {
-  switch (phase) {
-    case 'planning':
-      return {
-        objective: userModule.objective,
-        instructions: userModule.instructions,
-        materials: userModule.materials,
-        terms: userModule.terms,
-        guidelines: userModule.guidelines,
-      };
-    case 'execution':
-      return {
-        objective: userModule.objective,
-        terms: userModule.terms,
-        // instructions are replaced by task guidelines/constraints
-      };
-    case 'integration':
-      return {
-        objective: userModule.objective,
-        terms: userModule.terms,
-        cue: userModule.cue,
-        schema: userModule.schema,
-      };
+function bootstrap(module: PromptModule<AgenticWorkflowContext>): AgenticTask[] {
+  const tasks: AgenticTask[] = [];
+
+  tasks.push({
+    id: 1,
+    description: 'Decompose objective into executable tasks',
+    taskType: 'planning',
+  });
+
+  const outputType: TaskType = module.schema ? 'outputStructured' : 'outputMessage';
+  tasks.push({
+    id: 2,
+    description: 'Generate the final output based on all task results',
+    taskType: outputType,
+  });
+
+  return tasks;
+}
+
+// ---------------------------------------------------------------------------
+// Task execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Get builtin tools for a task based on its type config.
+ */
+function getBuiltinToolsForTask(
+  taskType: TaskType,
+  taskList: AgenticTask[]
+): ToolSpec[] {
+  const config = getTaskTypeConfig(taskType);
+  const toolNames = new Set(config.builtinToolNames);
+
+  const allTools: ToolSpec[] = [];
+
+  if (toolNames.has('__task')) {
+    allTools.push(...createPlanningTools(taskList));
+  }
+
+  if (toolNames.has('__time')) {
+    // createExecutionBuiltinTools returns [__task, __time]
+    // We only want __time if __task is not already added
+    const execTools = createExecutionBuiltinTools(taskList);
+    const timeOnly = execTools.filter(t => t.definition.name === '__time');
+    allTools.push(...timeOnly);
+  }
+
+  return allTools;
+}
+
+/**
+ * Execute a single task.
+ */
+async function executeTask(
+  driver: DriverInput,
+  module: PromptModule<AgenticWorkflowContext>,
+  context: AgenticWorkflowContext,
+  task: AgenticTask,
+  taskList: AgenticTask[],
+  externalTools: ToolSpec[],
+  maxToolCalls: number,
+  logger?: AgenticLogger
+): Promise<AgenticTaskExecutionLog> {
+  const taskConfig = getTaskTypeConfig(task.taskType);
+  const taskModule = taskConfig.buildModule(task, context, module);
+  const prompt = compile(taskModule, context);
+
+  const builtinTools = getBuiltinToolsForTask(task.taskType, taskList);
+  const externalToolDefs = externalTools.map(t => t.definition);
+
+  const driverRole = task.driverRole || DEFAULT_DRIVER_ROLE[task.taskType];
+
+  try {
+    const toolChoice = task.taskType === 'planning' ? 'required' as const : 'auto' as const;
+
+    const result = await queryWithTools(
+      resolveDriver(driver, driverRole),
+      prompt,
+      builtinTools,
+      {
+        externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,
+        toolChoice,
+        maxIterations: maxToolCalls,
+        logger,
+        logPrefix: `Task ${task.id} (${task.taskType}) - `,
+      }
+    );
+
+    return {
+      taskId: task.id,
+      taskType: task.taskType,
+      result: result.content,
+      pendingToolCalls: result.pendingToolCalls,
+      metadata: {
+        usage: result.usage,
+      },
+    };
+  } catch (error) {
+    rethrowAsWorkflowError(error, context, {
+      phase: task.taskType,
+      partialResult: context.executionLog?.map(log => log.result).join('\n\n') || '',
+    });
   }
 }
 
@@ -51,113 +150,86 @@ export function distributeModule<T extends AgenticWorkflowContext>(
 // Main workflow
 // ---------------------------------------------------------------------------
 
-/**
- * Agentic workflow - autonomous multi-step processing with task-based tool calling
- *
- * Flow:
- * 1. Planning: Decompose objective into tasks via __task tool
- * 2. Execution: Run each task sequentially, maintaining process state
- * 3. Integration: Combine results into formatted output
- */
 export async function agenticProcess(
   driver: DriverInput,
   module: PromptModule<AgenticWorkflowContext>,
   context: AgenticWorkflowContext,
   options: AgenticWorkflowOptions = {}
 ): Promise<WorkflowResult<AgenticWorkflowContext>> {
-
   const {
-    maxTasks = 5,
+    maxTasks = 10,
     tools = [],
     maxToolCalls = 10,
     enablePlanning = true,
-    logger
+    logger,
   } = options;
 
-  // Process state — tracks progress across phases
-  const processState = {
-    plan: context.plan as AgenticTaskPlan | undefined,
-    executionLog: context.executionLog || [],
-    state: context.state,
-    phase: 'planning' as AgenticWorkflowContext['phase'],
-  };
+  // Bootstrap or use provided task list
+  const taskList = context.taskList
+    ? [...context.taskList]
+    : enablePlanning
+      ? bootstrap(module)
+      : [{ id: 1, description: 'Generate output', taskType: 'outputMessage' as const }];
 
-  // Phase 1: Planning
-  if (enablePlanning && !processState.plan) {
-    processState.phase = 'planning';
-    const distributed = distributeModule(module, 'planning');
-    processState.plan = await runPlanning(
-      resolveDriver(driver, 'plan'), distributed,
-      { ...context, phase: 'planning' },
-      maxTasks, maxToolCalls, logger
-    );
-  }
+  const executionLog: AgenticTaskExecutionLog[] = context.executionLog
+    ? [...context.executionLog]
+    : [];
+  const startIndex = executionLog.length;
 
-  const plan = processState.plan!;
+  // Task loop
+  for (let i = startIndex; i < taskList.length; i++) {
+    // Guard: max tasks
+    if (i >= maxTasks) {
+      logger?.debug(`Max tasks (${maxTasks}) reached, stopping at task ${i}`);
+      break;
+    }
 
-  // Phase 2: Execution
-  processState.phase = 'execution';
-  const startIndex = processState.executionLog.length;
+    const task = taskList[i];
 
-  for (let i = startIndex; i < plan.tasks.length; i++) {
-    const task = plan.tasks[i];
     const currentContext: AgenticWorkflowContext = {
       ...context,
-      plan,
-      executionLog: processState.executionLog,
-      state: processState.state,
-      phase: 'execution',
+      taskList,
+      executionLog,
+      currentTaskIndex: i,
     };
 
-    const distributed = distributeModule(module, 'execution');
-    const logEntry = await runTask(
-      resolveDriver(driver, 'instruct'), distributed, currentContext,
-      task, tools, processState.executionLog,
-      maxToolCalls, logger
+    const logEntry = await executeTask(
+      driver, module, currentContext, task, taskList,
+      tools, maxToolCalls, logger
     );
-    processState.executionLog.push(logEntry);
-
-    if (logEntry.state !== undefined) {
-      processState.state = {
-        content: logEntry.state,
-        usage: logEntry.metadata?.usage?.totalTokens
-      };
-    }
+    executionLog.push(logEntry);
   }
 
-  // Phase 3: Integration
-  processState.phase = 'integration';
-  const integrationContext: AgenticWorkflowContext = {
-    ...context,
-    plan,
-    executionLog: processState.executionLog,
-    state: processState.state,
-    phase: 'integration',
-  };
+  // Final output: last task's result
+  const lastLog = executionLog[executionLog.length - 1];
+  const output = lastLog?.result || '';
 
-  const distributed = distributeModule(module, 'integration');
-  const finalOutput = await runIntegration(
-    resolveDriver(driver, 'default'), distributed, integrationContext, logger
+  // Determine finishReason
+  const hasPendingToolCalls = executionLog.some(
+    log => log.pendingToolCalls && log.pendingToolCalls.length > 0
   );
+  const finishReason: FinishReason | undefined = hasPendingToolCalls
+    ? 'tool_calls'
+    : 'stop';
 
-  // Build result
-  const totalToolCalls = processState.executionLog.reduce(
+  const totalToolCalls = executionLog.reduce(
     (sum, log) => sum + (log.pendingToolCalls?.length || 0), 0
   );
 
   return {
-    output: finalOutput,
+    output,
     context: {
       ...context,
-      plan,
-      executionLog: processState.executionLog,
-      state: processState.state,
-      phase: 'complete'
+      taskList,
+      executionLog,
+      currentTaskIndex: taskList.length,
     },
     metadata: {
-      planTasks: plan.tasks.length,
-      executedTasks: processState.executionLog.length,
-      toolCallsUsed: totalToolCalls
-    }
+      planTasks: taskList.length,
+      executedTasks: executionLog.length,
+      toolCallsUsed: totalToolCalls,
+      finishReason,
+      usage: lastLog?.metadata?.usage,
+    },
   };
 }

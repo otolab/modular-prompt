@@ -80,24 +80,24 @@ describe('integration tests', () => {
   });
 
   it('agenticProcessでエンドツーエンドのワークフローが実行できる', async () => {
-    // 計画（__task tool call）、実行（テキスト出力）、統合の3フェーズ
+    // Planning → Think×2 → OutputMessage の4タスクシーケンス
     const driver = new TestDriver({
       responses: [
-        // Planning: __task で2タスク登録
+        // Planning: __task で2タスク登録（v2では id パラメータなし）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: '入力データを分析する' } },
-            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: '分析結果をまとめる' } },
+            { id: 'tc-1', name: '__task', arguments: { description: '入力データを分析する' } },
+            { id: 'tc-2', name: '__task', arguments: { description: '分析結果をまとめる' } },
           ]
         },
         // Planning: ツール結果受け取り後に終了
         'Plan complete.',
-        // Execution task-1: テキスト出力が result
+        // Think task 1: テキスト出力が result
         'データは正しい形式です',
-        // Execution task-2: テキスト出力が result
+        // Think task 2: テキスト出力が result
         '重要な発見: データ品質が良好',
-        // Integration
+        // OutputMessage
         'データ分析とまとめが完了しました。データ品質は良好で、次のステップに進む準備が整いました。'
       ]
     });
@@ -119,10 +119,12 @@ describe('integration tests', () => {
     const result = await agenticProcess(driver, userModule, context);
 
     expect(result.output).toBeDefined();
-    expect(result.context.phase).toBe('complete');
-    expect(result.context.executionLog).toHaveLength(2);
-    expect(result.metadata?.planTasks).toBe(2);
-    expect(result.metadata?.executedTasks).toBe(2);
+    // v2では phase なし、taskList あり
+    expect(result.context.taskList).toHaveLength(4); // planning + think×2 + outputMessage
+    // executionLog には4タスク分
+    expect(result.context.executionLog).toHaveLength(4);
+    expect(result.metadata?.planTasks).toBe(4);
+    expect(result.metadata?.executedTasks).toBe(4);
   });
 
   it('agenticProcessで外部ツール呼び出しがpendingとして返される', async () => {
@@ -144,23 +146,23 @@ describe('integration tests', () => {
 
     const driver = new TestDriver({
       responses: [
-        // Planning: __task で2タスク登録
+        // Planning: __task で2タスク登録（v2では id パラメータなし）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'データを取得する' } },
-            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: 'データを処理する' } },
+            { id: 'tc-1', name: '__task', arguments: { description: 'データを取得する' } },
+            { id: 'tc-2', name: '__task', arguments: { description: 'データを処理する' } },
           ]
         },
         'Plan done.',
-        // Execution task-1: AI calls external tool → returned as pending
+        // Think task 1: AI calls external tool → returned as pending
         {
           content: 'データ取得が必要',
           toolCalls: [{ id: 'call-1', name: 'fetchData', arguments: { source: 'api' } }]
         },
-        // Execution task-2: テキスト出力のみ
+        // Think task 2: テキスト出力のみ
         '処理完了',
-        // Integration
+        // OutputMessage
         '全ての処理が完了しました'
       ]
     });
@@ -177,9 +179,9 @@ describe('integration tests', () => {
 
     // 外部ツールのhandlerは呼ばれない
     expect(fetchCalled).toBe(false);
-    // pendingToolCallsとして返される
-    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('fetchData');
-    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].arguments).toEqual({ source: 'api' });
+    // pendingToolCallsとして返される（executionLog[1]がthink task 1）
+    expect(result.context.executionLog?.[1].pendingToolCalls?.[0].name).toBe('fetchData');
+    expect(result.context.executionLog?.[1].pendingToolCalls?.[0].arguments).toEqual({ source: 'api' });
     expect(result.metadata?.toolCallsUsed).toBe(1);
   });
 

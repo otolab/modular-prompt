@@ -34,14 +34,18 @@ export type {
 // Agentic workflow
 export { agenticProcess } from './agentic-workflow/index.js';
 export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './agentic-workflow/index.js';
+export { DEFAULT_DRIVER_ROLE, DEFAULT_DATA_OPTIONS } from './agentic-workflow/index.js';
+export { getTaskTypeConfig } from './agentic-workflow/index.js';
 export type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
   AgenticTask,
-  AgenticTaskPlan,
   AgenticTaskExecutionLog,
-  BuiltinTaskType,
-  ToolSpec
+  TaskType,
+  ToolSpec,
+  ToolCallLog,
+  AgenticLogger,
+  TaskTypeConfig
 } from './agentic-workflow/index.js';
 
 // Default workflow

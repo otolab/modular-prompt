@@ -18,6 +18,5 @@ export {
 
 export {
   formatToolCall,
-  formatLogContentParts,
-  formatTaskDetails
+  formatLogContentParts
 } from './format-helpers.js';

@@ -1,28 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import { agenticProcess } from './agentic-workflow.js';
 import { TestDriver } from '@modular-prompt/driver';
-import type { AgenticWorkflowContext, AgenticTaskPlan, ToolSpec } from './types.js';
+import type { AgenticWorkflowContext, ToolSpec } from './types.js';
 
-describe('agenticProcess', () => {
+describe('agenticProcess v2', () => {
   // 1. 基本ワークフロー
-  it('should execute basic workflow with planning and execution', async () => {
+  it('should execute basic workflow with planning and tasks', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning round 1: register tasks via __task tool
+        // Planning: __task ツール呼び出し2回（id なし、description のみ）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Analyze input', taskType: 'think' } },
-            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: 'Generate output' } }
+            { id: 'tc-1', name: '__task', arguments: { description: 'Analyze input data' } },
+            { id: 'tc-2', name: '__task', arguments: { description: 'Process results' } }
           ]
         },
-        // Planning round 2: text output to finish planning
-        'Plan complete.',
-        // Execution task-1
-        'Analysis complete',
-        // Execution task-2
-        'Output generated',
-        // Integration
+        // Planning: テキスト出力（ツール結果受信後に planning 終了）
+        'Planning complete.',
+        // Think task 1
+        'Analysis result',
+        // Think task 2
+        'Processing result',
+        // OutputMessage
         'Final result'
       ]
     });
@@ -38,18 +38,25 @@ describe('agenticProcess', () => {
     const result = await agenticProcess(driver, userModule, context);
 
     expect(result.output).toBe('Final result');
-    expect(result.context.phase).toBe('complete');
-    expect(result.context.executionLog).toHaveLength(2);
-    expect(result.context.executionLog?.[0].taskId).toBe('task-1');
-    expect(result.context.executionLog?.[0].result).toBe('Analysis complete');
-    expect(result.context.executionLog?.[1].taskId).toBe('task-2');
-    expect(result.context.executionLog?.[1].result).toBe('Output generated');
-    expect(result.metadata?.planTasks).toBe(2);
-    expect(result.metadata?.executedTasks).toBe(2);
+    expect(result.context.taskList).toHaveLength(4); // planning + think×2 + outputMessage
+    expect(result.context.taskList?.[0].taskType).toBe('planning');
+    expect(result.context.taskList?.[1].taskType).toBe('think');
+    expect(result.context.taskList?.[2].taskType).toBe('think');
+    expect(result.context.taskList?.[3].taskType).toBe('outputMessage');
+    expect(result.context.executionLog).toHaveLength(4);
+    expect(result.context.executionLog?.[0].taskId).toBe(1);
+    expect(result.context.executionLog?.[0].taskType).toBe('planning');
+    expect(result.context.executionLog?.[1].taskId).toBe(3);
+    expect(result.context.executionLog?.[1].result).toBe('Analysis result');
+    expect(result.context.executionLog?.[2].taskId).toBe(4);
+    expect(result.context.executionLog?.[2].result).toBe('Processing result');
+    expect(result.context.executionLog?.[3].taskId).toBe(2);
+    expect(result.context.executionLog?.[3].taskType).toBe('outputMessage');
+    expect(result.metadata?.planTasks).toBe(4);
+    expect(result.metadata?.executedTasks).toBe(4);
   });
 
-  // 2. 外部ツール呼び出し
-  // 2. 外部ツール呼び出しは実行せずpendingとして返す
+  // 2. 外部ツール呼び出しは pending として返す
   it('should return external tool calls as pending without executing', async () => {
     let toolCalled = false;
     const tools: ToolSpec[] = [
@@ -63,19 +70,28 @@ describe('agenticProcess', () => {
             required: ['id']
           }
         },
-        handler: async () => { toolCalled = true; return {}; }
+        handler: async () => {
+          toolCalled = true;
+          return { data: 'test' };
+        }
       }
     ];
 
     const driver = new TestDriver({
       responses: [
         // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Get data' } }] },
-        'Done.',
-        // Execution: LLM requests external tool → returned immediately as pending
-        { content: 'I need to get data', toolCalls: [{ id: 'call-1', name: 'getData', arguments: { id: '123' } }] },
-        // Integration
-        'Final'
+        {
+          content: '',
+          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Get external data' } }]
+        },
+        'Planning done.',
+        // Think: 外部ツール呼び出し → pending として返す
+        {
+          content: 'I need to get data',
+          toolCalls: [{ id: 'call-1', name: 'getData', arguments: { id: '123' } }]
+        },
+        // OutputMessage
+        'Final output'
       ]
     });
 
@@ -83,266 +99,37 @@ describe('agenticProcess', () => {
       objective: 'Get and process data'
     };
 
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
+    const result = await agenticProcess(
+      driver,
+      { objective: ['Test'] },
+      context,
+      { tools }
+    );
 
-    // External tool handler should NOT be called
+    // 外部ツールのハンドラは呼ばれない
     expect(toolCalled).toBe(false);
-    // pendingToolCalls should contain the request
-    expect(result.context.executionLog?.[0].pendingToolCalls).toHaveLength(1);
-    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('getData');
-    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].arguments).toEqual({ id: '123' });
+    // pendingToolCalls に含まれている
+    expect(result.context.executionLog?.[1].pendingToolCalls).toHaveLength(1);
+    expect(result.context.executionLog?.[1].pendingToolCalls?.[0].name).toBe('getData');
+    expect(result.context.executionLog?.[1].pendingToolCalls?.[0].arguments).toEqual({ id: '123' });
     expect(result.metadata?.toolCallsUsed).toBe(1);
+    expect(result.metadata?.finishReason).toBe('tool_calls');
   });
 
-  // 3. builtin と external が混在した場合、builtinは実行し外部はpendingとして返す
-  it('should execute builtin tools but return external as pending', async () => {
-    const tools: ToolSpec[] = [
-      {
-        definition: { name: 'search', description: 'Search data' },
-        handler: async () => ({ results: [] })
-      }
-    ];
-
+  // 3. ツールなしワークフロー
+  it('should work without any tool calls', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Search' } }] },
-        'Done.',
-        // Execution: LLM calls __updateState (builtin) + search (external)
-        { content: 'Need to search', toolCalls: [
-          { id: 'c1', name: '__updateState', arguments: { content: 'searching' } },
-          { id: 'c2', name: 'search', arguments: { query: 'test' } }
-        ]},
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = { objective: 'Test mixed' };
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
-
-    // __updateState was executed (state is set)
-    expect(result.context.executionLog?.[0].state).toBe('searching');
-    // search was NOT executed, returned as pending
-    expect(result.context.executionLog?.[0].pendingToolCalls).toHaveLength(1);
-    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('search');
-  });
-
-  // 4. builtin のみのツール呼び出しはループを続ける
-  it('should continue loop when only builtin tools are called', async () => {
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Work' } }] },
-        'Done.',
-        // Execution round 1: __updateState (builtin) → loop continues
-        { content: '', toolCalls: [{ id: 'c1', name: '__updateState', arguments: { content: 'step 1 done' } }] },
-        // Execution round 2: text output → loop ends
-        'Task complete',
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = { objective: 'Test builtin loop' };
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
-
-    expect(result.context.executionLog?.[0].result).toBe('Task complete');
-    expect(result.context.executionLog?.[0].state).toBe('step 1 done');
-    expect(result.context.executionLog?.[0].pendingToolCalls).toBeUndefined();
-  });
-
-  // 7. maxTasks制限
-  it('should limit execution to maxTasks', async () => {
-    const driver = new TestDriver({
-      responses: [
-        // Planning: register 6 tasks in one response
+        // Planning: タスク登録
         {
           content: '',
-          toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Task 1' } },
-            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: 'Task 2' } },
-            { id: 'tc-3', name: '__task', arguments: { id: 'task-3', description: 'Task 3' } },
-            { id: 'tc-4', name: '__task', arguments: { id: 'task-4', description: 'Task 4' } },
-            { id: 'tc-5', name: '__task', arguments: { id: 'task-5', description: 'Task 5' } },
-            { id: 'tc-6', name: '__task', arguments: { id: 'task-6', description: 'Task 6' } }
-          ]
+          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Simple task' } }]
         },
-        'Done.',
-        // Execution: only first 3 tasks executed (maxTasks=3)
-        'Task 1 done',
-        'Task 2 done',
-        'Task 3 done',
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Test max tasks'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { maxTasks: 3 });
-
-    expect(result.context.executionLog).toHaveLength(3);
-  });
-
-  // 8. 既存plan使用
-  it('should use existing plan when provided', async () => {
-    const plan: AgenticTaskPlan = {
-      tasks: [
-        { id: 'task-1', description: 'Execute', taskType: 'do' }
-      ]
-    };
-
-    const driver = new TestDriver({
-      responses: [
-        // No planning phase - only execution and integration
-        'Executed',
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Use existing plan',
-      plan
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { enablePlanning: false });
-
-    expect(result.context.executionLog).toHaveLength(1);
-    expect(result.context.executionLog?.[0].taskId).toBe('task-1');
-  });
-
-  // 9. __updateState による状態引き継ぎ
-  it('should handle state updates via __updateState tool', async () => {
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        {
-          content: '',
-          toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'First task' } },
-            { id: 'tc-2', name: '__task', arguments: { id: 'task-2', description: 'Second task' } }
-          ]
-        },
-        'Done.',
-        // Execution task-1: update state
-        {
-          content: 'Task 1 result',
-          toolCalls: [{ id: 'us-1', name: '__updateState', arguments: { content: 'Context from task 1' } }]
-        },
-        'Task 1 done',
-        // Execution task-2: use updated state
-        'Task 2 done with context',
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Test state update'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
-
-    expect(result.context.executionLog?.[0].state).toBe('Context from task 1');
-    expect(result.context.state?.content).toBe('Context from task 1');
-  });
-
-  // 10. Planningでタスク0件 → エラー
-  it('should throw error when planning registers no tasks', async () => {
-    const driver = new TestDriver({
-      responses: [
-        // Planning: text only, no __task calls
-        'No tasks registered.'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Test no tasks'
-    };
-
-    await expect(async () => {
-      await agenticProcess(driver, { objective: ['Test'] }, context);
-    }).rejects.toThrow('did not register any tasks');
-  });
-
-  // 11. 外部ツール + 組み込みツール共存
-  it('should separate external tools from built-in tools', async () => {
-    const tools: ToolSpec[] = [
-      {
-        definition: { name: 'getData', description: 'Get data' },
-        handler: async () => ({})
-      }
-    ];
-
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Get and update' } }] },
-        'Done.',
-        // Execution: builtin (__updateState) is executed, external (getData) → pending
-        {
-          content: 'Need data',
-          toolCalls: [
-            { id: 'c1', name: '__updateState', arguments: { content: 'state data' } },
-            { id: 'c2', name: 'getData', arguments: { id: '1' } }
-          ]
-        },
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Test tool separation'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
-
-    // pendingToolCalls should only include external tool (getData)
-    expect(result.context.executionLog?.[0].pendingToolCalls).toHaveLength(1);
-    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('getData');
-    // __updateState was executed
-    expect(result.context.executionLog?.[0].state).toBe('state data');
-  });
-
-  // 12. __time ビルトインツール
-  it('should handle __time builtin tool and continue loop', async () => {
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Check time' } }] },
-        'Done.',
-        // Execution: LLM calls __time (builtin) → executed internally, loop continues
-        { content: '', toolCalls: [{ id: 'c1', name: '__time', arguments: {} }] },
-        // Execution: LLM produces result using the time
-        'The current time is noted.',
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = { objective: 'Check time' };
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
-
-    expect(result.context.executionLog?.[0].result).toBe('The current time is noted.');
-    // __time is builtin, so no pendingToolCalls
-    expect(result.context.executionLog?.[0].pendingToolCalls).toBeUndefined();
-  });
-
-  // 13. ツールなしワークフロー
-  it('should work without any tools', async () => {
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Simple task' } }] },
-        'Done.',
-        // Execution: text only, no tools
-        'Done',
-        // Integration
-        'Final'
+        'Planning done.',
+        // Think: テキストのみ
+        'Think result',
+        // OutputMessage
+        'Final output'
       ]
     });
 
@@ -352,7 +139,158 @@ describe('agenticProcess', () => {
 
     const result = await agenticProcess(driver, { objective: ['Test'] }, context);
 
-    expect(result.output).toBe('Final');
+    expect(result.output).toBe('Final output');
     expect(result.metadata?.toolCallsUsed).toBe(0);
+    expect(result.metadata?.finishReason).toBe('stop');
+  });
+
+  // 4. maxTasks 制限
+  it('should limit execution to maxTasks', async () => {
+    const driver = new TestDriver({
+      responses: [
+        // Planning: 5タスク登録
+        {
+          content: '',
+          toolCalls: [
+            { id: 'tc-1', name: '__task', arguments: { description: 'Task 1' } },
+            { id: 'tc-2', name: '__task', arguments: { description: 'Task 2' } },
+            { id: 'tc-3', name: '__task', arguments: { description: 'Task 3' } },
+            { id: 'tc-4', name: '__task', arguments: { description: 'Task 4' } },
+            { id: 'tc-5', name: '__task', arguments: { description: 'Task 5' } }
+          ]
+        },
+        'Planning done.',
+        // Execution: maxTasks=3 なので 3タスクまで実行
+        'Task 1 done',
+        'Task 2 done',
+        'Task 3 done'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Test max tasks'
+    };
+
+    const result = await agenticProcess(
+      driver,
+      { objective: ['Test'] },
+      context,
+      { maxTasks: 3 }
+    );
+
+    // planning (1) + think (2) までの 3タスクのみ実行
+    expect(result.context.executionLog).toHaveLength(3);
+    expect(result.metadata?.executedTasks).toBe(3);
+    // taskList は全部で 7個（planning + think×5 + outputMessage）
+    expect(result.context.taskList).toHaveLength(7);
+    expect(result.metadata?.planTasks).toBe(7);
+  });
+
+  // 5. 既存 taskList 使用（enablePlanning=false）
+  it('should use existing taskList when enablePlanning is false', async () => {
+    const driver = new TestDriver({
+      responses: [
+        // Planning スキップ、直接 think から実行
+        'Think result',
+        // OutputMessage
+        'Final output'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Use existing taskList',
+      taskList: [
+        { id: 1, description: 'Execute task', taskType: 'think' },
+        { id: 2, description: 'Generate output', taskType: 'outputMessage' }
+      ]
+    };
+
+    const result = await agenticProcess(
+      driver,
+      { objective: ['Test'] },
+      context,
+      { enablePlanning: false }
+    );
+
+    expect(result.context.executionLog).toHaveLength(2);
+    expect(result.context.executionLog?.[0].taskId).toBe(1);
+    expect(result.context.executionLog?.[0].taskType).toBe('think');
+    expect(result.context.executionLog?.[0].result).toBe('Think result');
+    expect(result.context.executionLog?.[1].taskId).toBe(2);
+    expect(result.context.executionLog?.[1].taskType).toBe('outputMessage');
+    expect(result.output).toBe('Final output');
+  });
+
+  // 6. __time ビルトインツール
+  it('should handle __time builtin tool and continue loop', async () => {
+    const driver = new TestDriver({
+      responses: [
+        // Planning
+        {
+          content: '',
+          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Check time' } }]
+        },
+        'Planning done.',
+        // Think: __time ツール呼び出し → ループ継続
+        {
+          content: '',
+          toolCalls: [{ id: 'c1', name: '__time', arguments: {} }]
+        },
+        // Think: テキスト結果
+        'Current time noted.',
+        // OutputMessage
+        'Final output'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Check time'
+    };
+
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
+
+    expect(result.context.executionLog?.[1].result).toBe('Current time noted.');
+    // __time は builtin なので pendingToolCalls にはない
+    expect(result.context.executionLog?.[1].pendingToolCalls).toBeUndefined();
+    expect(result.metadata?.finishReason).toBe('stop');
+  });
+
+  // 7. schema ありの場合は outputStructured
+  it('should use outputStructured when schema is provided', async () => {
+    const driver = new TestDriver({
+      responses: [
+        // Planning
+        {
+          content: '',
+          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Analyze' } }]
+        },
+        'Planning done.',
+        // Think
+        'Analysis complete',
+        // OutputStructured
+        '{"result": "structured output"}'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = {
+      objective: 'Generate structured output'
+    };
+
+    const userModule = {
+      objective: ['Test'],
+      schema: {
+        type: 'object',
+        properties: {
+          result: { type: 'string' }
+        }
+      }
+    };
+
+    const result = await agenticProcess(driver, userModule, context);
+
+    // taskList の最後のタスクは outputStructured
+    const lastTask = result.context.taskList?.[result.context.taskList.length - 1];
+    expect(lastTask?.taskType).toBe('outputStructured');
+    expect(result.output).toBe('{"result": "structured output"}');
   });
 });

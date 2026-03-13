@@ -1,25 +1,23 @@
 // Agentic workflow
 export { agenticProcess } from './agentic-workflow.js';
 
-// Types (only user-facing types)
+// Types
 export type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
   AgenticTask,
-  AgenticTaskPlan,
   AgenticTaskExecutionLog,
-  BuiltinTaskType,
+  TaskType,
   ToolSpec,
+  ToolCallLog,
   AgenticLogger
 } from './types.js';
 
-// Builtin tools
-export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './process/index.js';
+export { DEFAULT_DRIVER_ROLE, DEFAULT_DATA_OPTIONS } from './types.js';
 
-// Modules
-export {
-  agentic,
-  planning,
-  execution,
-  integration
-} from './phases/index.js';
+// Builtin tools
+export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './process/builtin-tools.js';
+
+// Task type registry
+export { getTaskTypeConfig } from './task-types/index.js';
+export type { TaskTypeConfig } from './task-types/index.js';
