@@ -1,4 +1,4 @@
-import type { ToolDefinition, QueryResult } from '@modular-prompt/driver';
+import type { ToolDefinition, QueryResult, ToolCall } from '@modular-prompt/driver';
 
 /**
  * Tool specification: definition for AI + handler for execution
@@ -40,11 +40,10 @@ export interface AgenticTaskExecutionLog {
   taskId: string;
   taskType?: BuiltinTaskType;
   result: string;              // テキスト出力がそのまま入る
-  toolCalls?: ToolCallLog[];
+  pendingToolCalls?: ToolCall[]; // 外部ツール呼び出しリクエスト（未実行）
   state?: string;              // __updateState() で設定された値
   metadata?: {
     usage?: QueryResult['usage'];
-    toolCallRounds: number;
   };
 }
 

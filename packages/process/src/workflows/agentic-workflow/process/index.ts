@@ -4,7 +4,6 @@
 
 export {
   queryWithTools,
-  executeToolCalls,
   rethrowAsWorkflowError,
   type QueryWithToolsOptions,
   type QueryWithToolsResult

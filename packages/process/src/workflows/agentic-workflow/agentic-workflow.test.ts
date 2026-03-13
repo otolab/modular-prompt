@@ -49,7 +49,8 @@ describe('agenticProcess', () => {
   });
 
   // 2. 外部ツール呼び出し
-  it('should handle external tool calls', async () => {
+  // 2. 外部ツール呼び出しは実行せずpendingとして返す
+  it('should return external tool calls as pending without executing', async () => {
     let toolCalled = false;
     const tools: ToolSpec[] = [
       {
@@ -62,11 +63,7 @@ describe('agenticProcess', () => {
             required: ['id']
           }
         },
-        handler: async (args) => {
-          toolCalled = true;
-          expect(args.id).toBe('123');
-          return { data: 'test data' };
-        }
+        handler: async () => { toolCalled = true; return {}; }
       }
     ];
 
@@ -75,9 +72,8 @@ describe('agenticProcess', () => {
         // Planning
         { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Get data' } }] },
         'Done.',
-        // Execution: call external tool
-        { content: '', toolCalls: [{ id: 'call-1', name: 'getData', arguments: { id: '123' } }] },
-        'Data processed',
+        // Execution: LLM requests external tool → returned immediately as pending
+        { content: 'I need to get data', toolCalls: [{ id: 'call-1', name: 'getData', arguments: { id: '123' } }] },
         // Integration
         'Final'
       ]
@@ -89,159 +85,71 @@ describe('agenticProcess', () => {
 
     const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
 
-    expect(toolCalled).toBe(true);
-    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(1);
-    expect(result.context.executionLog?.[0].toolCalls?.[0].name).toBe('getData');
+    // External tool handler should NOT be called
+    expect(toolCalled).toBe(false);
+    // pendingToolCalls should contain the request
+    expect(result.context.executionLog?.[0].pendingToolCalls).toHaveLength(1);
+    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('getData');
+    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].arguments).toEqual({ id: '123' });
     expect(result.metadata?.toolCallsUsed).toBe(1);
   });
 
-  // 3. 複数ラウンドのツール呼び出し
-  it('should handle multiple rounds of tool calls', async () => {
+  // 3. builtin と external が混在した場合、builtinは実行し外部はpendingとして返す
+  it('should execute builtin tools but return external as pending', async () => {
     const tools: ToolSpec[] = [
       {
         definition: { name: 'search', description: 'Search data' },
-        handler: async (args) => ({ results: [`found: ${args.query}`] })
-      },
-      {
-        definition: { name: 'analyze', description: 'Analyze data' },
-        handler: async (args) => ({ analysis: `analyzed: ${args.data}` })
+        handler: async () => ({ results: [] })
       }
     ];
 
     const driver = new TestDriver({
       responses: [
         // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Search and analyze' } }] },
+        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Search' } }] },
         'Done.',
-        // Execution round 1: search
-        { content: '', toolCalls: [{ id: 'c1', name: 'search', arguments: { query: 'test' } }] },
-        // Execution round 2: analyze
-        { content: '', toolCalls: [{ id: 'c2', name: 'analyze', arguments: { data: 'results' } }] },
-        // Execution final: text output
-        'Analysis complete',
-        // Integration
-        'Report'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Search and analyze'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
-
-    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(2);
-    expect(result.context.executionLog?.[0].toolCalls?.[0].name).toBe('search');
-    expect(result.context.executionLog?.[0].toolCalls?.[1].name).toBe('analyze');
-  });
-
-  // 4. maxToolCalls制限
-  it('should respect maxToolCalls limit', async () => {
-    let callCount = 0;
-    const tools: ToolSpec[] = [
-      {
-        definition: { name: 'repeat', description: 'Repeat tool' },
-        handler: async () => {
-          callCount++;
-          return { count: callCount };
-        }
-      }
-    ];
-
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Repeat' } }] },
-        'Done.',
-        // Execution: tool call 1
-        { content: '', toolCalls: [{ id: 'c1', name: 'repeat', arguments: {} }] },
-        // Execution: tool call 2
-        { content: '', toolCalls: [{ id: 'c2', name: 'repeat', arguments: {} }] },
-        // After maxToolCalls=2, must output text
-        'Stopped',
+        // Execution: LLM calls __updateState (builtin) + search (external)
+        { content: 'Need to search', toolCalls: [
+          { id: 'c1', name: '__updateState', arguments: { content: 'searching' } },
+          { id: 'c2', name: 'search', arguments: { query: 'test' } }
+        ]},
         // Integration
         'Final'
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Test limit'
-    };
+    const context: AgenticWorkflowContext = { objective: 'Test mixed' };
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
 
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, {
-      tools,
-      maxToolCalls: 2
-    });
-
-    expect(callCount).toBe(2);
-    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(2);
+    // __updateState was executed (state is set)
+    expect(result.context.executionLog?.[0].state).toBe('searching');
+    // search was NOT executed, returned as pending
+    expect(result.context.executionLog?.[0].pendingToolCalls).toHaveLength(1);
+    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('search');
   });
 
-  // 5. ツールエラー処理
-  it('should handle tool errors gracefully', async () => {
-    const tools: ToolSpec[] = [
-      {
-        definition: { name: 'failingTool', description: 'Failing tool' },
-        handler: async () => { throw new Error('Tool failed'); }
-      }
-    ];
-
+  // 4. builtin のみのツール呼び出しはループを続ける
+  it('should continue loop when only builtin tools are called', async () => {
     const driver = new TestDriver({
       responses: [
         // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Use tool' } }] },
+        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Work' } }] },
         'Done.',
-        // Execution: call failing tool
-        { content: '', toolCalls: [{ id: 'c1', name: 'failingTool', arguments: {} }] },
-        // Execution: handle error and continue
-        'Handled error',
+        // Execution round 1: __updateState (builtin) → loop continues
+        { content: '', toolCalls: [{ id: 'c1', name: '__updateState', arguments: { content: 'step 1 done' } }] },
+        // Execution round 2: text output → loop ends
+        'Task complete',
         // Integration
         'Final'
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Test error'
-    };
+    const context: AgenticWorkflowContext = { objective: 'Test builtin loop' };
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
 
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
-
-    expect(result.context.executionLog?.[0].toolCalls?.[0].result).toBe('Tool failed');
-    expect(result.context.executionLog?.[0].result).toBe('Handled error');
-  });
-
-  // 6. 不明なツール
-  it('should handle unknown tool calls', async () => {
-    const tools: ToolSpec[] = [
-      {
-        definition: { name: 'knownTool', description: 'Known tool' },
-        handler: async () => ({ ok: true })
-      }
-    ];
-
-    const driver = new TestDriver({
-      responses: [
-        // Planning
-        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Test' } }] },
-        'Done.',
-        // Execution: call unknown tool
-        { content: '', toolCalls: [{ id: 'c1', name: 'unknownTool', arguments: {} }] },
-        // Execution: handle unknown tool
-        'Handled',
-        // Integration
-        'Final'
-      ]
-    });
-
-    const context: AgenticWorkflowContext = {
-      objective: 'Test unknown'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
-
-    const toolResult = result.context.executionLog?.[0].toolCalls?.[0].result;
-    expect(typeof toolResult).toBe('string');
-    expect((toolResult as string).includes('Unknown tool')).toBe(true);
+    expect(result.context.executionLog?.[0].result).toBe('Task complete');
+    expect(result.context.executionLog?.[0].state).toBe('step 1 done');
+    expect(result.context.executionLog?.[0].pendingToolCalls).toBeUndefined();
   });
 
   // 7. maxTasks制限
@@ -361,11 +269,11 @@ describe('agenticProcess', () => {
   });
 
   // 11. 外部ツール + 組み込みツール共存
-  it('should separate external tools from built-in tools in toolCalls history', async () => {
+  it('should separate external tools from built-in tools', async () => {
     const tools: ToolSpec[] = [
       {
         definition: { name: 'getData', description: 'Get data' },
-        handler: async (args) => ({ data: `data-${args.id}` })
+        handler: async () => ({})
       }
     ];
 
@@ -374,15 +282,14 @@ describe('agenticProcess', () => {
         // Planning
         { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Get and update' } }] },
         'Done.',
-        // Execution: call external tool and built-in tool
+        // Execution: builtin (__updateState) is executed, external (getData) → pending
         {
-          content: '',
+          content: 'Need data',
           toolCalls: [
-            { id: 'c1', name: 'getData', arguments: { id: '1' } },
-            { id: 'c2', name: '__updateState', arguments: { content: 'state data' } }
+            { id: 'c1', name: '__updateState', arguments: { content: 'state data' } },
+            { id: 'c2', name: 'getData', arguments: { id: '1' } }
           ]
         },
-        'Result',
         // Integration
         'Final'
       ]
@@ -394,10 +301,10 @@ describe('agenticProcess', () => {
 
     const result = await agenticProcess(driver, { objective: ['Test'] }, context, { tools });
 
-    // toolCalls should only include external tools (getData), not built-in (__updateState)
-    expect(result.context.executionLog?.[0].toolCalls).toHaveLength(1);
-    expect(result.context.executionLog?.[0].toolCalls?.[0].name).toBe('getData');
-    // But state should be updated
+    // pendingToolCalls should only include external tool (getData)
+    expect(result.context.executionLog?.[0].pendingToolCalls).toHaveLength(1);
+    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('getData');
+    // __updateState was executed
     expect(result.context.executionLog?.[0].state).toBe('state data');
   });
 

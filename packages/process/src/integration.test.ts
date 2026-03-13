@@ -125,7 +125,7 @@ describe('integration tests', () => {
     expect(result.metadata?.executedTasks).toBe(2);
   });
 
-  it('agenticProcessでツール呼び出し付きワークフローが実行できる', async () => {
+  it('agenticProcessで外部ツール呼び出しがpendingとして返される', async () => {
     let fetchCalled = false;
     const tools = [
       {
@@ -138,11 +138,7 @@ describe('integration tests', () => {
             required: ['source']
           }
         },
-        handler: async (args: Record<string, unknown>) => {
-          fetchCalled = true;
-          expect(args.source).toBe('api');
-          return { data: [1, 2, 3] };
-        }
+        handler: async () => { fetchCalled = true; return {}; }
       }
     ];
 
@@ -157,13 +153,11 @@ describe('integration tests', () => {
           ]
         },
         'Plan done.',
-        // Execution task-1: AI calls external tool
+        // Execution task-1: AI calls external tool → returned as pending
         {
-          content: '',
+          content: 'データ取得が必要',
           toolCalls: [{ id: 'call-1', name: 'fetchData', arguments: { source: 'api' } }]
         },
-        // Execution task-1: AI produces text result after tool
-        'データ取得完了',
         // Execution task-2: テキスト出力のみ
         '処理完了',
         // Integration
@@ -181,8 +175,11 @@ describe('integration tests', () => {
 
     const result = await agenticProcess(driver, userModule, context, { tools });
 
-    expect(fetchCalled).toBe(true);
-    expect(result.context.executionLog?.[0].toolCalls?.[0].result).toEqual({ data: [1, 2, 3] });
+    // 外部ツールのhandlerは呼ばれない
+    expect(fetchCalled).toBe(false);
+    // pendingToolCallsとして返される
+    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].name).toBe('fetchData');
+    expect(result.context.executionLog?.[0].pendingToolCalls?.[0].arguments).toEqual({ source: 'api' });
     expect(result.metadata?.toolCallsUsed).toBe(1);
   });
 

@@ -142,7 +142,7 @@ export async function agenticProcess(
 
   // Build result
   const totalToolCalls = processState.executionLog.reduce(
-    (sum, log) => sum + (log.toolCalls?.length || 0), 0
+    (sum, log) => sum + (log.pendingToolCalls?.length || 0), 0
   );
 
   return {

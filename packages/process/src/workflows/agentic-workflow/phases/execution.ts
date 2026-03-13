@@ -8,7 +8,7 @@ import type { AIDriver } from '../../types.js';
 import { WorkflowExecutionError } from '../../types.js';
 import type { AgenticWorkflowContext, AgenticTask, AgenticTaskExecutionLog, ToolSpec, AgenticLogger } from '../types.js';
 import { agentic } from './common.js';
-import { queryWithTools, createExecutionBuiltinTools, isBuiltinTool, rethrowAsWorkflowError, formatTaskDetails, formatLogContentParts } from '../process/index.js';
+import { queryWithTools, createExecutionBuiltinTools, rethrowAsWorkflowError, formatTaskDetails, formatLogContentParts } from '../process/index.js';
 
 /**
  * Execution phase module for agent workflow
@@ -136,10 +136,11 @@ export async function runTask(
 
   const stateRef = { current: undefined as string | undefined };
   const builtinTools = createExecutionBuiltinTools(stateRef);
-  const allTools = [...externalTools, ...builtinTools];
+  const externalToolDefs = externalTools.map(t => t.definition);
 
   try {
-    const result = await queryWithTools(driver, prompt, allTools, {
+    const result = await queryWithTools(driver, prompt, builtinTools, {
+      externalToolDefs,
       maxIterations: maxToolCalls,
       logger,
       logPrefix: `Task ${task.id} - `,
@@ -157,22 +158,14 @@ export async function runTask(
       );
     }
 
-    // Filter out builtin tool calls from log
-    const externalToolCalls = result.toolCallLog.filter(tc => !isBuiltinTool(tc.name));
-
     return {
       taskId: task.id,
       taskType: task.taskType,
       result: result.content,
-      toolCalls: externalToolCalls.length > 0 ? externalToolCalls : undefined,
+      pendingToolCalls: result.pendingToolCalls,
       state: stateRef.current,
       metadata: {
         usage: result.usage,
-        toolCallRounds: result.toolCallLog.length > 0
-          ? result.toolCallLog.filter(tc => !isBuiltinTool(tc.name)).length > 0
-            ? Math.ceil(externalToolCalls.length)
-            : 0
-          : 0
       }
     };
   } catch (error) {
