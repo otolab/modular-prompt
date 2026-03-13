@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@modular-prompt/driver';
+import type { ToolDefinition, QueryResult } from '@modular-prompt/driver';
 
 /**
  * Tool specification: definition for AI + handler for execution
@@ -42,7 +42,10 @@ export interface AgenticTaskExecutionLog {
   result: string;              // テキスト出力がそのまま入る
   toolCalls?: ToolCallLog[];
   state?: string;              // __updateState() で設定された値
-  metadata?: any;
+  metadata?: {
+    usage?: QueryResult['usage'];
+    toolCallRounds: number;
+  };
 }
 
 /**
@@ -57,7 +60,7 @@ export interface AgenticTaskPlan {
  */
 export interface AgenticWorkflowContext {
   objective: string;
-  inputs?: any;
+  inputs?: Record<string, unknown>;
   state?: {
     content: string;
     usage?: number;
@@ -69,6 +72,13 @@ export interface AgenticWorkflowContext {
 }
 
 /**
+ * Logger interface for agentic workflow
+ */
+export interface AgenticLogger {
+  debug: (...args: unknown[]) => void;
+}
+
+/**
  * Options for agentic workflow
  */
 export interface AgenticWorkflowOptions {
@@ -77,5 +87,5 @@ export interface AgenticWorkflowOptions {
   maxToolCalls?: number;          // タスクあたりの最大ツール呼び出し数（デフォルト: 10）
   enablePlanning?: boolean;       // 計画フェーズの有効化（デフォルト: true）
   useFreeformExecution?: boolean; // Use freeform execution module (デフォルト: false)
-  logger?: any;
+  logger?: AgenticLogger;
 }

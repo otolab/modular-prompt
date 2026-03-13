@@ -5,7 +5,7 @@
  * Execution: __updateState で状態引き継ぎ
  */
 
-import type { ToolSpec, AgenticTask, BuiltinTaskType } from './types.js';
+import type { ToolSpec, AgenticTask, BuiltinTaskType } from '../types.js';
 
 export const BUILTIN_TOOL_PREFIX = '__';
 

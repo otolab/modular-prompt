@@ -1,4 +1,4 @@
-import type { AgenticTaskExecutionLog, AgenticTask, ToolCallLog } from './types.js';
+import type { AgenticTaskExecutionLog, AgenticTask, ToolCallLog } from '../types.js';
 
 /**
  * ToolCallLog を表示用文字列にフォーマット

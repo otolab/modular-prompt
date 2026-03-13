@@ -9,11 +9,12 @@ export type {
   AgenticTaskPlan,
   AgenticTaskExecutionLog,
   BuiltinTaskType,
-  ToolSpec
+  ToolSpec,
+  AgenticLogger
 } from './types.js';
 
 // Builtin tools
-export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './builtin-tools.js';
+export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './process/index.js';
 
 // Modules
 export {
@@ -22,4 +23,4 @@ export {
   execution,
   executionFreeform,
   integration
-} from './modules/index.js';
+} from './phases/index.js';

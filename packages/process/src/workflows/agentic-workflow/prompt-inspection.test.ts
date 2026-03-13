@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { compile, merge } from '@modular-prompt/core';
-import { agentic } from './modules/agentic.js';
-import { planning } from './modules/planning.js';
-import { execution } from './modules/execution.js';
-import { integration } from './modules/integration.js';
+import { agentic } from './phases/common.js';
+import { planning } from './phases/planning.js';
+import { execution } from './phases/execution.js';
+import { integration } from './phases/integration.js';
 import type { AgenticWorkflowContext, AgenticTaskPlan } from './types.js';
 
 function collectText(elements: any[] = []): string {

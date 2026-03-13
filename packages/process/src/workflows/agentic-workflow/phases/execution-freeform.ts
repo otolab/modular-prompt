@@ -1,6 +1,6 @@
 import type { PromptModule } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
-import { formatLogContentParts, formatTaskDetails } from '../format-helpers.js';
+import { formatLogContentParts, formatTaskDetails } from '../process/index.js';
 
 /**
  * Execution phase module (freeform version) for agent workflow

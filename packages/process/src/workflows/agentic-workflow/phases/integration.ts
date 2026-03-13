@@ -1,6 +1,14 @@
+/**
+ * Integration phase - combining all task results into final output
+ */
+
+import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
-import type { AgenticWorkflowContext, AgenticTask } from '../types.js';
-import { formatLogContentParts } from '../format-helpers.js';
+import type { AIDriver } from '../../types.js';
+import { WorkflowExecutionError } from '../../types.js';
+import type { AgenticWorkflowContext, AgenticTask, AgenticLogger } from '../types.js';
+import { agentic } from './common.js';
+import { formatLogContentParts, rethrowAsWorkflowError } from '../process/index.js';
 
 /**
  * Integration phase module for agent workflow
@@ -70,3 +78,40 @@ export const integration: PromptModule<AgenticWorkflowContext> = {
     'Summarize what was accomplished and provide the complete solution to the objective.'
   ]
 };
+
+/**
+ * Integration phase: combine results into final output
+ */
+export async function runIntegration(
+  driver: AIDriver,
+  module: PromptModule<AgenticWorkflowContext>,
+  context: AgenticWorkflowContext,
+  logger?: AgenticLogger
+): Promise<string> {
+  const integrationModule = merge(agentic, integration, module);
+  const prompt = compile(integrationModule, context);
+
+  try {
+    const result = await driver.query(prompt);
+    logger?.debug('Integration - AI generated:', result.content);
+
+    if (result.finishReason && result.finishReason !== 'stop') {
+      throw new WorkflowExecutionError(
+        `Integration failed with reason: ${result.finishReason}`,
+        context,
+        {
+          phase: 'integration',
+          partialResult: context.executionLog?.map(log => log.result).join('\n\n') || '',
+          finishReason: result.finishReason
+        }
+      );
+    }
+
+    return result.content;
+  } catch (error) {
+    rethrowAsWorkflowError(error, context, {
+      phase: 'integration',
+      partialResult: context.executionLog?.map(log => log.result).join('\n\n') || ''
+    });
+  }
+}
