@@ -61,6 +61,23 @@ export function createPlanningTools(registeredTasks: AgenticTask[]): ToolSpec[] 
 }
 
 /**
+ * 現在時刻を返す組み込みツール
+ */
+const timeTool: ToolSpec = {
+  definition: {
+    name: '__time',
+    description: 'Get the current date and time.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  handler: async () => {
+    return new Date().toISOString();
+  },
+};
+
+/**
  * Execution フェーズ用の組み込みツールを生成
  */
 export function createExecutionBuiltinTools(
@@ -84,5 +101,6 @@ export function createExecutionBuiltinTools(
         return 'State updated successfully';
       },
     },
+    timeTool,
   ];
 }

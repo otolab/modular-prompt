@@ -308,7 +308,31 @@ describe('agenticProcess', () => {
     expect(result.context.executionLog?.[0].state).toBe('state data');
   });
 
-  // 12. ツールなしワークフロー
+  // 12. __time ビルトインツール
+  it('should handle __time builtin tool and continue loop', async () => {
+    const driver = new TestDriver({
+      responses: [
+        // Planning
+        { content: '', toolCalls: [{ id: 'tc-1', name: '__task', arguments: { id: 'task-1', description: 'Check time' } }] },
+        'Done.',
+        // Execution: LLM calls __time (builtin) → executed internally, loop continues
+        { content: '', toolCalls: [{ id: 'c1', name: '__time', arguments: {} }] },
+        // Execution: LLM produces result using the time
+        'The current time is noted.',
+        // Integration
+        'Final'
+      ]
+    });
+
+    const context: AgenticWorkflowContext = { objective: 'Check time' };
+    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
+
+    expect(result.context.executionLog?.[0].result).toBe('The current time is noted.');
+    // __time is builtin, so no pendingToolCalls
+    expect(result.context.executionLog?.[0].pendingToolCalls).toBeUndefined();
+  });
+
+  // 13. ツールなしワークフロー
   it('should work without any tools', async () => {
     const driver = new TestDriver({
       responses: [
