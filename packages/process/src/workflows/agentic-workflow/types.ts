@@ -86,6 +86,5 @@ export interface AgenticWorkflowOptions {
   tools?: ToolSpec[];             // 利用可能な外部ツール
   maxToolCalls?: number;          // タスクあたりの最大ツール呼び出し数（デフォルト: 10）
   enablePlanning?: boolean;       // 計画フェーズの有効化（デフォルト: true）
-  useFreeformExecution?: boolean; // Use freeform execution module (デフォルト: false)
   logger?: AgenticLogger;
 }

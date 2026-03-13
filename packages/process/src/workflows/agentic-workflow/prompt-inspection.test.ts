@@ -157,9 +157,8 @@ describe('Agent Workflow Prompt Inspection', () => {
     const executionPrompt = compile(mergedExecution, executionContext);
 
     const instructionText = collectText(executionPrompt.instructions);
-    expect(instructionText).toContain('**Current Phase: Execution**');
+    expect(instructionText).toContain('**Current Phase: Execution (Task 2/4)**');
     expect(instructionText).toContain(plan.tasks[1].description);
-    expect(instructionText).toContain('[Currently executing]');
 
     const dataText = collectText(executionPrompt.data);
     expect(dataText).toContain('Progress: 1/4 tasks completed');

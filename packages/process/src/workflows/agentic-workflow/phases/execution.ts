@@ -8,62 +8,53 @@ import type { AIDriver } from '../../types.js';
 import { WorkflowExecutionError } from '../../types.js';
 import type { AgenticWorkflowContext, AgenticTask, AgenticTaskExecutionLog, ToolSpec, AgenticLogger } from '../types.js';
 import { agentic } from './common.js';
-import { executionFreeform } from './execution-freeform.js';
-import { queryWithTools, createExecutionBuiltinTools, isBuiltinTool, rethrowAsWorkflowError, formatTaskDetails, formatToolCall } from '../process/index.js';
+import { queryWithTools, createExecutionBuiltinTools, isBuiltinTool, rethrowAsWorkflowError, formatTaskDetails, formatLogContentParts } from '../process/index.js';
 
 /**
  * Execution phase module for agent workflow
- * Phase-specific definitions for executing a single step
- *
- * Should be merged with agentic and user's module:
- *   merge(agentic, execution, userModule)
  */
 export const execution: PromptModule<AgenticWorkflowContext> = {
   methodology: [
-    '',
-    '**Current Phase: Execution**',
-    '',
-    '- Execute only the current task of the execution plan.',
-    '- Your text response becomes the result of this task.',
-    '- Use `__updateState` tool to pass information to the next task if needed.'
+    (ctx: AgenticWorkflowContext) => {
+      const currentTaskIndex = (ctx.executionLog?.length || 0) + 1;
+      const totalTasks = ctx.plan?.tasks.length || 0;
+      return [
+        `- **Current Phase: Execution (Task ${currentTaskIndex}/${totalTasks})**`,
+        '  - Execute only the current task of the execution plan.',
+        '  - Follow the guidelines/constraints specified in the plan.',
+        '  - Your text response becomes the task result.',
+        '  - Use `__updateState` tool to pass information to the next task if needed.',
+      ];
+    }
   ],
 
   instructions: [
-    {
-      type: 'subsection',
-      title: 'Execution Phase Process',
-      items: [
-        '- Focus solely on completing the current task',
-        '- Use available tools if needed to accomplish the task',
-        '- Your text response becomes the task result',
-        '- Use `__updateState` tool to pass handover information to the next task'
-      ]
-    },
-    {
-      type: 'subsection',
-      title: 'Execution Plan',
-      items: [
-        (ctx) => {
-          if (!ctx.plan) {
-            return null;
-          }
+    (ctx: AgenticWorkflowContext) => {
+      const items: string[] = [];
 
-          const currentTaskId = ctx.currentTask?.id;
+      if (ctx.currentTask?.description) {
+        items.push(ctx.currentTask.description, '');
+      }
 
-          return ctx.plan.tasks.map((task: AgenticTask) => {
-            const baseText = task.description;
+      items.push('**Requirements:**');
+      if (ctx.executionLog && ctx.executionLog.length > 0) {
+        items.push('- Read and understand the previous task\'s decisions (shown in Data section below)');
+        items.push('- Use that understanding to complete THIS task');
+        items.push('- Produce only NEW content for this task');
+      } else {
+        items.push('- Focus on the current task instructions only');
+      }
+      items.push('- Use available tools if needed to accomplish the task');
+      items.push('- Concise output is acceptable');
 
-            // For currently executing task, show guidelines/constraints
-            if (task.id === currentTaskId) {
-              const details: string[] = [`- **${baseText}** ← **[Currently executing]**`];
-              details.push(...formatTaskDetails(task).map(line => `  ${line}`));
-              return details;
-            }
-
-            return `- ${baseText}`;
-          }).flat();
+      if (ctx.currentTask) {
+        const details = formatTaskDetails(ctx.currentTask);
+        if (details.length > 0) {
+          items.push('', ...details);
         }
-      ]
+      }
+
+      return items;
     }
   ],
 
@@ -83,39 +74,35 @@ export const execution: PromptModule<AgenticWorkflowContext> = {
 
   materials: [
     (ctx) => {
-      if (!ctx.executionLog || ctx.executionLog.length === 0 || !ctx.plan) {
+      if (!ctx.executionLog || ctx.executionLog.length === 0) {
         return null;
       }
 
-      return ctx.executionLog.map((log) => {
-        const task = ctx.plan!.tasks.find((t: AgenticTask) => t.id === log.taskId);
+      return ctx.executionLog.map((log, index) => {
+        const parts: string[] = [];
 
-        const contentParts: string[] = [];
-
+        const task = ctx.plan?.tasks[index];
         if (task) {
-          contentParts.push('## Instructions', '', task.description, '');
+          const instructionsParts: string[] = [];
+          if (task.description) {
+            instructionsParts.push(task.description);
+          }
           const details = formatTaskDetails(task);
           if (details.length > 0) {
-            contentParts.push(...details, '');
+            instructionsParts.push('', ...details);
+          }
+          if (instructionsParts.length > 0) {
+            parts.push(`[Instructions]\n${instructionsParts.join('\n')}`);
           }
         }
 
-        contentParts.push('## Result', '', log.result);
-
-        if (log.toolCalls && log.toolCalls.length > 0) {
-          contentParts.push('', '**Tool Calls:**');
-          contentParts.push(...log.toolCalls.map(formatToolCall));
-        }
-
-        if (log.state) {
-          contentParts.push('', '**State:**', log.state);
-        }
+        parts.push(...formatLogContentParts(log));
 
         return {
           type: 'material' as const,
           id: `previous-task-${log.taskId}`,
           title: `Previous task decision: ${log.taskId}`,
-          content: contentParts.join('\n')
+          content: parts.join('\n\n')
         };
       });
     }
@@ -136,14 +123,10 @@ export async function runTask(
   task: AgenticTask,
   externalTools: ToolSpec[],
   executionLog: AgenticTaskExecutionLog[],
-  useFreeform: boolean,
   maxToolCalls: number,
   logger?: AgenticLogger
 ): Promise<AgenticTaskExecutionLog> {
-  const executionPhaseModule = useFreeform ? executionFreeform : execution;
-  const distributed = useFreeform ? { ...module, instructions: undefined } : module;
-
-  const executionModule = merge(agentic, executionPhaseModule, distributed);
+  const executionModule = merge(agentic, execution, module);
   const taskContext: AgenticWorkflowContext = {
     ...context,
     currentTask: task,

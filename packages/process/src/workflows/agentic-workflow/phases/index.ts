@@ -14,8 +14,6 @@ export {
   runTask
 } from './execution.js';
 
-export { executionFreeform } from './execution-freeform.js';
-
 export {
   integration,
   runIntegration

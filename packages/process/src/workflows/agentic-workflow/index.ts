@@ -21,6 +21,5 @@ export {
   agentic,
   planning,
   execution,
-  executionFreeform,
   integration
 } from './phases/index.js';

@@ -71,7 +71,6 @@ export async function agenticProcess(
     tools = [],
     maxToolCalls = 10,
     enablePlanning = true,
-    useFreeformExecution = false,
     logger
   } = options;
 
@@ -114,7 +113,7 @@ export async function agenticProcess(
     const logEntry = await runTask(
       resolveDriver(driver, 'instruct'), distributed, currentContext,
       task, tools, processState.executionLog,
-      useFreeformExecution, maxToolCalls, logger
+      maxToolCalls, logger
     );
     processState.executionLog.push(logEntry);
 
