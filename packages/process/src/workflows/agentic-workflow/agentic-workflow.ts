@@ -105,7 +105,7 @@ async function executeTask(
   externalTools: ToolSpec[],
   maxToolCalls: number
 ): Promise<AgenticTaskExecutionLog> {
-  const taskLogger = logger.context(`task:${task.id}:${task.taskType}`);
+  const taskLogger = logger.context(`agentic:task:${task.id}:${task.taskType}`);
   taskLogger.info('[start]', task.description);
 
   const taskConfig = getTaskTypeConfig(task.taskType);
@@ -134,7 +134,6 @@ async function executeTask(
       }
     );
 
-    taskLogger.verbose('[output]', result.content);
     taskLogger.info('[end]');
 
     return {

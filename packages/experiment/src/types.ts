@@ -176,4 +176,5 @@ export interface ExtendedExperimentOptions extends ExperimentOptions {
   dryRun?: boolean;
   logFile?: string;
   verbose?: boolean;
+  traceDir?: string;
 }

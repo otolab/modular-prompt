@@ -36,7 +36,7 @@ Logger.configure({
   level: options.verbose ? 'debug' : 'info',
   accumulateLevel: 'debug',
   isMcpMode: false,
-  accumulate: !!options.logFile,
+  accumulate: !!options.logFile || !!options.traceDir,
   maxEntries: 10000,
   logFile: options.logFile,
 });
@@ -55,6 +55,9 @@ if (options.enableEvaluation) {
   console.log(`Evaluators: ${options.evaluatorFilter?.join(', ') || 'all'}`);
 }
 console.log(`Dry run: ${options.dryRun ? 'enabled (plan only)' : 'disabled'}`);
+if (options.traceDir) {
+  console.log(`Trace dir: ${options.traceDir}`);
+}
 console.log('='.repeat(80));
 console.log();
 
@@ -215,6 +218,13 @@ if (options.logFile) {
   const { logger } = await import('./logger.js');
   await logger.flush();
   console.log(`📄 Log file written: ${options.logFile}`);
+}
+
+// Write trace if configured
+if (options.traceDir) {
+  const { writeTrace } = await import('./trace/writer.js');
+  await writeTrace(options.traceDir);
+  console.log(`📂 Trace written: ${options.traceDir}`);
 }
 
 // Cleanup drivers

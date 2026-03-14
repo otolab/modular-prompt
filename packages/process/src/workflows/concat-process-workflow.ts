@@ -156,7 +156,7 @@ export async function concatProcess(
 
       try {
         const queryResult = await resolveDriver(driver, 'default').query(prompt);
-        logger.verbose('Response:', queryResult.content);
+        logger.verbose('[output]', queryResult.content);
         
         // Check finish reason for dynamic failures
         if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
