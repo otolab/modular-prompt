@@ -60,7 +60,7 @@ describe('writeTrace', () => {
     const summary = JSON.parse(summaryContent);
 
     expect(summary.totalEntries).toBe(3);
-    expect(summary.contexts).toContain('default');
+    expect(summary.fileNames).toContain('default.log');
 
     // default.logの検証
     const logContent = await readFile(join(tempDir, 'default.log'), 'utf-8');
@@ -89,8 +89,8 @@ describe('writeTrace', () => {
     const summary = JSON.parse(summaryContent);
 
     expect(summary.totalEntries).toBe(2);
-    expect(summary.contexts).toContain('agentic');
-    expect(summary.contexts).toContain('agentic:task:1:planning');
+    expect(summary.fileNames).toContain('agentic.log');
+    expect(summary.fileNames).toContain('agentic_task_1_planning.log');
 
     // agentic.logの検証
     const agenticLog = await readFile(join(tempDir, 'agentic.log'), 'utf-8');
@@ -147,11 +147,33 @@ describe('writeTrace', () => {
     const summary = JSON.parse(summaryContent);
 
     expect(summary.totalEntries).toBe(5);
-    expect(summary.contexts).toHaveLength(2);
-    expect(summary.contexts).toContain('context1');
-    expect(summary.contexts).toContain('context2');
+    expect(summary.fileNames).toHaveLength(2);
+    expect(summary.fileNames).toContain('context1.log');
+    expect(summary.fileNames).toContain('context2.log');
     expect(summary.timestamp).toBeDefined();
     // timestampがISO形式であることを確認
     expect(() => new Date(summary.timestamp)).not.toThrow();
+  });
+
+  it('prefix付きログがprefix_context.logとして出力される', async () => {
+    Logger.configure({ accumulate: true });
+
+    const logger = new Logger({ prefix: 'MLX', context: 'driver' });
+    logger.info('MLX driver initialized');
+    logger.debug('Connection established');
+
+    await writeTrace(tempDir);
+
+    // summary.jsonの検証
+    const summaryContent = await readFile(join(tempDir, 'summary.json'), 'utf-8');
+    const summary = JSON.parse(summaryContent);
+
+    expect(summary.totalEntries).toBe(2);
+    expect(summary.fileNames).toContain('MLX_driver.log');
+
+    // MLX_driver.logの検証
+    const logContent = await readFile(join(tempDir, 'MLX_driver.log'), 'utf-8');
+    expect(logContent).toContain('MLX driver initialized');
+    expect(logContent).toContain('Connection established');
   });
 });

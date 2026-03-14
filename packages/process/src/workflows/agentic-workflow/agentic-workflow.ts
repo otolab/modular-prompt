@@ -32,7 +32,7 @@ import {
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 
-const logger = new Logger({ context: 'agentic' });
+const logger = new Logger({ prefix: 'process', context: 'agentic' });
 
 // ---------------------------------------------------------------------------
 // Bootstrap

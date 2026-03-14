@@ -221,6 +221,7 @@ const importantEntries = logger.getLogEntries({
 interface LogEntry {
   timestamp: string;    // ISO形式のタイムスタンプ
   level: LogLevel;      // ログレベル
+  prefix?: string;      // パッケージ識別子（experiment/MLX等）
   context?: string;     // コンテキスト名
   message: string;      // メッセージ
   args?: any[];         // 追加引数
@@ -253,6 +254,107 @@ const stats = logger.getLogStats();
 logger.clearLogEntries();  // メモリ内のログエントリをクリア
 ```
 
+### 命名規約
+
+プロジェクト全体でログを区別しやすくするため、`prefix`と`context`の命名規約を定めます。
+
+#### prefix の規約
+
+**目的**: パッケージを識別する
+**形式**: パッケージごとに1つの`prefix`を持つ
+**推奨される prefix**:
+
+| パッケージ | prefix |
+|-----------|--------|
+| `@modular-prompt/experiment` | `experiment` |
+| `@modular-prompt/simple-chat` | `simple-chat` |
+| `@modular-prompt/process` | `process` |
+| `@modular-prompt/driver` (MLXドライバー) | `MLX` |
+| `@modular-prompt/utils` (DriverRegistry) | `DriverRegistry` |
+
+#### context の規約
+
+**目的**: モジュール/機能を識別する
+**形式**: フラット形式または階層形式
+
+**フラット形式**: `{モジュール名}`
+```typescript
+// 例:
+context: 'runner'
+context: 'driver'
+context: 'default'
+context: 'evaluator'
+```
+
+**階層形式**: `{ベース}:{区分}:{識別子}:{タイプ}`
+```typescript
+// 例:
+context: 'agentic:task:1:planning'
+context: 'agentic:task:2:outputMessage'
+context: 'experiment:run:baseline:evaluation'
+```
+
+階層形式では、コロン(`:`)で区切ることで後からフィルタリングや集計が容易になります。
+
+**制約**:
+- 同一パッケージ内で`context`名が重複しないこと
+- 異なるパッケージ間では`prefix`で区別されるため、`context`の重複は許容される
+
+#### ベースロガーパターン
+
+各パッケージでは、以下のパターンでLoggerを使用することを推奨します：
+
+1. **パッケージごとのベースロガーを作成** (`logger.ts`等で定義)
+   ```typescript
+   // packages/experiment/src/logger.ts
+   import { Logger } from '@modular-prompt/utils';
+
+   export const logger = new Logger({
+     prefix: 'experiment',
+     context: 'main'
+   });
+   ```
+
+2. **各モジュールで`.context()`を使って派生インスタンスを作成**
+   ```typescript
+   // packages/experiment/src/run-comparison.ts
+   import { logger as baseLogger } from './logger';
+
+   const logger = baseLogger.context('runner');
+   logger.info('Runner started');
+   ```
+
+3. **ワークフロー関数では独自のLoggerインスタンスを作成してもよい**
+   その場合も`prefix`は必ず設定すること。
+   ```typescript
+   const logger = new Logger({
+     prefix: 'process',
+     context: 'default'
+   });
+   ```
+
+#### 現状の課題
+
+プロジェクト全体でLoggerの使用状況を調査した結果、以下の課題が確認されています：
+
+**未整備の箇所**:
+- `DriverRegistry`で`context`が使われていない
+- trace writerで設定なしのLoggerが使われている
+
+**改善済みの項目**:
+- ~~MLXドライバーの`context: 'process'`が紛らわしい問題~~ → trace writerがprefixを考慮するようになったため、`MLX_process.log`として出力され、区別可能になりました
+- ~~`@modular-prompt/process` パッケージで`prefix`が設定されていない問題~~ → 全ワークフローに `prefix: 'process'` を追加済み
+
+**trace出力のファイル名ルール**:
+- trace writerは `prefix` と `context` を組み合わせてファイル名を生成します
+- prefix あり + context あり: `{prefix}_{context}.log` (例: `MLX_driver.log`, `MLX_process.log`)
+- prefix あり + context なし: `{prefix}.log` (例: `DriverRegistry.log`)
+- prefix なし + context あり: `{context}.log` (例: `default.log`, `agentic.log`)
+- prefix なし + context なし: `unknown.log`
+- context の `:` は `_` に置換されます（例: `agentic:task:1:planning` → `agentic_task_1_planning.log`）
+
+これらの課題は今後段階的に修正する予定です。
+
 ### JSONL形式でのファイル出力
 
 #### ファイル出力の設定
@@ -282,8 +384,8 @@ await logger.flush({ filterByContext: true });
 #### JSONL形式の例
 
 ```json
-{"timestamp":"2024-01-01T10:00:00.000Z","level":"info","context":"runner","message":"Processing started","formatted":"2024-01-01T10:00:00.000Z INFO [app] Processing started"}
-{"timestamp":"2024-01-01T10:00:05.000Z","level":"error","context":"runner","message":"Error occurred","args":[{"code":"ERR_001"}],"formatted":"2024-01-01T10:00:05.000Z ERROR [app] Error occurred {\"code\":\"ERR_001\"}"}
+{"timestamp":"2024-01-01T10:00:00.000Z","level":"info","prefix":"experiment","context":"runner","message":"Processing started","formatted":"2024-01-01T10:00:00.000Z INFO [experiment] Processing started"}
+{"timestamp":"2024-01-01T10:00:05.000Z","level":"error","prefix":"experiment","context":"runner","message":"Error occurred","args":[{"code":"ERR_001"}],"formatted":"2024-01-01T10:00:05.000Z ERROR [experiment] Error occurred {\"code\":\"ERR_001\"}"}
 ```
 
 ### MCPモードのサポート

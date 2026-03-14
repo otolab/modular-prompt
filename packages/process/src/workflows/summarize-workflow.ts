@@ -6,7 +6,7 @@ import { analyzeForSummary, contentSummarize } from '../modules/summarize.js';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
-const logger = new Logger({ context: 'summarize' });
+const logger = new Logger({ prefix: 'process', context: 'summarize' });
 
 /**
  * Simple token estimation (roughly 4 characters per token)

@@ -14,28 +14,47 @@ export async function writeTrace(traceDir: string): Promise<void> {
   // ディレクトリ作成
   await mkdir(traceDir, { recursive: true });
 
+  // ファイル名を生成するヘルパー関数
+  const generateFilename = (prefix?: string, context?: string): string => {
+    const p = prefix || '';
+    const c = context || '';
+
+    if (p && c) {
+      // prefix あり + context あり: {prefix}_{context}.log
+      return `${p}_${c.replace(/:/g, '_')}.log`;
+    } else if (p) {
+      // prefix あり + context なし: {prefix}.log
+      return `${p}.log`;
+    } else if (c) {
+      // prefix なし + context あり: {context}.log
+      return `${c.replace(/:/g, '_')}.log`;
+    } else {
+      // prefix なし + context なし: unknown.log
+      return 'unknown.log';
+    }
+  };
+
   // summary.json を書き出す
-  const contexts = [...new Set(entries.map(e => e.context || 'unknown'))];
+  const fileNames = [...new Set(entries.map(e => generateFilename(e.prefix, e.context)))];
   const summary = {
     timestamp: new Date().toISOString(),
     totalEntries: entries.length,
-    contexts,
+    fileNames,
   };
   await writeFile(join(traceDir, 'summary.json'), JSON.stringify(summary, null, 2));
 
-  // context ごとにグループ化してファイルに書き出す
+  // prefix + context ごとにグループ化してファイルに書き出す
   const grouped = new Map<string, typeof entries>();
   for (const entry of entries) {
-    const ctx = entry.context || 'unknown';
-    if (!grouped.has(ctx)) {
-      grouped.set(ctx, []);
+    const filename = generateFilename(entry.prefix, entry.context);
+    if (!grouped.has(filename)) {
+      grouped.set(filename, []);
     }
-    grouped.get(ctx)!.push(entry);
+    grouped.get(filename)!.push(entry);
   }
 
-  for (const [context, contextEntries] of grouped) {
-    // ファイル名: context の : を _ に置換（ファイルシステム安全）
-    const filename = context.replace(/:/g, '_') + '.log';
+  for (const [filename, contextEntries] of grouped) {
+    // ファイル名はすでに生成済み
 
     // 各エントリを読みやすい形式で書き出す
     const lines = contextEntries.map(entry => {

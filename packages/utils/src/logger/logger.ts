@@ -12,9 +12,10 @@ import { appendFile } from 'fs/promises';
 const LOG_LEVEL_VALUES = ['quiet', 'error', 'warn', 'info', 'verbose', 'debug'] as const;
 export type LogLevel = (typeof LOG_LEVEL_VALUES)[number];
 
-interface LogEntry {
+export interface LogEntry {
   timestamp: string;
   level: LogLevel;
+  prefix?: string; // パッケージ識別子（experiment/MLX等）
   context?: string; // runner/evaluator/experiment など
   message: string;
   args?: any[];
@@ -199,9 +200,11 @@ export class Logger {
     const formattedMessage = this.formatMessage(level, message, ...args);
 
     // ログエントリを作成
+    const computedPrefix = this.computedPrefix();
     const logEntry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,
+      prefix: computedPrefix || undefined,
       context: this.computedContext(),
       message,
       args: args.length > 0 ? args : undefined,

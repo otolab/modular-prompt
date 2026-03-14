@@ -5,7 +5,7 @@ import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
-const logger = new Logger({ context: 'default' });
+const logger = new Logger({ prefix: 'process', context: 'default' });
 
 /**
  * Options for default workflow

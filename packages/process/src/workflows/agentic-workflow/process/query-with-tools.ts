@@ -11,7 +11,7 @@ import type { QueryResult } from '@modular-prompt/driver';
 import type { ToolSpec, ToolCallLog, AgenticWorkflowContext } from '../types.js';
 import { isBuiltinTool } from './builtin-tools.js';
 
-const logger = new Logger({ context: 'agentic' });
+const logger = new Logger({ prefix: 'process', context: 'agentic' });
 
 /**
  * Execute builtin tool calls and return ToolResultMessageElements

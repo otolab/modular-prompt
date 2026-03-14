@@ -6,7 +6,7 @@ import { streamProcessing } from '../modules/stream-processing.js';
 import type { StreamProcessingContext } from '../modules/stream-processing.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
-const logger = new Logger({ context: 'stream' });
+const logger = new Logger({ prefix: 'process', context: 'stream' });
 
 /**
  * Simple token estimation (roughly 4 characters per token)

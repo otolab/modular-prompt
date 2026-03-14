@@ -12,7 +12,7 @@ import type { MaterialContext } from '../modules/material.js';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
 
-const logger = new Logger({ context: 'dialogue' });
+const logger = new Logger({ prefix: 'process', context: 'dialogue' });
 
 /**
  * Extended dialogue context with materials and preparation note
