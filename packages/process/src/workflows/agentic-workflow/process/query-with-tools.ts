@@ -4,18 +4,22 @@
 
 import type { ToolCall, ToolResultMessageElement, StandardMessageElement, CompiledPrompt, Element } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
+import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError } from '../../types.js';
 import type { AIDriver } from '../../types.js';
 import type { QueryResult } from '@modular-prompt/driver';
-import type { ToolSpec, ToolCallLog, AgenticWorkflowContext, AgenticLogger } from '../types.js';
+import type { ToolSpec, ToolCallLog, AgenticWorkflowContext } from '../types.js';
 import { isBuiltinTool } from './builtin-tools.js';
+
+const logger = new Logger({ context: 'agentic' });
 
 /**
  * Execute builtin tool calls and return ToolResultMessageElements
  */
 async function executeBuiltinToolCalls(
   toolCalls: ToolCall[],
-  builtinTools: ToolSpec[]
+  builtinTools: ToolSpec[],
+  logger: Logger
 ): Promise<ToolResultMessageElement[]> {
   const results: ToolResultMessageElement[] = [];
   for (const tc of toolCalls) {
@@ -29,6 +33,7 @@ async function executeBuiltinToolCalls(
     }
     try {
       const result = await spec.handler(tc.arguments);
+      logger.debug('[tool:result]', tc.name, result);
       results.push({
         type: 'message', role: 'tool', toolCallId: tc.id, name: tc.name,
         kind: typeof result === 'string' ? 'text' : 'data', value: result
@@ -48,8 +53,8 @@ export interface QueryWithToolsOptions {
   externalToolDefs?: ToolDefinition[];
   toolChoice?: ToolChoice;
   maxIterations?: number;
-  logger?: AgenticLogger;
   logPrefix?: string;
+  logger?: Logger;
 }
 
 export interface QueryWithToolsResult {
@@ -74,7 +79,7 @@ export async function queryWithTools(
   builtinTools: ToolSpec[],
   options: QueryWithToolsOptions = {}
 ): Promise<QueryWithToolsResult> {
-  const { externalToolDefs = [], maxIterations = 10, logger, logPrefix = '' } = options;
+  const { externalToolDefs = [], maxIterations = 10, logger: qLogger = logger } = options;
   const allToolDefs = [
     ...builtinTools.map(t => t.definition),
     ...externalToolDefs,
@@ -92,7 +97,7 @@ export async function queryWithTools(
       toolChoice: i === 0 ? (options.toolChoice ?? 'auto') : 'auto',
     });
 
-    logger?.debug(`${logPrefix}AI generated:`, queryResult.content);
+    qLogger.verbose('[output]', queryResult.content);
 
     if (queryResult.content) {
       content = queryResult.content;
@@ -107,11 +112,14 @@ export async function queryWithTools(
     const builtinCalls = queryResult.toolCalls.filter(tc => isBuiltinTool(tc.name));
     const externalCalls = queryResult.toolCalls.filter(tc => !isBuiltinTool(tc.name));
 
-    logger?.debug(`${logPrefix}Tool calls:`, queryResult.toolCalls.map(tc => tc.name));
+    // Log tool calls
+    for (const tc of queryResult.toolCalls) {
+      qLogger.debug('[tool:call]', tc.name, JSON.stringify(tc.arguments));
+    }
 
     // Execute builtin tools
     if (builtinCalls.length > 0) {
-      const toolResults = await executeBuiltinToolCalls(builtinCalls, builtinTools);
+      const toolResults = await executeBuiltinToolCalls(builtinCalls, builtinTools, qLogger);
       for (let j = 0; j < builtinCalls.length; j++) {
         toolCallLog.push({
           name: builtinCalls[j].name,

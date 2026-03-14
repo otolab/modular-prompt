@@ -13,6 +13,7 @@
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import type { FinishReason } from '@modular-prompt/driver';
+import { Logger } from '@modular-prompt/utils';
 import type { WorkflowResult } from '../types.js';
 import type {
   AgenticWorkflowContext,
@@ -21,7 +22,6 @@ import type {
   AgenticTaskExecutionLog,
   TaskType,
   ToolSpec,
-  AgenticLogger,
 } from './types.js';
 import { DEFAULT_DRIVER_ROLE } from './types.js';
 import { type DriverInput, resolveDriver } from '../driver-input.js';
@@ -31,6 +31,8 @@ import {
   createExecutionBuiltinTools,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
+
+const logger = new Logger({ context: 'agentic' });
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -101,12 +103,16 @@ async function executeTask(
   task: AgenticTask,
   taskList: AgenticTask[],
   externalTools: ToolSpec[],
-  maxToolCalls: number,
-  logger?: AgenticLogger
+  maxToolCalls: number
 ): Promise<AgenticTaskExecutionLog> {
+  const taskLogger = logger.context(`task:${task.id}:${task.taskType}`);
+  taskLogger.info('[start]', task.description);
+
   const taskConfig = getTaskTypeConfig(task.taskType);
   const taskModule = taskConfig.buildModule(task, context, module);
   const prompt = compile(taskModule, context);
+
+  taskLogger.verbose('[prompt]', JSON.stringify(prompt));
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList);
   const externalToolDefs = externalTools.map(t => t.definition);
@@ -124,10 +130,12 @@ async function executeTask(
         externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,
         toolChoice,
         maxIterations: maxToolCalls,
-        logger,
-        logPrefix: `Task ${task.id} (${task.taskType}) - `,
+        logger: taskLogger,
       }
     );
+
+    taskLogger.verbose('[output]', result.content);
+    taskLogger.info('[end]');
 
     return {
       taskId: task.id,
@@ -156,12 +164,13 @@ export async function agenticProcess(
   context: AgenticWorkflowContext,
   options: AgenticWorkflowOptions = {}
 ): Promise<WorkflowResult<AgenticWorkflowContext>> {
+  logger.info('[start] agentic workflow');
+
   const {
     maxTasks = 10,
     tools = [],
     maxToolCalls = 10,
     enablePlanning = true,
-    logger,
   } = options;
 
   // Bootstrap or use provided task list
@@ -180,7 +189,7 @@ export async function agenticProcess(
   for (let i = startIndex; i < taskList.length; i++) {
     // Guard: max tasks
     if (i >= maxTasks) {
-      logger?.debug(`Max tasks (${maxTasks}) reached, stopping at task ${i}`);
+      logger.info('[end] Max tasks reached', `(${maxTasks})`);
       break;
     }
 
@@ -195,7 +204,7 @@ export async function agenticProcess(
 
     const logEntry = await executeTask(
       driver, module, currentContext, task, taskList,
-      tools, maxToolCalls, logger
+      tools, maxToolCalls
     );
     executionLog.push(logEntry);
   }
@@ -215,6 +224,8 @@ export async function agenticProcess(
   const totalToolCalls = executionLog.reduce(
     (sum, log) => sum + (log.pendingToolCalls?.length || 0), 0
   );
+
+  logger.info('[end] agentic workflow');
 
   return {
     output,

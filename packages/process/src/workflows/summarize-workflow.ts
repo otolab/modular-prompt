@@ -1,9 +1,12 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
+import { Logger } from '@modular-prompt/utils';
 import { streamProcessing } from '../modules/stream-processing.js';
 import { analyzeForSummary, contentSummarize } from '../modules/summarize.js';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+
+const logger = new Logger({ context: 'summarize' });
 
 /**
  * Simple token estimation (roughly 4 characters per token)
@@ -55,10 +58,12 @@ export async function summarizeProcess(
   context: SummarizeWorkflowContext,
   options: SummarizeWorkflowOptions
 ): Promise<WorkflowResult<SummarizeWorkflowContext>> {
-  
-  const { 
+
+  logger.info('[start] summarize workflow');
+
+  const {
     targetTokens,
-    enableAnalysis = true 
+    enableAnalysis = true
   } = options;
   
   let currentContext = { ...context };
@@ -84,9 +89,11 @@ export async function summarizeProcess(
       };
       
       const prompt = compile(analysisModule, batchContext);
+      logger.verbose('[prompt]', JSON.stringify(prompt));
 
       try {
         const queryResult = await resolveDriver(driver, 'default').query(prompt);
+        logger.verbose('[output]', queryResult.content);
         
         // Check finish reason for dynamic failures
         if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -160,9 +167,11 @@ export async function summarizeProcess(
     };
     
     const prompt = compile(summarizeModule, batchContext);
+    logger.verbose('Prompt:', JSON.stringify(prompt));
 
     try {
       const queryResult = await resolveDriver(driver, 'default').query(prompt);
+      logger.verbose('Response:', queryResult.content);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -215,7 +224,9 @@ export async function summarizeProcess(
     analysisReport,
     range: undefined // Processing complete
   };
-  
+
+  logger.info('[end]');
+
   return {
     output: summaryState,
     context: finalContext,

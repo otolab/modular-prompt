@@ -10,7 +10,6 @@ export type {
   TaskType,
   ToolSpec,
   ToolCallLog,
-  AgenticLogger
 } from './types.js';
 
 export { DEFAULT_DRIVER_ROLE, DEFAULT_DATA_OPTIONS } from './types.js';

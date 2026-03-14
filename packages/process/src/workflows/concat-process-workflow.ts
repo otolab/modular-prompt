@@ -1,7 +1,10 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
+import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+
+const logger = new Logger({ context: 'concat' });
 
 
 /**
@@ -64,7 +67,9 @@ export async function concatProcess(
   context: ConcatProcessContext,
   options: ConcatProcessOptions = {}
 ): Promise<WorkflowResult<ConcatProcessContext>> {
-  
+
+  logger.info('[start] concat workflow');
+
   const {
     batchSize = 1,
     separator = '\n',
@@ -92,9 +97,11 @@ export async function concatProcess(
       };
 
       const prompt = compile(merge(concatProcessing, module), chunkContext);
+      logger.verbose('[prompt]', JSON.stringify(prompt));
 
       try {
         const result = await resolveDriver(driver, 'default').query(prompt);
+        logger.verbose('[output]', result.content);
         
         // Check finish reason for dynamic failures
         if (result.finishReason && result.finishReason !== 'stop') {
@@ -145,9 +152,11 @@ export async function concatProcess(
       };
 
       const prompt = compile(merge(concatProcessing, module), batchContext);
+      logger.verbose('[prompt]', JSON.stringify(prompt));
 
       try {
         const queryResult = await resolveDriver(driver, 'default').query(prompt);
+        logger.verbose('Response:', queryResult.content);
         
         // Check finish reason for dynamic failures
         if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -193,6 +202,8 @@ export async function concatProcess(
     results,
     processedCount
   };
+
+  logger.info('[end]');
 
   return {
     output,

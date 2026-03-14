@@ -35,7 +35,10 @@ drivers:
 # 共通定義
 _shared:
   models: &models_def
-    - qwen3.5-9b
+    # - qwen3.5-9b
+    - default: lfm2.5-instruct
+      plan: lfm2.5-thinking
+      # plan: qwen3.5-9b
 
   # 外部ツール定義
   tools: &tools_def

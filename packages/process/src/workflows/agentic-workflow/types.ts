@@ -1,4 +1,4 @@
-import type { ToolDefinition, QueryResult, ToolCall, FinishReason } from '@modular-prompt/driver';
+import type { ToolDefinition, QueryResult, ToolCall } from '@modular-prompt/driver';
 import type { MessageElement, MaterialElement } from '@modular-prompt/core';
 import type { ModelRole } from '../driver-input.js';
 
@@ -137,13 +137,6 @@ export interface AgenticWorkflowContext {
 // ---------------------------------------------------------------------------
 
 /**
- * Logger interface for agentic workflow
- */
-export interface AgenticLogger {
-  debug: (...args: unknown[]) => void;
-}
-
-/**
  * Options for agentic workflow
  */
 export interface AgenticWorkflowOptions {
@@ -155,6 +148,4 @@ export interface AgenticWorkflowOptions {
   maxToolCalls?: number;
   /** Skip planning and use provided taskList (default: true) */
   enablePlanning?: boolean;
-  /** Logger for debug output */
-  logger?: AgenticLogger;
 }

@@ -1,8 +1,11 @@
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import type { QueryOptions } from '@modular-prompt/driver';
+import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+
+const logger = new Logger({ context: 'default' });
 
 /**
  * Options for default workflow
@@ -22,8 +25,12 @@ export async function defaultProcess<TContext extends Record<string, any>>(
   options: DefaultProcessOptions = {}
 ): Promise<WorkflowResult<TContext>> {
   try {
+    logger.info('[start] default workflow');
     const compiled = compile(module, context);
+    logger.verbose('[prompt]', JSON.stringify(compiled));
     const result = await resolveDriver(driver, 'default').query(compiled, options.queryOptions);
+    logger.verbose('[output]', result.content);
+    logger.info('[end]');
 
     return {
       output: result.content,

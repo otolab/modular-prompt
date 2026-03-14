@@ -37,6 +37,10 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
   - 標準セクションとContextフィールドの使い方
   - 実装フロー（Context定義、モジュール定義、ワークフロー関数）
   - 典型的なフィールド構造と責任分担
+- **[ワークフローログ規約](../packages/process/docs/WORKFLOW_LOG_CONVENTIONS.md)** - ワークフロー実装者向けLogger使用規約
+  - context 命名規則
+  - メッセージ prefix 規則
+  - ログレベルの使い分け
 
 ## ユーティリティ
 

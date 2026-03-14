@@ -44,7 +44,6 @@ export type {
   TaskType,
   ToolSpec,
   ToolCallLog,
-  AgenticLogger,
   TaskTypeConfig
 } from './agentic-workflow/index.js';
 
