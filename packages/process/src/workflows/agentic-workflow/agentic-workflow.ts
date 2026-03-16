@@ -34,6 +34,14 @@ import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-too
 
 const logger = new Logger({ prefix: 'process', context: 'agentic' });
 
+/**
+ * Strip <think>...</think> blocks from model output.
+ * Thinking traces are internal reasoning and should not be passed to subsequent tasks.
+ */
+function stripThinkBlocks(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>\s*/g, '').replace(/^[\s\S]*?<\/think>\s*/g, '').trim();
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
@@ -139,7 +147,7 @@ async function executeTask(
     return {
       taskId: task.id,
       taskType: task.taskType,
-      result: result.content,
+      result: stripThinkBlocks(result.content),
       pendingToolCalls: result.pendingToolCalls,
       metadata: {
         usage: result.usage,

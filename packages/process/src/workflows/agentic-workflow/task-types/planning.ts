@@ -21,7 +21,7 @@
 import type { PromptModule, MaterialElement, SectionContent } from '@modular-prompt/core';
 import type { AgenticTask, AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
-import { buildTaskListDisplay } from './index.js';
+import { METHODOLOGY_INTRO, buildTaskListDisplay } from './index.js';
 
 /**
  * Extract text content from SectionContent
@@ -85,25 +85,58 @@ function buildModule(
     terms: userModule.terms,
 
     methodology: [
-      (ctx) => {
-        const taskListDisplay = buildTaskListDisplay(ctx);
-        return `**Current Phase: Planning**\n\nTask List:\n${taskListDisplay}`;
+      METHODOLOGY_INTRO,
+      {
+        type: 'subsection' as const,
+        title: 'Current Phase',
+        items: ['Planning — Analyze the objective and design an execution plan. Register each task using the `__task` tool.'],
       },
-      '',
-      '- Generate an execution plan by breaking down the Objective and Instructions into 3-5 executable tasks.',
-      '- Register each task using the `__task` tool provided.',
+      {
+        type: 'subsection' as const,
+        title: 'Task List',
+        items: [(ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx)],
+      },
     ],
 
     instructions: [
       {
         type: 'subsection',
-        title: 'Planning Requirements',
+        title: 'What is a Task',
         items: [
-          '- Break down the **Instructions shown in materials** into 3-5 concrete executable tasks',
-          '- Register each task using the `__task` tool',
-          '- Each task must have: id, description, taskType',
-          '- The tasks should accomplish the Instructions in a logical sequence',
-          '- Ensure logical flow between tasks',
+          'A task is a single unit of work executed by an independent AI instance.',
+          '- Each task receives only: the objective, its own description, and results from previous tasks.',
+          '- A task cannot see the original detailed instructions or guidelines (those are only available to you in this planning phase).',
+          '- A task produces a text result that subsequent tasks can reference.',
+        ],
+      },
+      {
+        type: 'subsection',
+        title: 'Available Task Types',
+        items: [
+          '- **think**: General-purpose reasoning and analysis. Can call external tools.',
+          '- **extractContext**: Extract information from inputs and materials. Can call external tools.',
+          '- **outputMessage**: Generate the final text output. Cannot call tools — only synthesizes from previous task results.',
+          '- **outputStructured**: Generate structured (JSON) output. Cannot call tools.',
+          '',
+          'An output task is always the final task. Since it cannot call tools, any tool-dependent work must be completed in earlier tasks.',
+        ],
+      },
+      {
+        type: 'subsection',
+        title: 'How to Plan',
+        items: [
+          '1. **Assess complexity**: Consider the objective and available information. A simple objective may need only one task before output. A complex objective may need multiple steps.',
+          '2. **Identify required actions**: What information needs to be gathered? What analysis is needed? What tools must be called?',
+          '3. **Design task sequence**: Order tasks so each builds on previous results.',
+          '4. **Register tasks**: Call `__task` for each task with a specific description and taskType.',
+        ],
+      },
+      {
+        type: 'subsection',
+        title: 'Writing Task Descriptions',
+        items: [
+          'The executing AI only sees: the objective, the task description, and previous task results. It does NOT see the original instructions, guidelines, or planning context.',
+          'Write descriptions that are specific and self-contained — include enough detail for the AI to execute independently.',
         ],
       },
     ],

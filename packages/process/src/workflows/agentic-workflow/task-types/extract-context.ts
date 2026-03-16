@@ -20,7 +20,7 @@
 import type { PromptModule, MaterialElement, MessageElement } from '@modular-prompt/core';
 import type { AgenticTask, AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
-import { buildTaskListDisplay, buildPreviousResultsMaterials } from './index.js';
+import { METHODOLOGY_INTRO, buildTaskListDisplay, buildPreviousResultsMaterials } from './index.js';
 
 /**
  * Build extractContext task module
@@ -57,9 +57,16 @@ function buildModule(
     terms: userModule.terms,
 
     methodology: [
-      (ctx) => {
-        const taskListDisplay = buildTaskListDisplay(ctx);
-        return `**Current Phase: Execution (Extract Context)**\n\nTask List:\n${taskListDisplay}`;
+      METHODOLOGY_INTRO,
+      {
+        type: 'subsection' as const,
+        title: 'Current Phase',
+        items: ['Execution — Extract relevant information from the provided inputs and materials.'],
+      },
+      {
+        type: 'subsection' as const,
+        title: 'Task List',
+        items: [(ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx)],
       },
     ],
 

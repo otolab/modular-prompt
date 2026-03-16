@@ -85,3 +85,10 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
 
   return lines.join('\n');
 }
+
+/**
+ * Common methodology introduction text.
+ * Used by all task types as the first element of their methodology section.
+ */
+export const METHODOLOGY_INTRO =
+  'This workflow accomplishes the objective by executing tasks sequentially. Each task is handled by a separate AI instance that only sees its own instructions and the results of previous tasks. You are now responsible for the task marked [current] in the task list below.';
