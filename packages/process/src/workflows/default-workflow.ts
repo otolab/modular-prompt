@@ -27,9 +27,15 @@ export async function defaultProcess<TContext extends Record<string, any>>(
   try {
     logger.info('[start] default workflow');
     const compiled = compile(module, context);
-    logger.verbose('[prompt]', JSON.stringify(compiled));
+    const toolNames = options.queryOptions?.tools?.map(t => t.name) ?? [];
+    logger.verbose('[prompt]', JSON.stringify(compiled), toolNames.length > 0 ? `tools: [${toolNames.join(', ')}]` : '');
     const result = await resolveDriver(driver, 'default').query(compiled, options.queryOptions);
     logger.verbose('[output]', result.content);
+    if (result.toolCalls?.length) {
+      for (const tc of result.toolCalls) {
+        logger.debug('[tool:call]', tc.name, JSON.stringify(tc.arguments));
+      }
+    }
     logger.info('[end]');
 
     return {

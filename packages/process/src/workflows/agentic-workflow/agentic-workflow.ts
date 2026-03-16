@@ -130,13 +130,13 @@ async function executeTask(
   // Set userModule in context
   context.userModule = module;
 
-  // Merge and compile
-  const prompt = compile(merge(workflowBase, taskCommon, taskConfig.module), context);
-
-  taskLogger.verbose('[prompt]', JSON.stringify(prompt));
+  // Merge and compile (taskCommon first for objective framing)
+  const prompt = compile(merge(taskCommon, workflowBase, taskConfig.module), context);
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList);
   const externalToolDefs = externalTools.map(t => t.definition);
+  const allToolNames = [...builtinTools.map(t => t.definition.name), ...externalToolDefs.map(t => t.name)];
+  taskLogger.verbose('[prompt]', JSON.stringify(prompt), allToolNames.length > 0 ? `tools: [${allToolNames.join(', ')}]` : '');
 
   const driverRole = task.driverRole || DEFAULT_DRIVER_ROLE[task.taskType];
 
