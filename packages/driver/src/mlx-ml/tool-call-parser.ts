@@ -425,6 +425,36 @@ function escapeRegExp(str: string): string {
 }
 
 /**
+ * パラメータ properties を再帰的にフォーマット
+ */
+function formatProperties(
+  lines: string[],
+  properties: Record<string, any>,
+  required?: string[],
+  depth: number = 1
+): void {
+  const indent = '  '.repeat(depth);
+  for (const [name, schema] of Object.entries(properties)) {
+    const req = required?.includes(name) ? ' (required)' : '';
+    const desc = schema.description ? `: ${schema.description}` : '';
+    const type = schema.type || 'any';
+
+    if (type === 'array' && schema.items) {
+      lines.push(`${indent}- ${name}: array${req}${desc}`);
+      if (schema.items.properties) {
+        lines.push(`${indent}  Each item:`);
+        formatProperties(lines, schema.items.properties, schema.items.required, depth + 2);
+      }
+    } else if (type === 'object' && schema.properties) {
+      lines.push(`${indent}- ${name}: object${req}${desc}`);
+      formatProperties(lines, schema.properties, schema.required, depth + 1);
+    } else {
+      lines.push(`${indent}- ${name}: ${type}${req}${desc}`);
+    }
+  }
+}
+
+/**
  * tool定義をテキスト形式にフォーマット
  * tool_call_formatまたは特殊トークンがある場合はそのフォーマットに合わせた指示を生成
  */
@@ -441,18 +471,13 @@ export function formatToolDefinitionsAsText(
       lines.push(tool.description);
     }
     if (tool.parameters) {
-      // パラメータを簡潔に表現
       const params = tool.parameters as {
-        properties?: Record<string, { type?: string; description?: string }>;
+        properties?: Record<string, any>;
         required?: string[];
       };
       if (params.properties) {
         lines.push('Parameters:');
-        for (const [name, schema] of Object.entries(params.properties)) {
-          const req = params.required?.includes(name) ? ' (required)' : '';
-          const desc = schema.description ? `: ${schema.description}` : '';
-          lines.push(`- ${name}: ${schema.type || 'any'}${req}${desc}`);
-        }
+        formatProperties(lines, params.properties, params.required, 1);
       } else {
         lines.push(`Parameters: ${JSON.stringify(tool.parameters)}`);
       }
