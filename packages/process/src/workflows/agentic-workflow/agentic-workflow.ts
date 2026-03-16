@@ -10,7 +10,7 @@
  * 3. Output: Last task (outputMessage/outputStructured) result is the final output
  */
 
-import { compile } from '@modular-prompt/core';
+import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import type { FinishReason } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
@@ -25,7 +25,7 @@ import type {
 } from './types.js';
 import { DEFAULT_DRIVER_ROLE } from './types.js';
 import { type DriverInput, resolveDriver } from '../driver-input.js';
-import { getTaskTypeConfig } from './task-types/index.js';
+import { getTaskTypeConfig, taskCommon } from './task-types/index.js';
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
@@ -117,8 +117,21 @@ async function executeTask(
   taskLogger.info('[start]', task.description);
 
   const taskConfig = getTaskTypeConfig(task.taskType);
-  const taskModule = taskConfig.buildModule(task, context, module);
-  const prompt = compile(taskModule, context);
+
+  // Build workflowBase from userModule
+  // objective/terms are always included; cue/schema only for output tasks
+  const workflowBase: PromptModule<AgenticWorkflowContext> = {
+    objective: module.objective,
+    terms: module.terms,
+    ...(task.taskType === 'outputMessage' && module.cue ? { cue: module.cue } : {}),
+    ...(task.taskType === 'outputStructured' && module.schema ? { schema: module.schema } : {}),
+  };
+
+  // Set userModule in context
+  context.userModule = module;
+
+  // Merge and compile
+  const prompt = compile(merge(workflowBase, taskCommon, taskConfig.module), context);
 
   taskLogger.verbose('[prompt]', JSON.stringify(prompt));
 

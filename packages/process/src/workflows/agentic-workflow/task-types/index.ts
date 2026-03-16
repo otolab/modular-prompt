@@ -2,7 +2,7 @@
  * Task type registry and shared utilities
  */
 
-import type { PromptModule, MaterialElement } from '@modular-prompt/core';
+import type { PromptModule, MaterialElement, SectionContent } from '@modular-prompt/core';
 import type { AgenticTask, AgenticWorkflowContext, TaskType, AgenticTaskExecutionLog } from '../types.js';
 import { config as planningConfig } from './planning.js';
 import { config as thinkConfig } from './think.js';
@@ -14,13 +14,8 @@ import { config as outputStructuredConfig } from './output-structured.js';
  * Task type configuration
  */
 export interface TaskTypeConfig {
-  /** Build task type-specific prompt module */
-  buildModule(
-    task: AgenticTask,
-    context: AgenticWorkflowContext,
-    userModule: PromptModule<AgenticWorkflowContext>
-  ): PromptModule<AgenticWorkflowContext>;
-
+  /** Static prompt module for this task type */
+  module: PromptModule<AgenticWorkflowContext>;
   /** List of builtin tool names available for this task type */
   builtinToolNames: string[];
 }
@@ -92,3 +87,54 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
  */
 export const METHODOLOGY_INTRO =
   'This workflow accomplishes the objective by executing tasks sequentially. Each task is handled by a separate AI instance that only sees its own instructions and the results of previous tasks. You are now responsible for the task marked [current] in the task list below.';
+
+/**
+ * Common module shared by all task types.
+ * Provides workflow methodology and state information.
+ */
+export const taskCommon: PromptModule<AgenticWorkflowContext> = {
+  methodology: [
+    METHODOLOGY_INTRO,
+    {
+      type: 'subsection' as const,
+      title: 'Current Task',
+      items: [
+        (ctx: AgenticWorkflowContext) => {
+          const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+          if (!task) return 'No current task';
+          return `${task.taskType}: ${task.description}`;
+        },
+      ],
+    },
+    {
+      type: 'subsection' as const,
+      title: 'Task List',
+      items: [
+        (ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx),
+      ],
+    },
+  ],
+  state: [
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      if (!task) return '';
+      return `Current task: ${task.description}\nTask type: ${task.taskType}`;
+    },
+  ],
+};
+
+/**
+ * Extract static text content from SectionContent.
+ * Only extracts strings, ignores DynamicContent and Elements.
+ */
+export function extractTextFromSection(section: SectionContent<any> | undefined): string {
+  if (!section) return '';
+  const items = Array.isArray(section) ? section : [section];
+  const textParts: string[] = [];
+  for (const item of items) {
+    if (typeof item === 'string') {
+      textParts.push(item);
+    }
+  }
+  return textParts.join('\n');
+}

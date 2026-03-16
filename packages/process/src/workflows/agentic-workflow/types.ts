@@ -1,5 +1,5 @@
 import type { ToolDefinition, QueryResult, ToolCall } from '@modular-prompt/driver';
-import type { MessageElement, MaterialElement } from '@modular-prompt/core';
+import type { MessageElement, MaterialElement, PromptModule } from '@modular-prompt/core';
 import type { ModelRole } from '../driver-input.js';
 
 // ---------------------------------------------------------------------------
@@ -118,6 +118,8 @@ export interface AgenticTaskExecutionLog {
 export interface AgenticWorkflowContext {
   /** Primary objective (passed as instruction to all tasks) */
   objective: string;
+  /** User-provided prompt module */
+  userModule?: PromptModule<any>;
   /** Structured input data */
   inputs?: Record<string, unknown>;
   /** Message history (for extractContext) */

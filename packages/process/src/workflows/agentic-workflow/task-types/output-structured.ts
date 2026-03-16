@@ -13,43 +13,21 @@
  * Tools: none
  */
 
-import type { PromptModule, MaterialElement } from '@modular-prompt/core';
-import type { AgenticTask, AgenticWorkflowContext } from '../types.js';
+import type { PromptModule } from '@modular-prompt/core';
+import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
 import { buildPreviousResultsMaterials } from './index.js';
 
-/**
- * Build outputStructured task module
- */
-function buildModule(
-  task: AgenticTask,
-  context: AgenticWorkflowContext,
-  userModule: PromptModule<AgenticWorkflowContext>
-): PromptModule<AgenticWorkflowContext> {
-  const materials: MaterialElement[] = [];
-
-  // Add all task results
-  if (context.executionLog && context.executionLog.length > 0) {
-    materials.push(...buildPreviousResultsMaterials(context.executionLog));
-  }
-
-  return {
-    objective: userModule.objective,
-    terms: userModule.terms,
-
-    state: [
-      `Phase: output`,
-      `Current task: ${task.description}`,
-      `Task type: ${task.taskType}`,
-    ],
-
-    materials: materials.length > 0 ? materials : undefined,
-
-    schema: userModule.schema,
-  };
-}
+const outputStructuredModule: PromptModule<AgenticWorkflowContext> = {
+  materials: [
+    (ctx: AgenticWorkflowContext) => {
+      if (!ctx.executionLog?.length) return null;
+      return buildPreviousResultsMaterials(ctx.executionLog);
+    },
+  ],
+};
 
 export const config: TaskTypeConfig = {
-  buildModule,
+  module: outputStructuredModule,
   builtinToolNames: [],
 };

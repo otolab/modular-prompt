@@ -17,83 +17,55 @@
  * Tools: __task, __time
  */
 
-import type { PromptModule, MaterialElement, MessageElement } from '@modular-prompt/core';
-import type { AgenticTask, AgenticWorkflowContext } from '../types.js';
+import type { PromptModule } from '@modular-prompt/core';
+import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
-import { METHODOLOGY_INTRO, buildTaskListDisplay, buildPreviousResultsMaterials } from './index.js';
+import { buildPreviousResultsMaterials } from './index.js';
 
-/**
- * Build think task module
- */
-function buildModule(
-  task: AgenticTask,
-  context: AgenticWorkflowContext,
-  userModule: PromptModule<AgenticWorkflowContext>
-): PromptModule<AgenticWorkflowContext> {
-  const materials: MaterialElement[] = [];
+const thinkModule: PromptModule<AgenticWorkflowContext> = {
+  instructions: [
+    {
+      type: 'subsection' as const,
+      title: 'Task Instructions',
+      items: [
+        (ctx: AgenticWorkflowContext) => {
+          const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+          return task?.description ?? '';
+        },
+      ],
+    },
+  ],
 
-  // Add previous task results
-  if (context.executionLog && context.executionLog.length > 0) {
-    materials.push(...buildPreviousResultsMaterials(context.executionLog));
-  }
+  materials: [
+    (ctx: AgenticWorkflowContext) => {
+      if (!ctx.executionLog?.length) return null;
+      return buildPreviousResultsMaterials(ctx.executionLog);
+    },
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      if (!task?.withMaterials || !ctx.materials?.length) return null;
+      return ctx.materials;
+    },
+  ],
 
-  // Add context materials if withMaterials=true (default: false)
-  if (task.withMaterials && context.materials) {
-    materials.push(...context.materials);
-  }
+  messages: [
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      if (!task?.withMessages || !ctx.messages?.length) return null;
+      return ctx.messages;
+    },
+  ],
 
-  // Prepare messages if withMessages=true (default: false)
-  const messages: MessageElement[] | undefined = task.withMessages && context.messages
-    ? [...context.messages]
-    : undefined;
-
-  return {
-    objective: userModule.objective,
-    terms: userModule.terms,
-
-    methodology: [
-      METHODOLOGY_INTRO,
-      {
-        type: 'subsection' as const,
-        title: 'Current Phase',
-        items: ['Execution — Carry out the assigned task and produce a result.'],
-      },
-      {
-        type: 'subsection' as const,
-        title: 'Task List',
-        items: [(ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx)],
-      },
-    ],
-
-    instructions: [
-      {
-        type: 'subsection',
-        title: 'Task Instructions',
-        items: [task.description],
-      },
-    ],
-
-    state: [
-      `Phase: execution`,
-      `Current task: ${task.description}`,
-      `Task type: ${task.taskType}`,
-    ],
-
-    materials: materials.length > 0 ? materials : undefined,
-
-    messages,
-
-    inputs: task.withInputs && context.inputs ? [
-      {
-        type: 'subsection',
-        title: 'Input Data',
-        items: [JSON.stringify(context.inputs, null, 2)],
-      },
-    ] : undefined,
-  };
-}
+  inputs: [
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      if (!task?.withInputs || !ctx.inputs) return null;
+      return JSON.stringify(ctx.inputs, null, 2);
+    },
+  ],
+};
 
 export const config: TaskTypeConfig = {
-  buildModule,
+  module: thinkModule,
   builtinToolNames: ['__task', '__time'],
 };

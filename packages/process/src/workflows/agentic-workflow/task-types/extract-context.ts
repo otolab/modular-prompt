@@ -17,88 +17,58 @@
  * Tools: __task, __time
  */
 
-import type { PromptModule, MaterialElement, MessageElement } from '@modular-prompt/core';
-import type { AgenticTask, AgenticWorkflowContext } from '../types.js';
+import type { PromptModule } from '@modular-prompt/core';
+import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
-import { METHODOLOGY_INTRO, buildTaskListDisplay, buildPreviousResultsMaterials } from './index.js';
+import { buildPreviousResultsMaterials } from './index.js';
 
-/**
- * Build extractContext task module
- */
-function buildModule(
-  task: AgenticTask,
-  context: AgenticWorkflowContext,
-  userModule: PromptModule<AgenticWorkflowContext>
-): PromptModule<AgenticWorkflowContext> {
-  const materials: MaterialElement[] = [];
+const extractContextModule: PromptModule<AgenticWorkflowContext> = {
+  instructions: [
+    {
+      type: 'subsection' as const,
+      title: 'Task Instructions',
+      items: [
+        (ctx: AgenticWorkflowContext) => {
+          const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+          return task?.description ?? '';
+        },
+      ],
+    },
+  ],
 
-  // Add previous task results
-  if (context.executionLog && context.executionLog.length > 0) {
-    materials.push(...buildPreviousResultsMaterials(context.executionLog));
-  }
+  materials: [
+    (ctx: AgenticWorkflowContext) => {
+      if (!ctx.executionLog?.length) return null;
+      return buildPreviousResultsMaterials(ctx.executionLog);
+    },
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      const withMaterials = task?.withMaterials ?? true;  // default true
+      if (!withMaterials || !ctx.materials?.length) return null;
+      return ctx.materials;
+    },
+  ],
 
-  // Add context materials if withMaterials (default: true)
-  const withMaterials = task.withMaterials ?? true;
-  if (withMaterials && context.materials) {
-    materials.push(...context.materials);
-  }
+  messages: [
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      const withMessages = task?.withMessages ?? true;  // default true
+      if (!withMessages || !ctx.messages?.length) return null;
+      return ctx.messages;
+    },
+  ],
 
-  // Prepare messages if withMessages (default: true)
-  const withMessages = task.withMessages ?? true;
-  const messages: MessageElement[] | undefined = withMessages && context.messages
-    ? [...context.messages]
-    : undefined;
-
-  // Prepare inputs if withInputs (default: true)
-  const withInputs = task.withInputs ?? true;
-
-  return {
-    objective: userModule.objective,
-    terms: userModule.terms,
-
-    methodology: [
-      METHODOLOGY_INTRO,
-      {
-        type: 'subsection' as const,
-        title: 'Current Phase',
-        items: ['Execution — Extract relevant information from the provided inputs and materials.'],
-      },
-      {
-        type: 'subsection' as const,
-        title: 'Task List',
-        items: [(ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx)],
-      },
-    ],
-
-    instructions: [
-      {
-        type: 'subsection',
-        title: 'Task Instructions',
-        items: [task.description],
-      },
-    ],
-
-    state: [
-      `Phase: execution`,
-      `Current task: ${task.description}`,
-      `Task type: ${task.taskType}`,
-    ],
-
-    materials: materials.length > 0 ? materials : undefined,
-
-    messages,
-
-    inputs: withInputs && context.inputs ? [
-      {
-        type: 'subsection',
-        title: 'Input Data',
-        items: [JSON.stringify(context.inputs, null, 2)],
-      },
-    ] : undefined,
-  };
-}
+  inputs: [
+    (ctx: AgenticWorkflowContext) => {
+      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
+      const withInputs = task?.withInputs ?? true;  // default true
+      if (!withInputs || !ctx.inputs) return null;
+      return JSON.stringify(ctx.inputs, null, 2);
+    },
+  ],
+};
 
 export const config: TaskTypeConfig = {
-  buildModule,
+  module: extractContextModule,
   builtinToolNames: ['__task', '__time'],
 };

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { compile } from '@modular-prompt/core';
+import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
-import { getTaskTypeConfig } from './task-types/index.js';
+import { getTaskTypeConfig, taskCommon } from './task-types/index.js';
 import type { AgenticWorkflowContext, AgenticTask } from './types.js';
 
 function collectText(elements: any[] = []): string {
@@ -46,6 +46,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
   it('planning: instructions/guidelines をデータ側に配置する', () => {
     const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
+      userModule,
       inputs: { document: 'サンプルドキュメントの内容...' },
       taskList,
       currentTaskIndex: 0,
@@ -53,8 +54,11 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     };
 
     const config = getTaskTypeConfig('planning');
-    const mod = config.buildModule(taskList[0], context, userModule);
-    const prompt = compile(mod, context);
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
     // objective は指示側にある
     const instructionText = collectText(prompt.instructions);
@@ -74,6 +78,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
   it('think: description が指示に、前タスク結果がデータに入る', () => {
     const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
+      userModule,
       taskList,
       currentTaskIndex: 1,
       executionLog: [
@@ -82,8 +87,11 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     };
 
     const config = getTaskTypeConfig('think');
-    const mod = config.buildModule(taskList[1], context, userModule);
-    const prompt = compile(mod, context);
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
     const instructionText = collectText(prompt.instructions);
     expect(instructionText).toContain('文書のテーマを分析する');
@@ -97,6 +105,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
   it('extractContext: messages/materials がデフォルトでデータに含まれる', () => {
     const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
+      userModule,
       taskList,
       currentTaskIndex: 2,
       executionLog: [
@@ -112,9 +121,11 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     };
 
     const config = getTaskTypeConfig('extractContext');
-    const task = { ...taskList[2], withMessages: true, withMaterials: true };
-    const mod = config.buildModule(task, context, userModule);
-    const prompt = compile(mod, context);
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
     // messages がプロンプトに含まれる
     const dataText = collectText(prompt.data);
@@ -125,6 +136,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
   it('outputMessage: cue が指示に、全タスク結果がデータに入る', () => {
     const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
+      userModule,
       taskList,
       currentTaskIndex: 3,
       executionLog: [
@@ -135,8 +147,12 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     };
 
     const config = getTaskTypeConfig('outputMessage');
-    const mod = config.buildModule(taskList[3], context, userModule);
-    const prompt = compile(mod, context);
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+      cue: userModule.cue,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
     // cue が output セクションに入る
     const outputText = collectText(prompt.output);
@@ -167,6 +183,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
 
     const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
+      userModule: moduleWithSchema,
       taskList: structuredTaskList,
       currentTaskIndex: 3,
       executionLog: [
@@ -177,8 +194,12 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     };
 
     const config = getTaskTypeConfig('outputStructured');
-    const mod = config.buildModule(structuredTaskList[3], context, moduleWithSchema);
-    const prompt = compile(mod, context);
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: moduleWithSchema.objective,
+      terms: moduleWithSchema.terms,
+      schema: moduleWithSchema.schema,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
     // schema が metadata.outputSchema に入る
     expect(prompt.metadata?.outputSchema).toBeDefined();
