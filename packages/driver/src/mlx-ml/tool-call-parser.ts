@@ -349,35 +349,80 @@ function parseGenericToolCalls(text: string): ToolCallParseResult {
   const toolCalls: ToolCall[] = [];
   let content = text;
   let callIndex = 0;
+  const matched: string[] = [];
 
-  // 汎用パターン: {"name": "...", "arguments": {...}} を検出
-  // 行頭からJSONオブジェクトが始まるか、テキスト末尾のJSONブロックを検出
-  const jsonPattern = /\{[\s\S]*?"name"\s*:\s*"[^"]+?"[\s\S]*?(?:"arguments"|"parameters")\s*:\s*\{[\s\S]*?\}\s*\}/g;
+  // テキスト中の JSON オブジェクトを括弧対応で抽出し、tool call か判定
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '{') continue;
 
-  let match;
-  while ((match = jsonPattern.exec(text)) !== null) {
+    const jsonStr = extractJsonObject(text, i);
+    if (!jsonStr) continue;
+
     try {
-      const parsed = JSON.parse(match[0]);
-      if (parsed.name && (parsed.arguments || parsed.parameters)) {
+      const parsed = JSON.parse(jsonStr);
+      const normalized = normalizeJsonToolCall(parsed);
+      if (normalized) {
         toolCalls.push({
           id: `call_${callIndex++}`,
-          name: parsed.name,
-          arguments: parsed.arguments || parsed.parameters || {}
+          name: normalized.name,
+          arguments: normalized.arguments || {}
         });
+        matched.push(jsonStr);
+        i += jsonStr.length - 1; // skip past this JSON
       }
     } catch {
-      // JSONパース失敗 → スキップ
+      // パース失敗 → スキップ
     }
   }
 
-  if (toolCalls.length > 0) {
-    // tool call部分をテキストから除去（最後のJSON部分のみ）
-    for (const match2 of [...text.matchAll(jsonPattern)]) {
-      content = content.replace(match2[0], '').trim();
+  if (matched.length > 0) {
+    for (const m of matched) {
+      content = content.replace(m, '').trim();
     }
   }
 
   return { content, toolCalls };
+}
+
+/**
+ * テキスト中の位置 start から括弧対応で JSON オブジェクトを抽出
+ */
+function extractJsonObject(text: string, start: number): string | null {
+  if (text[start] !== '{') return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 function parseMistralStyleToolCalls(
@@ -486,11 +531,12 @@ export function formatToolDefinitionsAsText(
     lines.push('');
   }
 
-  // tool call出力フォーマットの指示（既存ロジック維持）
+  // tool call出力フォーマットの指示
+  const example = '{"name": "tool_name", "arguments": {"key": "value", "list": [...], "obj": {...}}}';
   if (toolCallFormat?.call_start && toolCallFormat?.call_end) {
     lines.push('To call a tool, respond with:');
     lines.push(toolCallFormat.call_start);
-    lines.push('{"name": "tool_name", "arguments": {"param": "value"}}');
+    lines.push(example);
     lines.push(toolCallFormat.call_end);
   } else {
     const toolCallToken = specialTokens?.tool_call;
@@ -498,12 +544,12 @@ export function formatToolDefinitionsAsText(
       const pair = toolCallToken as SpecialTokenPair;
       lines.push('To call a tool, respond with:');
       lines.push(`${pair.start.text}`);
-      lines.push('{"name": "tool_name", "arguments": {"param": "value"}}');
+      lines.push(example);
       lines.push(`${pair.end.text}`);
     } else {
       lines.push('To call a tool, respond with:');
       lines.push('```json:toolCall');
-      lines.push('{"name": "tool_name", "arguments": {"param": "value"}}');
+      lines.push(example);
       lines.push('```');
     }
   }
