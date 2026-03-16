@@ -108,15 +108,16 @@ interface ParsedToolCall {
  * - 数値文字列 → number
  */
 function coerceValue(value: string | undefined): unknown {
-  if (value === undefined || value === 'None' || value === 'null') return null;
-  if (value === 'True' || value === 'true') return true;
-  if (value === 'False' || value === 'false') return false;
+  if (value === undefined) return null;
 
-  // 数値判定
-  const num = Number(value);
-  if (!isNaN(num) && value !== '') return num;
+  // Python形式の変換
+  const normalized = value === 'None' ? 'null' : value === 'True' ? 'true' : value === 'False' ? 'false' : value;
 
-  return value;
+  try {
+    return JSON.parse(normalized);
+  } catch {
+    return value;
+  }
 }
 
 /**
