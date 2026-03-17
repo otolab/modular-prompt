@@ -128,9 +128,12 @@ export async function loadEvaluators(
 
 /**
  * Module reference in config file
+ * - path: external file reference
+ * - module: inline PromptModule definition (static content only)
  */
 export type ModuleReference =
-  | { name: string; path: string; description?: string };
+  | { name: string; path: string; description?: string }
+  | { name: string; module: Record<string, any>; description?: string };
 
 /**
  * Load modules from references
@@ -146,6 +149,16 @@ export async function loadModules(
   const modules: ModuleDefinition[] = [];
 
   for (const ref of refs) {
+    if ('module' in ref) {
+      // Inline module definition
+      modules.push({
+        name: ref.name,
+        description: ref.description || '',
+        module: ref.module,
+      });
+      continue;
+    }
+
     const filePath = resolve(basePath, ref.path);
     const imported = await importFile(filePath);
     const module = imported.default;

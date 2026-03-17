@@ -8,8 +8,24 @@ models:
     capabilities: ["local", "tools"]
     priority: 10
     disabled: true
+  gemma-3-27b:
+    model: 'mlx-community/gemma-3-27b-it-qat-4bit'
+    provider: 'mlx'
+    flags: ['japanese', 'reasoning', 'local']
+    inputTokens: 128000
+    completionTokens: 8192
   qwen3.5-9b:
     model: mlx-community/Qwen3.5-9B-MLX-4bit
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 10
+  quen3.5-2b-optiq:
+    model: mlx-community/Qwen3.5-2B-OptiQ-4bit
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 10
+  qwq-bakeneko-32b:
+    model: mlx-community/qwq-bakeneko-32b-4bit
     provider: "mlx"
     capabilities: ["local", "tools"]
     priority: 10
@@ -35,10 +51,16 @@ drivers:
 # 共通定義
 _shared:
   models: &models_def
+    # - qwq-bakeneko-32b
+    # - qwen3.5-27b
+    # - gemma-3-27b
+    # - default: lfm2.5-instruct
+      # plan: quen3.5-2b-optiq
+    # - lfm2.5-thinking
+    # - default: lfm2.5-instruct
+    #   plan: lfm2.5-instruct
     # - qwen3.5-9b
-    - default: lfm2.5-instruct
-      plan: lfm2.5-thinking
-      # plan: qwen3.5-9b
+    - quen3.5-2b-optiq
 
   # 外部ツール定義
   tools: &tools_def
@@ -66,50 +88,66 @@ _shared:
 
   # v2 ビルトインツール定義
   planningTools: &planning_tools
-    - name: __task
-      description: "Register a task in the workflow. Call this multiple times to build the task list."
+    - name: __insert_tasks
+      description: "Insert tasks into the workflow. Each task is executed by a separate AI instance that only sees the Objective, its own instruction, and results from previous tasks. Write instructions that are specific and self-contained."
       parameters:
         type: object
         properties:
-          description:
-            type: string
-            description: "What this task should accomplish"
-          taskType:
-            type: string
-            enum: [planning, think, extractContext, outputMessage, outputStructured]
-            description: "Type of task. Default: think"
-          driverRole:
-            type: string
-            enum: [default, thinking, instruct, chat, plan]
-            description: "Driver role override."
-          withInputs:
-            type: boolean
-            description: "Include inputs in data."
-          withMessages:
-            type: boolean
-            description: "Include messages in data."
-          withMaterials:
-            type: boolean
-            description: "Include materials in data."
-          insertAt:
-            type: number
-            description: "Index to insert at."
-        required: [description]
+          tasks:
+            type: array
+            description: "Array of Task objects."
+            items:
+              type: object
+              properties:
+                instruction:
+                  type: string
+                  description: "Specific instruction for the task executor. This is the only guidance the executor receives, so be concrete and self-contained."
+                taskType:
+                  type: string
+                  enum: [planning, think, extractContext, outputMessage, outputStructured]
+                  description: "think: general reasoning and analysis, can call tools. extractContext: extract information from inputs/materials, can call tools. outputMessage: generate final text output, no tools. outputStructured: generate JSON output, no tools. Default: think"
+                driverRole:
+                  type: string
+                  enum: [default, thinking, instruct, chat, plan]
+                  description: "Driver role override."
+                withInputs:
+                  type: boolean
+                  description: "Include inputs in data."
+                withMessages:
+                  type: boolean
+                  description: "Include messages in data."
+                withMaterials:
+                  type: boolean
+                  description: "Include materials in data."
+              required: [instruction]
+        required: [tasks]
+    - name: __time
+      description: "Get the current date and time."
+      parameters:
+        type: object
+        properties: {}
 
   executionTools: &execution_tools
-    - name: __task
-      description: "Register a task in the workflow."
+    - name: __insert_tasks
+      description: "Insert tasks into the workflow."
       parameters:
         type: object
         properties:
-          description:
-            type: string
-            description: "What this task should accomplish"
-          taskType:
-            type: string
-            enum: [planning, think, extractContext, outputMessage, outputStructured]
-            description: "Type of task. Default: think"
-        required: [description]
+          tasks:
+            type: array
+            description: "Tasks to insert."
+            items:
+              type: object
+              properties:
+                instruction:
+                  type: string
+                  description: "Specific instruction for the task executor."
+                taskType:
+                  type: string
+                  enum: [planning, think, extractContext, outputMessage, outputStructured]
+                  description: "Type of task. Default: think"
+              required: [instruction]
+        required: [tasks]
     - name: __time
       description: "Get the current date and time."
       parameters:
@@ -118,15 +156,26 @@ _shared:
 
   # execution用: ビルトイン + 外部ツール統合
   executionAllTools: &execution_all_tools
-    - name: __task
-      description: "Register a task in the workflow."
+    - name: __insert_tasks
+      description: "Insert tasks into the workflow."
       parameters:
         type: object
         properties:
-          description:
-            type: string
-            description: "What this task should accomplish"
-        required: [description]
+          tasks:
+            type: array
+            description: "Tasks to insert."
+            items:
+              type: object
+              properties:
+                instruction:
+                  type: string
+                  description: "Specific instruction for the task executor."
+                taskType:
+                  type: string
+                  enum: [planning, think, extractContext, outputMessage, outputStructured]
+                  description: "Type of task. Default: think"
+              required: [instruction]
+        required: [tasks]
     - name: __time
       description: "Get the current date and time."
       parameters:
@@ -162,6 +211,7 @@ _shared:
   planningOptions: &planning_options
     temperature: 0.3
     maxTokens: 2048
+    # apiStrategy: force-completion
     tools: *planning_tools
     toolChoice: required
 
@@ -172,7 +222,7 @@ _shared:
 
 modules:
   - name: planning
-    path: ./planning-module.mjs
+    path: ./planning-module.ts
     description: "Planning タスクタイプのプロンプトテスト"
 
   - name: think
@@ -183,91 +233,137 @@ modules:
     path: ./agentic-module.mjs
     description: "Agentic workflow エンドツーエンドテスト"
 
+  - name: agentic-time-check
+    description: "時刻確認用インラインモジュール"
+    module:
+      objective:
+        - ユーザメッセージを理解して適切な応答を返す。
+      instructions:
+        - 日本語で応答する
+      messages:
+        - role: user
+          content: 現在の日時を確認して。
+
 testCases:
   # ---- Planning タスクタイプテスト ----
   - name: "計画生成: ドキュメント分析"
-    description: "__taskツールでタスク登録を期待"
+    description: "__insert_tasksツールでタスク登録を期待"
     modules: [planning]
     models: *models_def
     input:
-      objective: "技術仕様書を分析し、主要な要件と制約事項を抽出してレポートを作成する"
+      userModule:
+        objective:
+          - "- 技術仕様書を分析し、主要な要件と制約事項を抽出してレポートを作成する"
+        instructions:
+          - "- 仕様書の各セクションから要件を漏れなく抽出すること"
+          - "- 機能要件と非機能要件を区別して整理すること"
+          - "- 制約事項は技術的制約とビジネス制約に分類すること"
+        guidelines:
+          - "- 出力は日本語で作成すること"
+          - "- 箇条書きで簡潔にまとめること"
       inputs:
         documentType: "技術仕様書"
         pages: 50
       taskList:
         - id: 1
-          description: "Planning"
+          instruction: "ワークフローの作業プラン（Task）を作成・編集します"
           taskType: planning
         - id: 2
-          description: "Output"
+          instruction: "Output"
           taskType: outputMessage
       currentTaskIndex: 0
     queryOptions: *planning_options
 
-  # ---- Think タスクタイプテスト ----
-  - name: "タスク実行: ツール呼び出し"
-    description: "search_documentsツールを呼び出すことを期待"
-    modules: [think]
+  # # ---- Think タスクタイプテスト ----
+  # - name: "タスク実行: ツール呼び出し"
+  #   description: "search_documentsツールを呼び出すことを期待"
+  #   modules: [think]
+  #   models: *models_def
+  #   input:
+  #     objective: "APIドキュメントを検索して認証方式を調べ、結果を整理する"
+  #     taskList:
+  #       - id: 1
+  #         instruction: "Planning"
+  #         taskType: planning
+  #       - id: 2
+  #         instruction: "関連ドキュメントを検索して取得する"
+  #         taskType: think
+  #       - id: 3
+  #         instruction: "Output"
+  #         taskType: outputMessage
+  #     currentTaskIndex: 1
+  #     executionLog:
+  #       - taskId: 1
+  #         taskType: planning
+  #         result: "Tasks registered."
+  #   queryOptions:
+  #     <<: *base_options
+  #     tools: *execution_all_tools
+  #     toolChoice: auto
+
+  # - name: "タスク実行: テキスト応答"
+  #   description: "ツール不要の分析タスク"
+  #   modules: [think]
+  #   models: *models_def
+  #   input:
+  #     objective: "収集したデータの分析レポートを作成する"
+  #     taskList:
+  #       - id: 1
+  #         instruction: "Planning"
+  #         taskType: planning
+  #       - id: 2
+  #         instruction: "データを分析して主要な発見をまとめる"
+  #         taskType: think
+  #       - id: 3
+  #         instruction: "Output"
+  #         taskType: outputMessage
+  #     currentTaskIndex: 1
+  #     executionLog:
+  #       - taskId: 1
+  #         taskType: planning
+  #         result: "Tasks registered."
+  #     inputs:
+  #       activeUsers: 12500
+  #       averageSession: "8.3分"
+  #       retention7d: "42%"
+  #   queryOptions: *execution_options
+
+
+  - name: "計画生成: 時刻確認"
+    description: "__insert_tasksツールでタスク登録を期待"
+    modules: [planning]
     models: *models_def
     input:
-      objective: "APIドキュメントを検索して認証方式を調べ、結果を整理する"
+      userModule:
+        objective:
+          - ユーザメッセージを理解して適切な応答を返す。
+        instructions:
+          - 日本語で応答する
+        messages:
+          - type: message
+            role: user
+            content: 現在の日時を確認して。
+        inputs:
       taskList:
         - id: 1
-          description: "Planning"
+          instruction: "ワークフローの作業プラン（Task）を作成・編集します"
           taskType: planning
         - id: 2
-          description: "関連ドキュメントを検索して取得する"
-          taskType: think
-        - id: 3
-          description: "Output"
+          instruction: "Output"
           taskType: outputMessage
-      currentTaskIndex: 1
-      executionLog:
-        - taskId: 1
-          taskType: planning
-          result: "Tasks registered."
-    queryOptions:
-      <<: *base_options
-      tools: *execution_all_tools
-      toolChoice: auto
+      currentTaskIndex: 0
+    queryOptions: *planning_options
 
-  - name: "タスク実行: テキスト応答"
-    description: "ツール不要の分析タスク"
-    modules: [think]
-    models: *models_def
-    input:
-      objective: "収集したデータの分析レポートを作成する"
-      taskList:
-        - id: 1
-          description: "Planning"
-          taskType: planning
-        - id: 2
-          description: "データを分析して主要な発見をまとめる"
-          taskType: think
-        - id: 3
-          description: "Output"
-          taskType: outputMessage
-      currentTaskIndex: 1
-      executionLog:
-        - taskId: 1
-          taskType: planning
-          result: "Tasks registered."
-      inputs:
-        activeUsers: 12500
-        averageSession: "8.3分"
-        retention7d: "42%"
-    queryOptions: *execution_options
 
-  # ---- Agentic process (エンドツーエンド) テスト ----
-  - name: "agenticProcess: 時刻確認"
-    description: "__timeビルトインツールを使って現在時刻を聞き出す"
-    modules: [agentic]
-    models: *models_def
-    input:
-      objective: "現在の日時を確認して、日本語で報告してください"
-    process: agenticProcess
-    processOptions:
-      maxTasks: 5
+  # # ---- Agentic process (エンドツーエンド) テスト ----
+  # - name: "agenticProcess: 時刻確認"
+  #   description: "__timeビルトインツールを使って現在時刻を聞き出す"
+  #   modules: [agentic-time-check]
+  #   models: *models_def
+  #   input: {}
+  #   process: agenticProcess
+  #   processOptions:
+  #     maxTasks: 5
 
 evaluators:
   - name: structured-output-presence

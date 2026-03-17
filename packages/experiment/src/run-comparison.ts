@@ -41,6 +41,45 @@ Logger.configure({
   logFile: options.logFile,
 });
 
+// 異常終了時のログ書き出し
+async function flushLogsOnExit(signal: string) {
+  console.error(`\n⚠️  ${signal} received, flushing logs...`);
+  try {
+    if (options.logFile) {
+      const { logger } = await import('./logger.js');
+      await logger.flush();
+      console.error(`📄 Log file written: ${options.logFile}`);
+    }
+    if (options.traceDir) {
+      const { writeTrace } = await import('./trace/writer.js');
+      await writeTrace(options.traceDir);
+      console.error(`📂 Trace written: ${options.traceDir}`);
+    }
+  } catch (e) {
+    console.error('Failed to flush logs:', e);
+  }
+  process.exit(1);
+}
+
+let logsFlushed = false;
+
+process.on('SIGINT', () => flushLogsOnExit('SIGINT'));
+process.on('SIGTERM', () => flushLogsOnExit('SIGTERM'));
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception:', err.message);
+  flushLogsOnExit('uncaughtException');
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled rejection:', reason);
+  flushLogsOnExit('unhandledRejection');
+});
+// Promise が settle せずにイベントループが空になった場合
+process.on('beforeExit', (code) => {
+  if (!logsFlushed) {
+    flushLogsOnExit(`beforeExit (code=${code})`);
+  }
+});
+
 // Display header
 console.log('='.repeat(80));
 console.log('Module Comparison Experiment');
@@ -206,32 +245,41 @@ const runner = new ExperimentRunner(
   evaluatorModel
 );
 
-const results = await runner.run();
+try {
+  const results = await runner.run();
 
-// Display completion
-console.log('='.repeat(80));
-console.log('✨ Experiment completed');
-console.log('='.repeat(80));
+  // Display completion
+  console.log('='.repeat(80));
+  console.log('✨ Experiment completed');
+  console.log('='.repeat(80));
 
-// Flush log file if configured
-if (options.logFile) {
-  const { logger } = await import('./logger.js');
-  await logger.flush();
-  console.log(`📄 Log file written: ${options.logFile}`);
-}
+  // Display statistics if repeated
+  if (options.repeatCount > 1) {
+    const reporter = new StatisticsReporter(results);
+    reporter.report();
+  }
+} catch (error) {
+  console.error('❌ Experiment failed:', error instanceof Error ? error.message : String(error));
+  if (error instanceof Error && error.stack) {
+    console.error(error.stack);
+  }
+} finally {
+  // Flush log file if configured
+  if (options.logFile) {
+    const { logger } = await import('./logger.js');
+    await logger.flush();
+    console.log(`📄 Log file written: ${options.logFile}`);
+  }
 
-// Write trace if configured
-if (options.traceDir) {
-  const { writeTrace } = await import('./trace/writer.js');
-  await writeTrace(options.traceDir);
-  console.log(`📂 Trace written: ${options.traceDir}`);
-}
+  // Write trace if configured
+  if (options.traceDir) {
+    const { writeTrace } = await import('./trace/writer.js');
+    await writeTrace(options.traceDir);
+    console.log(`📂 Trace written: ${options.traceDir}`);
+  }
 
-// Cleanup drivers
-await driverManager.cleanup();
+  // Cleanup drivers
+  await driverManager.cleanup();
 
-// Display statistics if repeated
-if (options.repeatCount > 1) {
-  const reporter = new StatisticsReporter(results);
-  reporter.report();
+  logsFlushed = true;
 }
