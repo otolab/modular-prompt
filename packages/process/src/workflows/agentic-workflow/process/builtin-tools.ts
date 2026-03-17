@@ -136,15 +136,17 @@ export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
     },
     handler: async (args) => {
       if (Array.isArray(args.tasks) && args.tasks.length > 0) {
-        const results = (args.tasks as TaskEntry[]).map(entry => registerTask(taskList, entry));
-        return results.join('\n');
+        (args.tasks as TaskEntry[]).forEach(entry => registerTask(taskList, entry));
+      } else if (args.instruction) {
+        registerTask(taskList, args as unknown as TaskEntry);
+      } else {
+        return 'Error: Provide "tasks" array or "instruction".';
       }
 
-      if (args.instruction) {
-        return registerTask(taskList, args as unknown as TaskEntry);
-      }
-
-      return 'Error: Provide "tasks" array or "instruction".';
+      // Return full updated task list so the model can see the current plan
+      return 'Updated task list:\n' + taskList
+        .map(t => `- Task ${t.id} (${t.taskType}): ${t.instruction}`)
+        .join('\n');
     },
   }];
 }
