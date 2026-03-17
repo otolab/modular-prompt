@@ -252,9 +252,9 @@ export class MlxDriver implements AIDriver {
     // tools変換
     const tools = options?.tools ? convertToolDefinitions(options.tools) : undefined;
 
-    // nativeツール非対応の場合、tool定義をテキストとしてプロンプトに注入
+    // completion API または nativeツール非対応の場合、tool定義をテキストとしてプロンプトに注入
     let augmentedPrompt = prompt;
-    if (options?.tools && options.tools.length > 0 && !this.hasNativeToolSupport()) {
+    if (options?.tools && options.tools.length > 0 && (api === 'completion' || !this.hasNativeToolSupport())) {
       const toolsText = formatToolDefinitionsAsText(
         options.tools,
         this.runtimeInfo?.special_tokens,

@@ -199,17 +199,78 @@ function parsePythonicToolCallContent(content: string): ParsedToolCall | null {
   const args: Record<string, unknown> = {};
 
   if (argsStr) {
-    // key=value ペアを抽出
-    const argRegex = /(\w+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^,)]+?))\s*(?:,|$)/g;
-    let argMatch;
-    while ((argMatch = argRegex.exec(argsStr)) !== null) {
-      const key = argMatch[1];
-      const value = argMatch[2] ?? argMatch[3] ?? argMatch[4]?.trim();
+    // key=value ペアを抽出（値が括弧構造を含む場合は括弧対応で取得）
+    let pos = 0;
+    while (pos < argsStr.length) {
+      // key の抽出
+      const keyMatch = argsStr.slice(pos).match(/^(\w+)\s*=\s*/);
+      if (!keyMatch) break;
+      const key = keyMatch[1];
+      pos += keyMatch[0].length;
+
+      // value の抽出
+      const ch = argsStr[pos];
+      let value: string;
+
+      if (ch === '[' || ch === '{') {
+        // 括弧対応で値を抽出
+        const extracted = extractBracketedValue(argsStr, pos);
+        if (!extracted) break;
+        value = extracted;
+        pos += value.length;
+      } else if (ch === '"' || ch === "'") {
+        // 引用符で囲まれた文字列
+        const quote = ch;
+        let end = pos + 1;
+        while (end < argsStr.length && argsStr[end] !== quote) {
+          if (argsStr[end] === '\\') end++;
+          end++;
+        }
+        value = argsStr.slice(pos + 1, end);
+        pos = end + 1;
+      } else {
+        // カンマまたは末尾まで
+        const endMatch = argsStr.slice(pos).match(/^([^,)]*)/);
+        value = endMatch ? endMatch[1].trim() : '';
+        pos += endMatch ? endMatch[0].length : 0;
+      }
+
       args[key] = coerceValue(value);
+
+      // カンマをスキップ
+      const sep = argsStr.slice(pos).match(/^\s*,\s*/);
+      if (sep) pos += sep[0].length;
     }
   }
 
   return { name, arguments: args };
+}
+
+/**
+ * 括弧対応で値を抽出（[...] や {...}）
+ */
+function extractBracketedValue(text: string, start: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+
+    if (ch === '[' || ch === '{') depth++;
+    else if (ch === ']' || ch === '}') depth--;
+
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 /**
