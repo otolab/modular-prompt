@@ -197,10 +197,8 @@ export async function agenticProcess(
   const userModule = resolve(module, context);
   context.userModule = userModule;
 
-  // Bootstrap or use provided task list
-  const taskList = context.taskList
-    ? [...context.taskList]
-    : bootstrap(userModule, enablePlanning);
+  // Bootstrap task list
+  const taskList = bootstrap(userModule, enablePlanning);
 
   const executionLog: AgenticTaskExecutionLog[] = context.executionLog
     ? [...context.executionLog]

@@ -186,23 +186,16 @@ describe('agenticProcess v2', () => {
     expect(result.metadata?.planTasks).toBe(7);
   });
 
-  // 5. 既存 taskList 使用（enablePlanning=false）
-  it('should use existing taskList when enablePlanning is false', async () => {
+  // 5. enablePlanning=false で outputMessage のみ実行
+  it('should skip planning and generate output directly when enablePlanning is false', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning スキップ、直接 think から実行
-        'Think result',
-        // OutputMessage
         'Final output'
       ]
     });
 
     const context: AgenticWorkflowContext = {
-      objective: 'Use existing taskList',
-      taskList: [
-        { id: 1, instruction: 'Execute task', taskType: 'think' },
-        { id: 2, instruction: 'Generate output', taskType: 'outputMessage' }
-      ]
+      objective: 'Direct output',
     };
 
     const result = await agenticProcess(
@@ -212,12 +205,8 @@ describe('agenticProcess v2', () => {
       { enablePlanning: false }
     );
 
-    expect(result.context.executionLog).toHaveLength(2);
-    expect(result.context.executionLog?.[0].taskId).toBe(1);
-    expect(result.context.executionLog?.[0].taskType).toBe('think');
-    expect(result.context.executionLog?.[0].result).toBe('Think result');
-    expect(result.context.executionLog?.[1].taskId).toBe(2);
-    expect(result.context.executionLog?.[1].taskType).toBe('outputMessage');
+    expect(result.context.executionLog).toHaveLength(1);
+    expect(result.context.executionLog?.[0].taskType).toBe('outputMessage');
     expect(result.output).toBe('Final output');
   });
 
