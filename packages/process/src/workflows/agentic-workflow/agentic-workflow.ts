@@ -10,7 +10,7 @@
  * 3. Output: Last task (outputMessage/outputStructured) result is the final output
  */
 
-import { compile, merge, resolve } from '@modular-prompt/core';
+import { merge, resolve } from '@modular-prompt/core';
 import type { PromptModule, ResolvedModule } from '@modular-prompt/core';
 import type { FinishReason } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
@@ -129,13 +129,13 @@ async function executeTask(
     ...(task.taskType === 'outputStructured' && userModule.schema ? { schema: userModule.schema } : {}),
   };
 
-  // Merge and compile (taskCommon first for objective framing)
-  const prompt = compile(merge(workflowBase, taskCommon, taskConfig.module), context);
+  // Merge and resolve (taskCommon first for objective framing)
+  const resolved = resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList);
   const externalToolDefs = externalTools.map(t => t.definition);
   const allToolNames = [...builtinTools.map(t => t.definition.name), ...externalToolDefs.map(t => t.name)];
-  taskLogger.verbose('[prompt]', JSON.stringify(prompt), allToolNames.length > 0 ? `tools: [${allToolNames.join(', ')}]` : '');
+  taskLogger.verbose('[prompt]', JSON.stringify(resolved), allToolNames.length > 0 ? `tools: [${allToolNames.join(', ')}]` : '');
 
   const driverRole = task.driverRole || DEFAULT_DRIVER_ROLE[task.taskType];
 
@@ -144,7 +144,7 @@ async function executeTask(
 
     const result = await queryWithTools(
       resolveDriver(driver, driverRole),
-      prompt,
+      resolved,
       builtinTools,
       {
         externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,

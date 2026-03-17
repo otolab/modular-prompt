@@ -2,7 +2,8 @@
  * Tool calling loop implementation
  */
 
-import type { ToolCall, ToolResultMessageElement, StandardMessageElement, CompiledPrompt, Element } from '@modular-prompt/core';
+import type { ToolCall, ToolResultMessageElement, StandardMessageElement, Element, ResolvedModule } from '@modular-prompt/core';
+import { distribute } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError } from '../../types.js';
@@ -75,8 +76,7 @@ export interface QueryWithToolsResult {
  */
 export async function queryWithTools(
   driver: AIDriver,
-  // >>> ResolvedPromptの方が良さそう
-  prompt: CompiledPrompt,
+  resolved: ResolvedModule,
   builtinTools: ToolSpec[],
   options: QueryWithToolsOptions = {}
 ): Promise<QueryWithToolsResult> {
@@ -86,14 +86,19 @@ export async function queryWithTools(
     ...externalToolDefs,
   ];
 
-  let currentPrompt = prompt;
   const conversation: (StandardMessageElement | ToolResultMessageElement)[] = [];
   const toolCallLog: ToolCallLog[] = [];
   let content = '';
   let lastResult: { usage?: QueryWithToolsResult['usage']; finishReason?: FinishReason } = {};
 
   for (let i = 0; i <= maxIterations; i++) {
-    const queryResult = await driver.query(currentPrompt, {
+    // Distribute resolved module to CompiledPrompt, appending conversation history
+    const prompt = distribute(
+      conversation.length > 0
+        ? { ...resolved, messages: [...(resolved.messages || []), ...conversation] }
+        : resolved
+    );
+    const queryResult = await driver.query(prompt, {
       tools: allToolDefs.length > 0 ? allToolDefs : undefined,
       toolChoice: i === 0 ? (options.toolChoice ?? 'auto') : 'auto',
     });
@@ -148,10 +153,7 @@ export async function queryWithTools(
       };
     }
 
-    currentPrompt = {
-      ...prompt,
-      data: [...(prompt.data || []), ...conversation as Element[]],
-    };
+    // conversation is accumulated; next iteration will distribute with updated messages
   }
 
   return { content, toolCallLog, usage: lastResult.usage, finishReason: lastResult.finishReason };
