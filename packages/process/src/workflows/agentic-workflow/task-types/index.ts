@@ -44,10 +44,10 @@ export function getTaskTypeConfig(taskType: TaskType): TaskTypeConfig {
 export function buildPreviousResultsMaterials(
   executionLog: AgenticTaskExecutionLog[]
 ): MaterialElement[] {
-  return executionLog.map((log) => ({
+  return executionLog.map((log, index) => ({
     type: 'material' as const,
-    id: `task-result-${log.taskId}`,
-    title: `Task(id=${log.taskId}) result`,
+    id: `task-result-${index}`,
+    title: `Task ${index + 1} result`,
     content: log.result,
   }));
 }
@@ -75,7 +75,7 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
       status = '[pending]';
     }
 
-    lines.push(`- Task(id=${task.id}) (${task.taskType}): ${task.instruction} ${status}`);
+    lines.push(`${i + 1}. (${task.taskType}): ${task.instruction} ${status}`);
   }
 
   return lines.join('\n');

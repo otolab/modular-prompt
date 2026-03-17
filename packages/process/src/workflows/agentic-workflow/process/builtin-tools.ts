@@ -19,13 +19,6 @@ export function isBuiltinTool(name: string): boolean {
 }
 
 /**
- * taskList 内の最大 id + 1 を返す（自動採番）
- */
-function nextTaskId(taskList: AgenticTask[]): number {
-  return taskList.length > 0 ? Math.max(...taskList.map(t => t.id)) + 1 : 1;
-}
-
-/**
  * output タスクの直前のインデックスを返す
  */
 function findDefaultInsertIndex(taskList: AgenticTask[]): number {
@@ -90,11 +83,9 @@ const TASK_ENTRY_SCHEMA = {
 /**
  * TaskEntry からタスクを登録し、結果メッセージを返す
  */
-function registerTask(taskList: AgenticTask[], entry: TaskEntry): string {
+function registerTask(taskList: AgenticTask[], entry: TaskEntry): void {
   const taskType = (entry.taskType as TaskType) || 'think';
-  const id = nextTaskId(taskList);
   const task: AgenticTask = {
-    id,
     instruction: entry.instruction,
     taskType,
     driverRole: entry.driverRole as ModelRole | undefined,
@@ -105,8 +96,6 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry): string {
 
   const insertAt = typeof entry.insertAt === 'number' ? entry.insertAt : findDefaultInsertIndex(taskList);
   taskList.splice(insertAt, 0, task);
-
-  return `Task(id=${id}) registered: ${task.instruction}`;
 }
 
 /**
@@ -145,7 +134,7 @@ export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
 
       // Return full updated task list so the model can see the current plan
       return 'Updated task list:\n' + taskList
-        .map(t => `- Task(id=${t.id}) (${t.taskType}): ${t.instruction}`)
+        .map((t, i) => `${i + 1}. (${t.taskType}): ${t.instruction}`)
         .join('\n');
     },
   }];

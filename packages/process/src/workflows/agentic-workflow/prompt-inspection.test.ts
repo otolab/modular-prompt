@@ -77,7 +77,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     expect(dataText).toContain('文書の主要なテーマを特定する');
 
     // タスクリストが methodology に表示される
-    expect(instructionText).toContain('Task(id=1)');
+    expect(instructionText).toContain('1.');
     expect(instructionText).toContain('planning');
   });
 
@@ -88,7 +88,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
       taskList,
       currentTaskIndex: 1,
       executionLog: [
-        { taskId: 1, taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'planning', result: 'Tasks registered.' },
       ],
     };
 
@@ -112,7 +112,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     // 前タスク結果が materials に入る
     const materialElements = prompt.data.filter((e: any) => e.type === 'material');
     expect(materialElements.length).toBeGreaterThanOrEqual(1);
-    expect(materialElements[0].title).toContain('Task(id=1)');
+    expect(materialElements[0].title).toContain('Task 1');
   });
 
   it('extractContext: messages/materials がデフォルトでデータに含まれる', () => {
@@ -131,8 +131,8 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
       taskList,
       currentTaskIndex: 2,
       executionLog: [
-        { taskId: 1, taskType: 'planning', result: 'Tasks registered.' },
-        { taskId: 2, taskType: 'think', result: 'テーマを特定しました' },
+        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'think', result: 'テーマを特定しました' },
       ],
     };
 
@@ -156,9 +156,9 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
       taskList,
       currentTaskIndex: 3,
       executionLog: [
-        { taskId: 1, taskType: 'planning', result: 'Tasks registered.' },
-        { taskId: 2, taskType: 'think', result: 'テーマを特定しました' },
-        { taskId: 3, taskType: 'extractContext', result: 'コンテキストを抽出しました' },
+        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'think', result: 'テーマを特定しました' },
+        { taskType: 'extractContext', result: 'コンテキストを抽出しました' },
       ],
     };
 
@@ -203,9 +203,9 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
       taskList: structuredTaskList,
       currentTaskIndex: 3,
       executionLog: [
-        { taskId: 1, taskType: 'planning', result: 'Tasks registered.' },
-        { taskId: 2, taskType: 'think', result: 'テーマを特定しました' },
-        { taskId: 3, taskType: 'extractContext', result: 'コンテキストを抽出しました' },
+        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'think', result: 'テーマを特定しました' },
+        { taskType: 'extractContext', result: 'コンテキストを抽出しました' },
       ],
     };
 

@@ -59,8 +59,8 @@ _shared:
     # - lfm2.5-thinking
     # - default: lfm2.5-instruct
     #   plan: lfm2.5-instruct
-    # - qwen3.5-9b
-    - quen3.5-2b-optiq
+    - qwen3.5-9b
+    # - quen3.5-2b-optiq
 
   # 外部ツール定義
   tools: &tools_def
@@ -241,7 +241,8 @@ modules:
       instructions:
         - 日本語で応答する
       messages:
-        - role: user
+        - type: message
+          role: user
           content: 現在の日時を確認して。
 
 testCases:
@@ -355,15 +356,15 @@ testCases:
     queryOptions: *planning_options
 
 
-  # # ---- Agentic process (エンドツーエンド) テスト ----
-  # - name: "agenticProcess: 時刻確認"
-  #   description: "__timeビルトインツールを使って現在時刻を聞き出す"
-  #   modules: [agentic-time-check]
-  #   models: *models_def
-  #   input: {}
-  #   process: agenticProcess
-  #   processOptions:
-  #     maxTasks: 5
+  # ---- Agentic process (エンドツーエンド) テスト ----
+  - name: "agenticProcess: 時刻確認"
+    description: "__timeビルトインツールを使って現在時刻を聞き出す"
+    modules: [agentic-time-check]
+    models: *models_def
+    input: {}
+    process: agenticProcess
+    processOptions:
+      maxTasks: 5
 
 evaluators:
   - name: structured-output-presence

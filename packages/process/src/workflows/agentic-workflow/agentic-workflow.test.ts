@@ -44,13 +44,9 @@ describe('agenticProcess v2', () => {
     expect(result.context.taskList?.[2].taskType).toBe('think');
     expect(result.context.taskList?.[3].taskType).toBe('outputMessage');
     expect(result.context.executionLog).toHaveLength(4);
-    expect(result.context.executionLog?.[0].taskId).toBe(1);
     expect(result.context.executionLog?.[0].taskType).toBe('planning');
-    expect(result.context.executionLog?.[1].taskId).toBe(3);
     expect(result.context.executionLog?.[1].result).toBe('Analysis result');
-    expect(result.context.executionLog?.[2].taskId).toBe(4);
     expect(result.context.executionLog?.[2].result).toBe('Processing result');
-    expect(result.context.executionLog?.[3].taskId).toBe(2);
     expect(result.context.executionLog?.[3].taskType).toBe('outputMessage');
     expect(result.metadata?.planTasks).toBe(4);
     expect(result.metadata?.executedTasks).toBe(4);

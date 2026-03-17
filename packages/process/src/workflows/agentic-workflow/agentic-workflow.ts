@@ -56,7 +56,6 @@ function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask
 
   if (enablePlanning) {
     tasks.push({
-      id: 1,
       instruction: 'Decompose objective into executable tasks',
       taskType: 'planning',
     });
@@ -64,7 +63,6 @@ function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask
 
   const outputType: TaskType = module.schema ? 'outputStructured' : 'outputMessage';
   tasks.push({
-    id: tasks.length + 1,
     instruction: 'Generate the final output based on all task results',
     taskType: outputType,
   });
@@ -111,11 +109,12 @@ async function executeTask(
   userModule: ResolvedModule,
   context: AgenticWorkflowContext,
   task: AgenticTask,
+  taskIndex: number,
   taskList: AgenticTask[],
   externalTools: ToolSpec[],
   maxToolCalls: number
 ): Promise<AgenticTaskExecutionLog> {
-  const taskLogger = logger.context(`agentic:task:${task.id}:${task.taskType}`);
+  const taskLogger = logger.context(`agentic:task:${taskIndex + 1}:${task.taskType}`);
   taskLogger.info('[start]', task.instruction);
 
   const taskConfig = getTaskTypeConfig(task.taskType);
@@ -157,7 +156,6 @@ async function executeTask(
     taskLogger.info('[end]');
 
     return {
-      taskId: task.id,
       taskType: task.taskType,
       result: stripThinkBlocks(result.content),
       pendingToolCalls: result.pendingToolCalls,
@@ -223,7 +221,7 @@ export async function agenticProcess(
     };
 
     const logEntry = await executeTask(
-      driver, userModule, currentContext, task, taskList,
+      driver, userModule, currentContext, task, i, taskList,
       tools, maxToolCalls
     );
     executionLog.push(logEntry);

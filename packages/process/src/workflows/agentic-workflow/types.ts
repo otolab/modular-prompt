@@ -72,8 +72,6 @@ export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withM
  * Agentic workflow task definition
  */
 export interface AgenticTask {
-  /** Auto-assigned sequential ID */
-  id: number;
   /** What this task should accomplish */
   instruction: string;
   /** Task type determining prompt construction and input contract */
@@ -96,7 +94,6 @@ export interface AgenticTask {
  * Record of a single task execution
  */
 export interface AgenticTaskExecutionLog {
-  taskId: number;
   taskType: TaskType;
   result: string;
   pendingToolCalls?: ToolCall[];
