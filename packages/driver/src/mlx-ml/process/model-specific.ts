@@ -28,7 +28,7 @@ export function selectApi(
   if (strategy === 'force-chat') return 'chat';
 
   if (strategy === 'force-completion') {
-    // completion用プロセッサがないchat-tunedモデルはchatにフォールバック
+    // ブラックリスト対象はchatにフォールバック
     if (!hasCompletionProc && hasChatTemplate) return 'chat';
     return 'completion';
   }

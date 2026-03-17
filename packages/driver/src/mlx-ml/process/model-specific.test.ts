@@ -20,14 +20,15 @@ describe('selectApi', () => {
   describe('force-completion', () => {
     it('should return completion when completion processor exists', () => {
       expect(selectApi('force-completion', undefined, true, true)).toBe('completion');
-    });
-
-    it('should return completion when no chat template (completion is only option)', () => {
-      expect(selectApi('force-completion', undefined, false, false)).toBe('completion');
+      expect(selectApi('force-completion', undefined, false, true)).toBe('completion');
     });
 
     it('should fall back to chat when no completion processor and has chat template', () => {
       expect(selectApi('force-completion', undefined, true, false)).toBe('chat');
+    });
+
+    it('should return completion when no completion processor and no chat template', () => {
+      expect(selectApi('force-completion', undefined, false, false)).toBe('completion');
     });
   });
 
@@ -65,17 +66,19 @@ describe('ModelSpecificProcessor', () => {
   // hasCompletionProcessor
   // --------------------------------------------------------------------------
   describe('hasCompletionProcessor', () => {
-    it('should return true for models with completion processors', () => {
+    it('should return true for models with completion support', () => {
       expect(createModelSpecificProcessor('llm-jp-3.1').hasCompletionProcessor()).toBe(true);
       expect(createModelSpecificProcessor('Tanuki-8B-dpo-v1').hasCompletionProcessor()).toBe(true);
       expect(createModelSpecificProcessor('mlx-community/CodeLlama-7b').hasCompletionProcessor()).toBe(true);
       expect(createModelSpecificProcessor('mlx-community/gemma-3-2b').hasCompletionProcessor()).toBe(true);
+      // unknown models use generic formatter
+      expect(createModelSpecificProcessor('unknown-model').hasCompletionProcessor()).toBe(true);
+      expect(createModelSpecificProcessor('LiquidAI/LFM2.5-1.2B-JP').hasCompletionProcessor()).toBe(true);
     });
 
-    it('should return false for models without completion processors', () => {
-      expect(createModelSpecificProcessor('unknown-model').hasCompletionProcessor()).toBe(false);
+    it('should return false for blacklisted models', () => {
       expect(createModelSpecificProcessor('mlx-community/Qwen3.5-27B-4bit').hasCompletionProcessor()).toBe(false);
-      expect(createModelSpecificProcessor('LiquidAI/LFM2.5-1.2B-JP').hasCompletionProcessor()).toBe(false);
+      expect(createModelSpecificProcessor('mlx-community/Qwen3.5-9B-MLX-4bit').hasCompletionProcessor()).toBe(false);
     });
   });
 
@@ -236,6 +239,44 @@ describe('ModelSpecificProcessor', () => {
 
       const systemMessages = result.filter(m => m.role === 'system');
       expect(systemMessages).toHaveLength(1);
+    });
+  });
+
+  describe('LFM processing', () => {
+    const processor = createModelSpecificProcessor('LiquidAI/LFM2.5-1.2B-JP');
+
+    it('should merge system messages', () => {
+      const messages: MlxMessage[] = [
+        { role: 'system', content: 'System 1' },
+        { role: 'system', content: 'System 2' },
+        { role: 'user', content: 'Hello' }
+      ];
+
+      const result = processor.applyChatSpecificProcessing(messages);
+
+      const systemMessages = result.filter(m => m.role === 'system');
+      expect(systemMessages).toHaveLength(1);
+      expect(systemMessages[0].content).toContain('System 1');
+      expect(systemMessages[0].content).toContain('System 2');
+    });
+  });
+
+  describe('Qwen processing', () => {
+    const processor = createModelSpecificProcessor('mlx-community/Qwen3.5-9B-MLX-4bit');
+
+    it('should merge system messages', () => {
+      const messages: MlxMessage[] = [
+        { role: 'system', content: 'System 1' },
+        { role: 'system', content: 'System 2' },
+        { role: 'user', content: 'Hello' }
+      ];
+
+      const result = processor.applyChatSpecificProcessing(messages);
+
+      const systemMessages = result.filter(m => m.role === 'system');
+      expect(systemMessages).toHaveLength(1);
+      expect(systemMessages[0].content).toContain('System 1');
+      expect(systemMessages[0].content).toContain('System 2');
     });
   });
 

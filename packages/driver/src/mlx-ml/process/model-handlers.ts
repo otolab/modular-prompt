@@ -168,6 +168,22 @@ export function processElyzaCompletion(prompt: string): string {
 }
 
 /**
+ * LFM用のChat処理
+ * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
+ */
+export function processLfmChat(messages: MlxMessage[]): MlxMessage[] {
+  return mergeSystemMessages(messages);
+}
+
+/**
+ * Qwen用のChat処理
+ * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
+ */
+export function processQwenChat(messages: MlxMessage[]): MlxMessage[] {
+  return mergeSystemMessages(messages);
+}
+
+/**
  * モデル名に基づいてChat処理を選択
  */
 export function selectChatProcessor(modelName: string): ((messages: MlxMessage[]) => MlxMessage[]) | null {
@@ -178,32 +194,34 @@ export function selectChatProcessor(modelName: string): ((messages: MlxMessage[]
   if (modelName.includes('mlx-community/CodeLlama')) {
     return processCodeLlamaChat;
   }
-  if (modelName.includes('mlx-community/gemma-3')) {
+  if (modelName.includes('mlx-community/gemma-3') || modelName.includes('gemma-3')) {
     return processGemmaChat;
+  }
+  if (modelName.includes('LFM')) {
+    return processLfmChat;
+  }
+  if (modelName.includes('Qwen')) {
+    return processQwenChat;
   }
   return null;
 }
 
 /**
  * モデル名に基づいてCompletion処理を選択
+ *
+ * デフォルトは identity（そのまま返す）。
+ * 特定モデルのみ専用の後処理を適用する。
  */
 export function selectCompletionProcessor(modelName: string): ((prompt: string) => string) | null {
-  if (modelName.includes('llm-jp-3.1')) {
-    return processLlmJpCompletion;
-  }
-  if (modelName.includes('Tanuki-8B')) {
-    return processTanukiCompletion;
-  }
-  if (modelName.includes('CodeLlama')) {
-    // CodeLlamaはそのまま返す
-    return (prompt: string) => prompt;
-  }
-  if (modelName.includes('gemma-3')) {
-    return processGemmaCompletion;
-  }
-  // ELYZA models (elyza/ELYZA-japanese-Llama-2-*)
-  if (modelName.toLowerCase().includes('elyza')) {
-    return processElyzaCompletion;
-  }
-  return null;
+  // ブラックリスト: completion API で動作しないモデル
+  if (modelName.includes('Qwen3.5')) return null;
+
+  // モデル固有の後処理
+  if (modelName.includes('llm-jp-3.1')) return processLlmJpCompletion;
+  if (modelName.includes('Tanuki-8B')) return processTanukiCompletion;
+  if (modelName.includes('gemma-3')) return processGemmaCompletion;
+  if (modelName.toLowerCase().includes('elyza')) return processElyzaCompletion;
+
+  // デフォルト: 汎用フォーマッタで動作する
+  return (prompt: string) => prompt;
 }
