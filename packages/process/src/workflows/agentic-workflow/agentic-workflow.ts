@@ -10,8 +10,8 @@
  * 3. Output: Last task (outputMessage/outputStructured) result is the final output
  */
 
-import { compile, merge } from '@modular-prompt/core';
-import type { PromptModule } from '@modular-prompt/core';
+import { compile, merge, resolve } from '@modular-prompt/core';
+import type { PromptModule, ResolvedModule } from '@modular-prompt/core';
 import type { FinishReason } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
 import type { WorkflowResult } from '../types.js';
@@ -56,14 +56,14 @@ function bootstrap(module: PromptModule<AgenticWorkflowContext>): AgenticTask[] 
 
   tasks.push({
     id: 1,
-    description: 'Decompose objective into executable tasks',
+    instruction: 'Decompose objective into executable tasks',
     taskType: 'planning',
   });
 
   const outputType: TaskType = module.schema ? 'outputStructured' : 'outputMessage';
   tasks.push({
     id: 2,
-    description: 'Generate the final output based on all task results',
+    instruction: 'Generate the final output based on all task results',
     taskType: outputType,
   });
 
@@ -86,13 +86,13 @@ function getBuiltinToolsForTask(
 
   const allTools: ToolSpec[] = [];
 
-  if (toolNames.has('__task')) {
+  if (toolNames.has('__insert_tasks')) {
     allTools.push(...createPlanningTools(taskList));
   }
 
   if (toolNames.has('__time')) {
-    // createExecutionBuiltinTools returns [__task, __time]
-    // We only want __time if __task is not already added
+    // createExecutionBuiltinTools returns [__insert_tasks, __time]
+    // We only want __time if __insert_tasks is not already added
     const execTools = createExecutionBuiltinTools(taskList);
     const timeOnly = execTools.filter(t => t.definition.name === '__time');
     allTools.push(...timeOnly);
@@ -106,7 +106,7 @@ function getBuiltinToolsForTask(
  */
 async function executeTask(
   driver: DriverInput,
-  module: PromptModule<AgenticWorkflowContext>,
+  userModule: ResolvedModule,
   context: AgenticWorkflowContext,
   task: AgenticTask,
   taskList: AgenticTask[],
@@ -114,24 +114,21 @@ async function executeTask(
   maxToolCalls: number
 ): Promise<AgenticTaskExecutionLog> {
   const taskLogger = logger.context(`agentic:task:${task.id}:${task.taskType}`);
-  taskLogger.info('[start]', task.description);
+  taskLogger.info('[start]', task.instruction);
 
   const taskConfig = getTaskTypeConfig(task.taskType);
 
-  // Build workflowBase from userModule
+  // Build workflowBase from resolved userModule
   // objective/terms are always included; cue/schema only for output tasks
   const workflowBase: PromptModule<AgenticWorkflowContext> = {
-    objective: module.objective,
-    terms: module.terms,
-    ...(task.taskType === 'outputMessage' && module.cue ? { cue: module.cue } : {}),
-    ...(task.taskType === 'outputStructured' && module.schema ? { schema: module.schema } : {}),
+    objective: userModule.objective,
+    terms: userModule.terms,
+    ...(task.taskType === 'outputMessage' && userModule.cue ? { cue: userModule.cue } : {}),
+    ...(task.taskType === 'outputStructured' && userModule.schema ? { schema: userModule.schema } : {}),
   };
 
-  // Set userModule in context
-  context.userModule = module;
-
   // Merge and compile (taskCommon first for objective framing)
-  const prompt = compile(merge(taskCommon, workflowBase, taskConfig.module), context);
+  const prompt = compile(merge(workflowBase, taskCommon, taskConfig.module), context);
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList);
   const externalToolDefs = externalTools.map(t => t.definition);
@@ -193,12 +190,18 @@ export async function agenticProcess(
     enablePlanning = true,
   } = options;
 
+  // Resolve user module: DynamicContent → static values
+  // userModule is available throughout the workflow via context.userModule
+  const userModule = resolve(module, context);
+  context.userModule = userModule;
+
   // Bootstrap or use provided task list
+  // >>> ここは簡単にできる
   const taskList = context.taskList
     ? [...context.taskList]
     : enablePlanning
       ? bootstrap(module)
-      : [{ id: 1, description: 'Generate output', taskType: 'outputMessage' as const }];
+      : [{ id: 1, instruction: 'Generate output', taskType: 'outputMessage' as const }];
 
   const executionLog: AgenticTaskExecutionLog[] = context.executionLog
     ? [...context.executionLog]
@@ -223,7 +226,7 @@ export async function agenticProcess(
     };
 
     const logEntry = await executeTask(
-      driver, module, currentContext, task, taskList,
+      driver, userModule, currentContext, task, taskList,
       tools, maxToolCalls
     );
     executionLog.push(logEntry);

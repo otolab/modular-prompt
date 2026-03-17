@@ -42,7 +42,7 @@ describe('integration tests', () => {
     expect(sectionTitles).toContain('Term Explanations'); // withMaterialsのterms
     expect(sectionTitles).toContain('Objective and Role'); // streamProcessingのobjective
   });
-  
+
   it('streamProcessingで実際のプロンプトを生成できる', () => {
     const summarizeModule = {
       instructions: [
@@ -50,9 +50,9 @@ describe('integration tests', () => {
         'Merge the summary with the current state'
       ]
     };
-    
+
     const workflow = merge(streamProcessing, summarizeModule);
-    
+
     const context: StreamProcessingContext = {
       chunks: [
         { content: 'This is a test chunk with some important information.' }
@@ -64,7 +64,7 @@ describe('integration tests', () => {
       range: { start: 1, end: 2 },
       targetTokens: 500
     };
-    
+
     const result = compile(workflow, context);
 
     // プロンプトの構造を確認
@@ -74,7 +74,7 @@ describe('integration tests', () => {
     expect(result.instructions).toBeDefined();
     expect(result.data).toBeDefined();
     expect(result.output).toBeDefined();
-    
+
     // 各セクションに内容があることを確認
     expect(result.instructions.length).toBeGreaterThan(0);
   });
@@ -83,12 +83,12 @@ describe('integration tests', () => {
     // Planning → Think×2 → OutputMessage の4タスクシーケンス
     const driver = new TestDriver({
       responses: [
-        // Planning: __task で2タスク登録（v2では id パラメータなし）
+        // Planning: __insert_tasks で2タスク登録（v2では id パラメータなし）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { description: '入力データを分析する' } },
-            { id: 'tc-2', name: '__task', arguments: { description: '分析結果をまとめる' } },
+            { id: 'tc-1', name: '__insert_tasks', arguments: { instruction: '入力データを分析する' } },
+            { id: 'tc-2', name: '__insert_tasks', arguments: { instruction: '分析結果をまとめる' } },
           ]
         },
         // Planning: ツール結果受け取り後に終了
@@ -146,12 +146,12 @@ describe('integration tests', () => {
 
     const driver = new TestDriver({
       responses: [
-        // Planning: __task で2タスク登録（v2では id パラメータなし）
+        // Planning: __insert_tasks で2タスク登録（v2では id パラメータなし）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { description: 'データを取得する' } },
-            { id: 'tc-2', name: '__task', arguments: { description: 'データを処理する' } },
+            { id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'データを取得する' } },
+            { id: 'tc-2', name: '__insert_tasks', arguments: { instruction: 'データを処理する' } },
           ]
         },
         'Plan done.',

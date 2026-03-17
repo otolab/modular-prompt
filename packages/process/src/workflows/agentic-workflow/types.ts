@@ -1,5 +1,5 @@
 import type { ToolDefinition, QueryResult, ToolCall } from '@modular-prompt/driver';
-import type { MessageElement, MaterialElement, PromptModule } from '@modular-prompt/core';
+import type { ResolvedModule } from '@modular-prompt/core';
 import type { ModelRole } from '../driver-input.js';
 
 // ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ export interface AgenticTask {
   /** Auto-assigned sequential ID */
   id: number;
   /** What this task should accomplish */
-  description: string;
+  instruction: string;
   /** Task type determining prompt construction and input contract */
   taskType: TaskType;
   /** Driver role override (defaults per task type) */
@@ -118,20 +118,18 @@ export interface AgenticTaskExecutionLog {
 export interface AgenticWorkflowContext {
   /** Primary objective (passed as instruction to all tasks) */
   objective: string;
-  /** User-provided prompt module */
-  userModule?: PromptModule<any>;
+  /** Resolved user module (set by agenticProcess via resolve()) */
+  userModule?: ResolvedModule;
   /** Structured input data */
   inputs?: Record<string, unknown>;
-  /** Message history (for extractContext) */
-  messages?: MessageElement[];
-  /** Reference materials (for extractContext, planning) */
-  materials?: MaterialElement[];
   /** Current task list */
   taskList?: AgenticTask[];
   /** Execution log of completed tasks */
   executionLog?: AgenticTaskExecutionLog[];
   /** Index of the currently executing task */
   currentTaskIndex?: number;
+  /** Persisted state string from previous task execution */
+  state?: string;
 }
 
 // ---------------------------------------------------------------------------

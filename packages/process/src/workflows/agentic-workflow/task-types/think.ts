@@ -4,33 +4,41 @@
  * Performs analysis or thinking tasks.
  *
  * Instruction side:
- * - objective, terms
- * - methodology: task list display
- * - instructions: task.description
+ * - objective (from userModule via workflowBase, + task-specific framing)
+ * - terms (from taskCommon + userModule)
+ * - methodology: current task, task list
+ * - instructions: task.instruction
  *
  * Data side:
  * - Previous task results
  * - ctx.inputs (if withInputs=true)
- * - ctx.messages (if withMessages=true)
- * - ctx.materials (if withMaterials=true)
+ * - userModule.messages (if withMessages=true)
+ * - userModule.materials (if withMaterials=true)
  *
- * Tools: __task, __time
+ * Tools: __insert_tasks, __time
  */
 
-import type { PromptModule } from '@modular-prompt/core';
+import type { PromptModule, DynamicElement } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
 import { buildPreviousResultsMaterials } from './index.js';
 
 const thinkModule: PromptModule<AgenticWorkflowContext> = {
+  objective: [
+    '',
+    '- You will execute the Task described in "Task Instructions" below.',
+  ],
+
   instructions: [
+    '- You will perform reasoning, analysis, or processing as instructed.',
+    '- You may call external tools if needed to gather information or perform actions.',
     {
       type: 'subsection' as const,
       title: 'Task Instructions',
       items: [
         (ctx: AgenticWorkflowContext) => {
           const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-          return task?.description ?? '';
+          return task?.instruction ?? '';
         },
       ],
     },
@@ -43,16 +51,16 @@ const thinkModule: PromptModule<AgenticWorkflowContext> = {
     },
     (ctx: AgenticWorkflowContext) => {
       const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-      if (!task?.withMaterials || !ctx.materials?.length) return null;
-      return ctx.materials;
+      if (!task?.withMaterials || !ctx.userModule?.materials?.length) return null;
+      return ctx.userModule.materials as DynamicElement[];
     },
   ],
 
   messages: [
     (ctx: AgenticWorkflowContext) => {
       const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-      if (!task?.withMessages || !ctx.messages?.length) return null;
-      return ctx.messages;
+      if (!task?.withMessages || !ctx.userModule?.messages?.length) return null;
+      return ctx.userModule.messages as DynamicElement[];
     },
   ],
 
@@ -67,5 +75,5 @@ const thinkModule: PromptModule<AgenticWorkflowContext> = {
 
 export const config: TaskTypeConfig = {
   module: thinkModule,
-  builtinToolNames: ['__task', '__time'],
+  builtinToolNames: ['__insert_tasks', '__time'],
 };

@@ -8,12 +8,12 @@ describe('agenticProcess v2', () => {
   it('should execute basic workflow with planning and tasks', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning: __task ツール呼び出し2回（id なし、description のみ）
+        // Planning: __insert_tasks ツール呼び出し2回（id なし、description のみ）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { description: 'Analyze input data' } },
-            { id: 'tc-2', name: '__task', arguments: { description: 'Process results' } }
+            { id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'Analyze input data' } },
+            { id: 'tc-2', name: '__insert_tasks', arguments: { instruction: 'Process results' } }
           ]
         },
         // Planning: テキスト出力（ツール結果受信後に planning 終了）
@@ -82,7 +82,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Get external data' } }]
+          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'Get external data' } }]
         },
         'Planning done.',
         // Think: 外部ツール呼び出し → pending として返す
@@ -123,7 +123,7 @@ describe('agenticProcess v2', () => {
         // Planning: タスク登録
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Simple task' } }]
+          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'Simple task' } }]
         },
         'Planning done.',
         // Think: テキストのみ
@@ -152,11 +152,11 @@ describe('agenticProcess v2', () => {
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__task', arguments: { description: 'Task 1' } },
-            { id: 'tc-2', name: '__task', arguments: { description: 'Task 2' } },
-            { id: 'tc-3', name: '__task', arguments: { description: 'Task 3' } },
-            { id: 'tc-4', name: '__task', arguments: { description: 'Task 4' } },
-            { id: 'tc-5', name: '__task', arguments: { description: 'Task 5' } }
+            { id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'Task 1' } },
+            { id: 'tc-2', name: '__insert_tasks', arguments: { instruction: 'Task 2' } },
+            { id: 'tc-3', name: '__insert_tasks', arguments: { instruction: 'Task 3' } },
+            { id: 'tc-4', name: '__insert_tasks', arguments: { instruction: 'Task 4' } },
+            { id: 'tc-5', name: '__insert_tasks', arguments: { instruction: 'Task 5' } }
           ]
         },
         'Planning done.',
@@ -200,8 +200,8 @@ describe('agenticProcess v2', () => {
     const context: AgenticWorkflowContext = {
       objective: 'Use existing taskList',
       taskList: [
-        { id: 1, description: 'Execute task', taskType: 'think' },
-        { id: 2, description: 'Generate output', taskType: 'outputMessage' }
+        { id: 1, instruction: 'Execute task', taskType: 'think' },
+        { id: 2, instruction: 'Generate output', taskType: 'outputMessage' }
       ]
     };
 
@@ -228,7 +228,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Check time' } }]
+          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'Check time' } }]
         },
         'Planning done.',
         // Think: __time ツール呼び出し → ループ継続
@@ -262,7 +262,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__task', arguments: { description: 'Analyze' } }]
+          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'Analyze' } }]
         },
         'Planning done.',
         // Think

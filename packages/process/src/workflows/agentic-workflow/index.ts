@@ -18,5 +18,5 @@ export { DEFAULT_DRIVER_ROLE, DEFAULT_DATA_OPTIONS } from './types.js';
 export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './process/builtin-tools.js';
 
 // Task type registry
-export { getTaskTypeConfig } from './task-types/index.js';
+export { getTaskTypeConfig, taskCommon } from './task-types/index.js';
 export type { TaskTypeConfig } from './task-types/index.js';

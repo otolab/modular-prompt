@@ -75,6 +75,7 @@ export interface QueryWithToolsResult {
  */
 export async function queryWithTools(
   driver: AIDriver,
+  // >>> ResolvedPromptの方が良さそう
   prompt: CompiledPrompt,
   builtinTools: ToolSpec[],
   options: QueryWithToolsOptions = {}

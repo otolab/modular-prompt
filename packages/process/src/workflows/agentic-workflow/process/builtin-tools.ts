@@ -1,7 +1,7 @@
 /**
  * Agentic workflow 組み込みツール定義 (v2)
  *
- * - __task: タスク登録（全タスクから利用可能）
+ * - __insert_tasks: タスク登録（全タスクから利用可能）
  * - __time: 現在時刻取得
  */
 
@@ -40,62 +40,111 @@ function findDefaultInsertIndex(taskList: AgenticTask[]): number {
 /**
  * Planning フェーズ用の組み込みツールを生成
  */
+/**
+ * 単一タスク定義の型
+ */
+interface TaskEntry {
+  instruction: string;
+  taskType?: string;
+  driverRole?: string;
+  withInputs?: boolean;
+  withMessages?: boolean;
+  withMaterials?: boolean;
+  insertAt?: number;
+}
+
+const TASK_ENTRY_SCHEMA = {
+  type: 'object',
+  properties: {
+    instruction: { type: 'string', description: 'Specific instruction for the task executor. This is the only guidance the executor receives, so be concrete and self-contained.' },
+    taskType: {
+      type: 'string',
+      enum: ['planning', 'think', 'extractContext', 'outputMessage', 'outputStructured'],
+      description: 'Type of task. Default: think',
+    },
+    driverRole: {
+      type: 'string',
+      enum: ['default', 'thinking', 'instruct', 'chat', 'plan'],
+      description: 'Driver role override. Defaults per task type.',
+    },
+    withInputs: {
+      type: 'boolean',
+      description: 'Include ctx.inputs in data. Defaults per task type.',
+    },
+    withMessages: {
+      type: 'boolean',
+      description: 'Include ctx.messages in data. Defaults per task type.',
+    },
+    withMaterials: {
+      type: 'boolean',
+      description: 'Include ctx.materials in data. Defaults per task type.',
+    },
+    insertAt: {
+      type: 'number',
+      description: 'Index to insert at. Defaults to just before the output task.',
+    },
+  },
+  required: ['instruction'],
+} as const;
+
+/**
+ * TaskEntry からタスクを登録し、結果メッセージを返す
+ */
+function registerTask(taskList: AgenticTask[], entry: TaskEntry): string {
+  const taskType = (entry.taskType as TaskType) || 'think';
+  const id = nextTaskId(taskList);
+  const task: AgenticTask = {
+    id,
+    instruction: entry.instruction,
+    taskType,
+    driverRole: entry.driverRole as ModelRole | undefined,
+    withInputs: entry.withInputs,
+    withMessages: entry.withMessages,
+    withMaterials: entry.withMaterials,
+  };
+
+  const insertAt = typeof entry.insertAt === 'number' ? entry.insertAt : findDefaultInsertIndex(taskList);
+  taskList.splice(insertAt, 0, task);
+
+  return `Task ${id} registered: ${task.instruction}`;
+}
+
+/**
+ * Planning フェーズ用の組み込みツールを生成
+ *
+ * __insert_tasks ツールは tasks 配列で複数タスクを一括登録する。
+ * 単体の instruction 指定も後方互換として受け付ける。
+ */
 export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
   return [{
     definition: {
-      name: '__task',
-      description: 'Register a task in the workflow. Call this multiple times to build the task list. Tasks are inserted before the output task by default.',
+      name: '__insert_tasks',
+      description: 'Register tasks in the workflow. Tasks are inserted before the output task by default.',
       parameters: {
         type: 'object',
         properties: {
-          description: { type: 'string', description: 'What this task should accomplish' },
-          taskType: {
-            type: 'string',
-            enum: ['planning', 'think', 'extractContext', 'outputMessage', 'outputStructured'],
-            description: 'Type of task. Default: think',
+          tasks: {
+            type: 'array',
+            description: 'List of tasks to register.',
+            items: TASK_ENTRY_SCHEMA,
           },
-          driverRole: {
-            type: 'string',
-            enum: ['default', 'thinking', 'instruct', 'chat', 'plan'],
-            description: 'Driver role override. Defaults per task type.',
-          },
-          withInputs: {
-            type: 'boolean',
-            description: 'Include ctx.inputs in data. Defaults per task type.',
-          },
-          withMessages: {
-            type: 'boolean',
-            description: 'Include ctx.messages in data. Defaults per task type.',
-          },
-          withMaterials: {
-            type: 'boolean',
-            description: 'Include ctx.materials in data. Defaults per task type.',
-          },
-          insertAt: {
-            type: 'number',
-            description: 'Index to insert at. Defaults to just before the output task.',
-          },
+          // 後方互換: 単体登録
+          instruction: { type: 'string', description: 'Instruction for a single task.' },
+          taskType: { type: 'string', enum: ['planning', 'think', 'extractContext', 'outputMessage', 'outputStructured'] },
         },
-        required: ['description'],
       },
     },
     handler: async (args) => {
-      const taskType = (args.taskType as TaskType) || 'think';
-      const id = nextTaskId(taskList);
-      const task: AgenticTask = {
-        id,
-        description: args.description as string,
-        taskType,
-        driverRole: args.driverRole as ModelRole | undefined,
-        withInputs: args.withInputs as boolean | undefined,
-        withMessages: args.withMessages as boolean | undefined,
-        withMaterials: args.withMaterials as boolean | undefined,
-      };
+      if (Array.isArray(args.tasks) && args.tasks.length > 0) {
+        const results = (args.tasks as TaskEntry[]).map(entry => registerTask(taskList, entry));
+        return results.join('\n');
+      }
 
-      const insertAt = typeof args.insertAt === 'number' ? args.insertAt : findDefaultInsertIndex(taskList);
-      taskList.splice(insertAt, 0, task);
+      if (args.instruction) {
+        return registerTask(taskList, args as unknown as TaskEntry);
+      }
 
-      return `Task ${id} registered: ${task.description}`;
+      return 'Error: Provide "tasks" array or "instruction".';
     },
   }];
 }
@@ -124,7 +173,7 @@ export function createExecutionBuiltinTools(
   taskList: AgenticTask[]
 ): ToolSpec[] {
   return [
-    createPlanningTools(taskList)[0], // __task
+    createPlanningTools(taskList)[0], // __insert_tasks
     timeTool,
   ];
 }

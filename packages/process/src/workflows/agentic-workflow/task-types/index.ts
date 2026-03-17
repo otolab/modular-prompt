@@ -3,7 +3,7 @@
  */
 
 import type { PromptModule, MaterialElement, SectionContent } from '@modular-prompt/core';
-import type { AgenticTask, AgenticWorkflowContext, TaskType, AgenticTaskExecutionLog } from '../types.js';
+import type { AgenticWorkflowContext, TaskType, AgenticTaskExecutionLog } from '../types.js';
 import { config as planningConfig } from './planning.js';
 import { config as thinkConfig } from './think.js';
 import { config as extractContextConfig } from './extract-context.js';
@@ -70,55 +70,43 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
     if (i < currentIndex) {
       status = '[completed]';
     } else if (i === currentIndex) {
-      status = '[current]';
+      status = '**[current]**';
     } else {
       status = '[pending]';
     }
 
-    lines.push(`- Task ${task.id} (${task.taskType}): ${task.description} ${status}`);
+    lines.push(`- Task ${task.id} (${task.taskType}): ${task.instruction} ${status}`);
   }
 
   return lines.join('\n');
 }
 
 /**
- * Common methodology introduction text.
- * Used by all task types as the first element of their methodology section.
- */
-export const METHODOLOGY_INTRO =
-  'This workflow accomplishes the objective by executing tasks sequentially. Each task is handled by a separate AI instance that only sees its own instructions and the results of previous tasks. You are now responsible for the task marked [current] in the task list below.';
-
-/**
  * Common module shared by all task types.
- * Provides workflow methodology and state information.
+ * Provides workflow terms, methodology, and state information.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
+  terms: [
+    '- Objective: The final goal we are working to achieve',
+    '- Plan: A sequence of Tasks we execute to accomplish the Objective',
+    '- Task: A unit of work executed by one of our AI instances',
+  ],
   methodology: [
-    METHODOLOGY_INTRO,
+    '- We accomplish the Objective by executing Tasks sequentially.',
+    '- You are now working on the Task marked [current] below. Follow the "Instructions" section.',
     {
       type: 'subsection' as const,
-      title: 'Current Task',
+      title: 'Workflow Status',
       items: [
-        (ctx: AgenticWorkflowContext) => {
-          const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-          if (!task) return 'No current task';
-          return `${task.taskType}: ${task.description}`;
-        },
-      ],
-    },
-    {
-      type: 'subsection' as const,
-      title: 'Task List',
-      items: [
+        '- This is the current state of our workflow.',
+        '- The [current] Task is what you are doing right now — do not re-register it.',
         (ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx),
       ],
     },
   ],
   state: [
     (ctx: AgenticWorkflowContext) => {
-      const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-      if (!task) return '';
-      return `Current task: ${task.description}\nTask type: ${task.taskType}`;
+      return ctx.state || '(no saved state)';
     },
   ],
 };
