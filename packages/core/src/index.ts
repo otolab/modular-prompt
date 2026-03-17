@@ -10,4 +10,4 @@ export * from './types.js';
 export { merge } from './merge.js';
 
 // Export compile functionality
-export { compile, createContext } from './compile.js';
+export { resolve, distribute, compile, createContext } from './compile.js';

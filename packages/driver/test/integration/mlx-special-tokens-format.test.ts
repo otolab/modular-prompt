@@ -79,11 +79,11 @@ describe('MLX Special Tokens Formatting', () => {
       expect(result).toContain('"properties"');
     });
 
-    it('should not extract dynamic schema to metadata (but still renders as normal section)', async () => {
+    it('should extract dynamic schema to metadata (same as static JSONElement)', async () => {
       const prompt = compile({
         instructions: ['Generate response'],
         schema: [
-          // DynamicContentとしてJSONElementを返す場合、metadata.outputSchemaには抽出されない
+          // DynamicContentとしてJSONElementを返す場合も、resolve後にmetadata.outputSchemaに抽出される
           () => ({
             type: 'json' as const,
             content: {
@@ -96,17 +96,19 @@ describe('MLX Special Tokens Formatting', () => {
         ]
       });
 
-      // metadata.outputSchemaは設定されない（静的なJSONElementのみ抽出される）
-      expect(prompt.metadata?.outputSchema).toBeUndefined();
+      // resolve で DynamicContent が解決された後、distribute で JSONElement が抽出される
+      expect(prompt.metadata?.outputSchema).toEqual({
+        type: 'object',
+        properties: {
+          dynamicField: { type: 'string' }
+        }
+      });
 
       const result = await formatCompletionPrompt(prompt);
 
-      // 通常のセクションとして "## Output Schema" が表示される
-      expect(result).toContain('## Output Schema');
-      // JSONElementの内容も含まれる
+      // metadata.outputSchema として抽出されるため、### Output Schema としてフォーマットされる
+      expect(result).toContain('### Output Schema');
       expect(result).toContain('dynamicField');
-      // ただし、metadata.outputSchemaとしての特別なフォーマット（### Output Schema）は含まれない
-      expect(result).not.toContain('### Output Schema');
     });
   });
 

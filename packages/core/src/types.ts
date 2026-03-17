@@ -196,6 +196,17 @@ export type StandardSectionName = keyof typeof STANDARD_SECTIONS;
 // セクションタイプの型
 export type SectionType = 'instructions' | 'data' | 'output';
 
+// DynamicContent解決済みのセクション内容
+export type ResolvedSectionContent = (string | Element)[];
+
+// DynamicContent解決済みのモジュール
+// resolve() の出力。セクション構造は維持したまま、関数が全て解決されている
+export type ResolvedModule = {
+  [K in StandardSectionName]?: ResolvedSectionContent;
+} & {
+  sections?: SectionElement[];
+};
+
 // コンパイル済みプロンプト
 export interface CompiledPrompt {
   instructions: Element[];
