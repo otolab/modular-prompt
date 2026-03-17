@@ -51,18 +51,20 @@ function stripThinkBlocks(text: string): string {
  * - Always starts with a planning task.
  * - Ends with outputStructured (if schema) or outputMessage.
  */
-function bootstrap(module: PromptModule<AgenticWorkflowContext>): AgenticTask[] {
+function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask[] {
   const tasks: AgenticTask[] = [];
 
-  tasks.push({
-    id: 1,
-    instruction: 'Decompose objective into executable tasks',
-    taskType: 'planning',
-  });
+  if (enablePlanning) {
+    tasks.push({
+      id: 1,
+      instruction: 'Decompose objective into executable tasks',
+      taskType: 'planning',
+    });
+  }
 
   const outputType: TaskType = module.schema ? 'outputStructured' : 'outputMessage';
   tasks.push({
-    id: 2,
+    id: tasks.length + 1,
     instruction: 'Generate the final output based on all task results',
     taskType: outputType,
   });
@@ -196,12 +198,9 @@ export async function agenticProcess(
   context.userModule = userModule;
 
   // Bootstrap or use provided task list
-  // >>> ここは簡単にできる
   const taskList = context.taskList
     ? [...context.taskList]
-    : enablePlanning
-      ? bootstrap(module)
-      : [{ id: 1, instruction: 'Generate output', taskType: 'outputMessage' as const }];
+    : bootstrap(userModule, enablePlanning);
 
   const executionLog: AgenticTaskExecutionLog[] = context.executionLog
     ? [...context.executionLog]
