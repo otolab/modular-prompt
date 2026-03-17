@@ -77,7 +77,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     expect(dataText).toContain('文書の主要なテーマを特定する');
 
     // タスクリストが methodology に表示される
-    expect(instructionText).toContain('Task 1');
+    expect(instructionText).toContain('Task(id=1)');
     expect(instructionText).toContain('planning');
   });
 
@@ -112,7 +112,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     // 前タスク結果が materials に入る
     const materialElements = prompt.data.filter((e: any) => e.type === 'material');
     expect(materialElements.length).toBeGreaterThanOrEqual(1);
-    expect(materialElements[0].title).toContain('Task 1');
+    expect(materialElements[0].title).toContain('Task(id=1)');
   });
 
   it('extractContext: messages/materials がデフォルトでデータに含まれる', () => {

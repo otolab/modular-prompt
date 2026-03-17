@@ -189,7 +189,6 @@ export class ExperimentRunner {
         console.log(`🤖 Model: ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
         console.log('='.repeat(80));
 
-        logger.info(`Creating driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
         driverInput = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
       }
 

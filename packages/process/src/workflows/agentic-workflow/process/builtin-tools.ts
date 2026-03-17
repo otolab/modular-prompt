@@ -106,7 +106,7 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry): string {
   const insertAt = typeof entry.insertAt === 'number' ? entry.insertAt : findDefaultInsertIndex(taskList);
   taskList.splice(insertAt, 0, task);
 
-  return `Task ${id} registered: ${task.instruction}`;
+  return `Task(id=${id}) registered: ${task.instruction}`;
 }
 
 /**
@@ -145,7 +145,7 @@ export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
 
       // Return full updated task list so the model can see the current plan
       return 'Updated task list:\n' + taskList
-        .map(t => `- Task ${t.id} (${t.taskType}): ${t.instruction}`)
+        .map(t => `- Task(id=${t.id}) (${t.taskType}): ${t.instruction}`)
         .join('\n');
     },
   }];

@@ -47,7 +47,7 @@ export function buildPreviousResultsMaterials(
   return executionLog.map((log) => ({
     type: 'material' as const,
     id: `task-result-${log.taskId}`,
-    title: `Task ${log.taskId} result`,
+    title: `Task(id=${log.taskId}) result`,
     content: log.result,
   }));
 }
@@ -75,7 +75,7 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
       status = '[pending]';
     }
 
-    lines.push(`- Task ${task.id} (${task.taskType}): ${task.instruction} ${status}`);
+    lines.push(`- Task(id=${task.id}) (${task.taskType}): ${task.instruction} ${status}`);
   }
 
   return lines.join('\n');
