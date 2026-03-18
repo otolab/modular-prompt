@@ -197,7 +197,8 @@ export type StandardSectionName = keyof typeof STANDARD_SECTIONS;
 export type SectionType = 'instructions' | 'data' | 'output';
 
 // DynamicContent解決済みのセクション内容
-export type ResolvedSectionContent = (string | Element)[];
+// resolve後はSectionElementは残らない（distributeで生成される）
+export type ResolvedSectionContent = (string | DynamicElement | SubSectionElement)[];
 
 // DynamicContent解決済みのモジュール
 // resolve() の出力。セクション構造は維持したまま、関数が全て解決されている

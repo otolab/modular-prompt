@@ -8,6 +8,7 @@
 import type { ToolSpec, AgenticTask, TaskType } from '../types.js';
 import { DEFAULT_DRIVER_ROLE } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
+import { EXECUTION_TASK_DEFS } from '../task-types/execution-tasks.js';
 
 export const BUILTIN_TOOL_PREFIX = '__';
 
@@ -16,18 +17,6 @@ export const BUILTIN_TOOL_PREFIX = '__';
  */
 export function isBuiltinTool(name: string): boolean {
   return name.startsWith(BUILTIN_TOOL_PREFIX);
-}
-
-/**
- * output タスクの直前のインデックスを返す
- */
-function findDefaultInsertIndex(taskList: AgenticTask[]): number {
-  const lastIndex = taskList.length - 1;
-  const lastTask = taskList[lastIndex];
-  if (lastTask && lastTask.taskType === 'output') {
-    return lastIndex;
-  }
-  return taskList.length;
 }
 
 /**
@@ -52,8 +41,11 @@ const TASK_ENTRY_SCHEMA = {
     instruction: { type: 'string', description: 'Specific instruction for the task executor.' },
     taskType: {
       type: 'string',
-      enum: ['toolCall', 'think', 'verify', 'extractContext', 'output'],
-      description: 'toolCall: call external tools. think: general reasoning/analysis. verify: validate previous results. extractContext: extract from inputs/materials. output: generate final output (must be the last task). Default: think',
+      enum: [...Object.keys(EXECUTION_TASK_DEFS), 'output'],
+      description: Object.entries(EXECUTION_TASK_DEFS)
+        .map(([name, def]) => `${name}: ${def.toolDescription}`)
+        .concat(['output: generate final output (must be the last task)'])
+        .join('. ') + '. Default: think',
     },
     driverRole: {
       type: 'string',
@@ -74,7 +66,7 @@ const TASK_ENTRY_SCHEMA = {
     },
     insertAt: {
       type: 'number',
-      description: 'Index to insert at. Defaults to just before the output task.',
+      description: 'Position in the task list to insert at. If omitted, the task is scheduled as the next task. Values before the current task are ignored.',
     },
   },
   required: ['instruction', 'taskType'],
@@ -82,8 +74,9 @@ const TASK_ENTRY_SCHEMA = {
 
 /**
  * TaskEntry からタスクを登録し、結果メッセージを返す
+ * @param currentIndex 現在実行中のタスクのインデックス。insertAt がこれ以下の場合はクランプされる。
  */
-function registerTask(taskList: AgenticTask[], entry: TaskEntry): void {
+function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: number): void {
   const taskType = (entry.taskType as TaskType) || 'think';
   const task: AgenticTask = {
     instruction: entry.instruction,
@@ -94,7 +87,9 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry): void {
     withMaterials: entry.withMaterials,
   };
 
-  const insertAt = typeof entry.insertAt === 'number' ? entry.insertAt : findDefaultInsertIndex(taskList);
+  const minInsertAt = currentIndex + 1;
+  const requestedAt = typeof entry.insertAt === 'number' ? entry.insertAt : minInsertAt;
+  const insertAt = Math.max(requestedAt, minInsertAt);
   taskList.splice(insertAt, 0, task);
 }
 
@@ -104,11 +99,11 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry): void {
  * __insert_tasks ツールは tasks 配列で複数タスクを一括登録する。
  * 単体の instruction 指定も後方互換として受け付ける。
  */
-export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
+export function createPlanningTools(taskList: AgenticTask[], currentIndex: number): ToolSpec[] {
   return [{
     definition: {
       name: '__insert_tasks',
-      description: 'Register tasks in the workflow. Each task is executed by a separate AI instance. Write specific, self-contained instructions.',
+      description: 'Register tasks in the workflow. Each task is executed by a separate AI instance. Write specific, self-contained instructions. Refer to the current task list in Workflow Status to understand the existing plan before inserting.',
       parameters: {
         type: 'object',
         properties: {
@@ -125,7 +120,11 @@ export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
       if (!Array.isArray(args.tasks) || args.tasks.length === 0) {
         return 'Error: Provide a non-empty "tasks" array.';
       }
-      (args.tasks as TaskEntry[]).forEach(entry => registerTask(taskList, entry));
+      let insertOffset = 0;
+      for (const entry of args.tasks as TaskEntry[]) {
+        registerTask(taskList, entry, currentIndex + insertOffset);
+        insertOffset++;
+      }
 
       // Return full updated task list so the model can see the current plan
       return 'Updated task list:\n' + taskList
@@ -156,10 +155,11 @@ const timeTool: ToolSpec = {
  * Execution フェーズ用の組み込みツールを生成
  */
 export function createExecutionBuiltinTools(
-  taskList: AgenticTask[]
+  taskList: AgenticTask[],
+  currentIndex: number
 ): ToolSpec[] {
   return [
-    createPlanningTools(taskList)[0], // __insert_tasks
+    createPlanningTools(taskList, currentIndex)[0], // __insert_tasks
     timeTool,
   ];
 }

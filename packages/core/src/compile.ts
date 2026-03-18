@@ -80,7 +80,7 @@ function resolveSectionContent<TContext>(
         }
         items.push({ ...item, items: resolvedItems } as SubSectionElement);
       } else {
-        items.push(item as Element);
+        items.push(item as DynamicElement);
       }
     }
   }

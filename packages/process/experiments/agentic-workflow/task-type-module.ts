@@ -46,4 +46,6 @@ export const think = build('think');
 export const toolCall = build('toolCall');
 export const verify = build('verify');
 export const extractContext = build('extractContext');
+export const recall = build('recall');
+export const determine = build('determine');
 export const output = build('output');

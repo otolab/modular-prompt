@@ -5,11 +5,8 @@
 import type { PromptModule, MaterialElement, SectionContent } from '@modular-prompt/core';
 import type { AgenticWorkflowContext, TaskType, AgenticTaskExecutionLog } from '../types.js';
 import { config as planningConfig } from './planning.js';
-import { config as toolCallConfig } from './tool-call.js';
-import { config as thinkConfig } from './think.js';
-import { config as verifyConfig } from './verify.js';
-import { config as extractContextConfig } from './extract-context.js';
 import { config as outputConfig } from './output.js';
+import { executionTaskConfigs } from './execution-tasks.js';
 
 /**
  * Task type configuration
@@ -22,16 +19,14 @@ export interface TaskTypeConfig {
 }
 
 /**
- * Task type registry
+ * Task type registry.
+ * planning/output are special; execution tasks are auto-generated from EXECUTION_TASK_DEFS.
  */
 const TASK_TYPE_REGISTRY: Record<TaskType, TaskTypeConfig> = {
   planning: planningConfig,
-  toolCall: toolCallConfig,
-  think: thinkConfig,
-  verify: verifyConfig,
-  extractContext: extractContextConfig,
+  ...executionTaskConfigs as Record<string, TaskTypeConfig>,
   output: outputConfig,
-};
+} as Record<TaskType, TaskTypeConfig>;
 
 /**
  * Get task type configuration
@@ -88,6 +83,11 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
  * Provides workflow terms, methodology, and state information.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
+  terms: [
+    '- **Task**: A unit of work in the workflow. Each Task is executed by a separate AI instance.',
+    '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
+    '- **Focus**: The specific directive for the current Task — what to concentrate on and accomplish.',
+  ],
   methodology: [
     '- We accomplish the Objective by executing Tasks sequentially.',
     {

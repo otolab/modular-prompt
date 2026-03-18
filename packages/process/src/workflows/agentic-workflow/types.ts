@@ -41,17 +41,22 @@ export type TaskType =
   | 'think'
   | 'verify'
   | 'extractContext'
+  | 'recall'
+  | 'determine'
   | 'output';
 
 /**
- * Default driver role for each task type
+ * Default driver role for each task type.
+ * planning/output are hardcoded; execution tasks are derived from EXECUTION_TASK_DEFS.
  */
 export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
   planning: 'plan',
   toolCall: 'instruct',
   think: 'instruct',
   verify: 'instruct',
-  extractContext: 'instruct',
+  extractContext: 'thinking',
+  recall: 'instruct',
+  determine: 'instruct',
   output: 'chat',
 };
 
@@ -64,6 +69,8 @@ export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withM
   think: { withInputs: false, withMessages: false, withMaterials: false },
   verify: { withInputs: false, withMessages: false, withMaterials: false },
   extractContext: { withInputs: true, withMessages: true, withMaterials: true },
+  recall: { withInputs: false, withMessages: false, withMaterials: false },
+  determine: { withInputs: true, withMessages: true, withMaterials: true },
   output: { withInputs: false, withMessages: false, withMaterials: false },
 };
 
@@ -148,4 +155,6 @@ export interface AgenticWorkflowOptions {
   maxToolCalls?: number;
   /** Skip planning and use provided taskList (default: true) */
   enablePlanning?: boolean;
+  /** Include intermediate task results wrapped in <think> tags before the final output (default: false) */
+  includeThinking?: boolean;
 }

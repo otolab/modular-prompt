@@ -62,7 +62,7 @@ function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask
   } else {
     // No planning: default to a single output task
     tasks.push({
-      instruction: 'Produce the final output from all preceding task results',
+      instruction: 'Compose the response using the preceding task results.',
       taskType: 'output',
     });
   }
@@ -79,7 +79,8 @@ function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask
  */
 function getBuiltinToolsForTask(
   taskType: TaskType,
-  taskList: AgenticTask[]
+  taskList: AgenticTask[],
+  currentIndex: number
 ): ToolSpec[] {
   const config = getTaskTypeConfig(taskType);
   const toolNames = new Set(config.builtinToolNames);
@@ -87,13 +88,13 @@ function getBuiltinToolsForTask(
   const allTools: ToolSpec[] = [];
 
   if (toolNames.has('__insert_tasks')) {
-    allTools.push(...createPlanningTools(taskList));
+    allTools.push(...createPlanningTools(taskList, currentIndex));
   }
 
   if (toolNames.has('__time')) {
     // createExecutionBuiltinTools returns [__insert_tasks, __time]
     // We only want __time if __insert_tasks is not already added
-    const execTools = createExecutionBuiltinTools(taskList);
+    const execTools = createExecutionBuiltinTools(taskList, currentIndex);
     const timeOnly = execTools.filter(t => t.definition.name === '__time');
     allTools.push(...timeOnly);
   }
@@ -120,18 +121,18 @@ async function executeTask(
   const taskConfig = getTaskTypeConfig(task.taskType);
 
   // Build workflowBase from resolved userModule
-  // objective/terms are always included; cue/schema only for output tasks
-  const workflowBase: PromptModule<AgenticWorkflowContext> = {
-    objective: userModule.objective,
-    terms: userModule.terms,
-    ...(task.taskType === 'output' && userModule.cue ? { cue: userModule.cue } : {}),
-    ...(task.taskType === 'output' && userModule.schema ? { schema: userModule.schema } : {}),
-  };
+  // output tasks get the full userModule; other tasks get objective/terms only
+  const workflowBase: PromptModule<AgenticWorkflowContext> = task.taskType === 'output'
+    ? { ...userModule } as PromptModule<AgenticWorkflowContext>
+    : {
+        objective: userModule.objective,
+        terms: userModule.terms,
+      };
 
   // Merge and resolve (taskCommon first for objective framing)
   const resolved = resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
 
-  const builtinTools = getBuiltinToolsForTask(task.taskType, taskList);
+  const builtinTools = getBuiltinToolsForTask(task.taskType, taskList, taskIndex);
   const externalToolDefs = externalTools.map(t => t.definition);
   const allToolNames = [...builtinTools.map(t => t.definition.name), ...externalToolDefs.map(t => t.name)];
   taskLogger.verbose('[prompt]', JSON.stringify(resolved), allToolNames.length > 0 ? `tools: [${allToolNames.join(', ')}]` : '');
@@ -190,6 +191,7 @@ export async function agenticProcess(
     tools = [],
     maxToolCalls = 10,
     enablePlanning = true,
+    includeThinking = false,
   } = options;
 
   // Resolve user module: DynamicContent → static values
@@ -233,7 +235,7 @@ export async function agenticProcess(
   const lastExecuted = executionLog[executionLog.length - 1];
   if (lastExecuted && lastExecuted.taskType !== 'output') {
     const outputTask: AgenticTask = {
-      instruction: 'Produce the final output from all preceding task results',
+      instruction: 'Compose the response using the preceding task results.',
       taskType: 'output',
     };
     taskList.push(outputTask);
@@ -253,9 +255,20 @@ export async function agenticProcess(
     executionLog.push(outputLog);
   }
 
-  // Final output: last task's result
+  // Final output: last task's result, optionally prefixed with intermediate results as <think>
   const lastLog = executionLog[executionLog.length - 1];
-  const output = lastLog?.result || '';
+  const finalResult = lastLog?.result || '';
+
+  let output: string;
+  if (includeThinking && executionLog.length > 1) {
+    const intermediateLog = executionLog.slice(0, -1);
+    const thinkingLines = intermediateLog
+      .map(log => `[${log.taskType}]\n${log.result}`)
+      .join('\n\n');
+    output = `<think>\n${thinkingLines}\n</think>\n\n${finalResult}`;
+  } else {
+    output = finalResult;
+  }
 
   // Determine finishReason
   const hasPendingToolCalls = executionLog.some(
