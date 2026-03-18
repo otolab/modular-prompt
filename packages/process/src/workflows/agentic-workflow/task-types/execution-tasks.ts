@@ -12,7 +12,7 @@
  */
 
 import type { PromptModule, DynamicElement } from '@modular-prompt/core';
-import type { AgenticWorkflowContext, TaskType } from '../types.js';
+import type { AgenticWorkflowContext } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
 import type { TaskTypeConfig } from './index.js';
 import { buildPreviousResultsMaterials } from './index.js';

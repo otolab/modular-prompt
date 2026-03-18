@@ -6,7 +6,6 @@
  */
 
 import type { ToolSpec, AgenticTask, TaskType } from '../types.js';
-import { DEFAULT_DRIVER_ROLE } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
 import { EXECUTION_TASK_DEFS } from '../task-types/execution-tasks.js';
 

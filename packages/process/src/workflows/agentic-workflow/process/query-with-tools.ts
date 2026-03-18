@@ -2,7 +2,7 @@
  * Tool calling loop implementation
  */
 
-import type { ToolCall, ToolResultMessageElement, StandardMessageElement, Element, ResolvedModule } from '@modular-prompt/core';
+import type { ToolCall, ToolResultMessageElement, StandardMessageElement, ResolvedModule } from '@modular-prompt/core';
 import { distribute } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
