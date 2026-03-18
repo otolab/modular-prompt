@@ -56,16 +56,16 @@ function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask
 
   if (enablePlanning) {
     tasks.push({
-      instruction: 'Decompose objective into executable tasks',
+      instruction: 'Analyze the prompt and register tasks',
       taskType: 'planning',
     });
+  } else {
+    // No planning: default to a single output task
+    tasks.push({
+      instruction: 'Produce the final output from all preceding task results',
+      taskType: 'output',
+    });
   }
-
-  const outputType: TaskType = module.schema ? 'outputStructured' : 'outputMessage';
-  tasks.push({
-    instruction: 'Generate the final output based on all task results',
-    taskType: outputType,
-  });
 
   return tasks;
 }
@@ -124,8 +124,8 @@ async function executeTask(
   const workflowBase: PromptModule<AgenticWorkflowContext> = {
     objective: userModule.objective,
     terms: userModule.terms,
-    ...(task.taskType === 'outputMessage' && userModule.cue ? { cue: userModule.cue } : {}),
-    ...(task.taskType === 'outputStructured' && userModule.schema ? { schema: userModule.schema } : {}),
+    ...(task.taskType === 'output' && userModule.cue ? { cue: userModule.cue } : {}),
+    ...(task.taskType === 'output' && userModule.schema ? { schema: userModule.schema } : {}),
   };
 
   // Merge and resolve (taskCommon first for objective framing)
@@ -139,7 +139,8 @@ async function executeTask(
   const driverRole = task.driverRole || DEFAULT_DRIVER_ROLE[task.taskType];
 
   try {
-    const toolChoice = task.taskType === 'planning' ? 'required' as const : 'auto' as const;
+    const isPlanning = task.taskType === 'planning';
+    const toolChoice = isPlanning ? 'required' as const : 'auto' as const;
 
     const result = await queryWithTools(
       resolveDriver(driver, driverRole),
@@ -149,6 +150,7 @@ async function executeTask(
         externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,
         toolChoice,
         maxIterations: maxToolCalls,
+        stopAfterToolCall: isPlanning,
         logger: taskLogger,
       }
     );
@@ -225,6 +227,30 @@ export async function agenticProcess(
       tools, maxToolCalls
     );
     executionLog.push(logEntry);
+  }
+
+  // Auto-append output task if the last executed task was not output
+  const lastExecuted = executionLog[executionLog.length - 1];
+  if (lastExecuted && lastExecuted.taskType !== 'output') {
+    const outputTask: AgenticTask = {
+      instruction: 'Produce the final output from all preceding task results',
+      taskType: 'output',
+    };
+    taskList.push(outputTask);
+    const outputIndex = taskList.length - 1;
+
+    const outputContext: AgenticWorkflowContext = {
+      ...context,
+      taskList,
+      executionLog,
+      currentTaskIndex: outputIndex,
+    };
+
+    const outputLog = await executeTask(
+      driver, userModule, outputContext, outputTask, outputIndex, taskList,
+      tools, maxToolCalls
+    );
+    executionLog.push(outputLog);
   }
 
   // Final output: last task's result

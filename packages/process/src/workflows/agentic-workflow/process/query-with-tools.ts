@@ -54,6 +54,8 @@ export interface QueryWithToolsOptions {
   externalToolDefs?: ToolDefinition[];
   toolChoice?: ToolChoice;
   maxIterations?: number;
+  /** Stop after first builtin tool execution without sending result back to model */
+  stopAfterToolCall?: boolean;
   logPrefix?: string;
   logger?: Logger;
 }
@@ -142,6 +144,11 @@ export async function queryWithTools(
         } as StandardMessageElement,
         ...toolResults
       );
+
+      // Stop after first tool call if requested (e.g. planning)
+      if (options.stopAfterToolCall) {
+        return { content, toolCallLog, usage: lastResult.usage, finishReason: lastResult.finishReason };
+      }
     }
 
     // External tool calls → stop immediately and return them

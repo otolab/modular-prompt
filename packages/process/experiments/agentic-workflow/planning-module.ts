@@ -6,8 +6,9 @@
  * - USE_SOURCE_MODULES=false: このファイル内のテスト用定義を使用（日本語版）
  */
 
-import { merge } from '@modular-prompt/core';
+import { merge, distribute } from '@modular-prompt/core';
 import type { PromptModule, MaterialElement } from '@modular-prompt/core';
+import { formatCompletionPrompt } from '@modular-prompt/driver';
 
 // ---------------------------------------------------------------------------
 // モード切り替え: true でソースコードのモジュールを使用
@@ -19,15 +20,10 @@ const USE_SOURCE_MODULES = true;
 // ---------------------------------------------------------------------------
 
 interface PlanningContext {
-  userModule: {
-    objective: string[];
-    terms?: string[];
-    instructions?: string[];
-    guidelines?: string[];
-  };
+  userModule: Record<string, any>;
   inputs?: Record<string, unknown>;
   materials?: MaterialElement[];
-  taskList?: { id: number; description: string; taskType: string }[];
+  taskList?: { instruction: string; taskType: string }[];
   currentTaskIndex?: number;
   state?: string;
 }
@@ -42,9 +38,6 @@ function extractTextFromSection(section: string[] | undefined): string {
 }
 
 const userModule: PromptModule<PlanningContext> = {
-  objective: [
-    (ctx: PlanningContext) => ctx.userModule.objective || '',
-  ],
   terms: [
     (ctx: PlanningContext) => ctx.userModule.terms || null,
   ],
@@ -61,31 +54,14 @@ function buildTaskListDisplay(ctx: PlanningContext): string {
   }
   const currentIndex = ctx.currentTaskIndex ?? -1;
   return ctx.taskList.map((task, i) => {
-    const status = i < currentIndex ? '[完了]' : i === currentIndex ? '[現在]' : '[未着手]';
-    return `- タスク ${task.id} (${task.taskType}): ${task.instruction} ${status}`;
+    const status = i < currentIndex ? '[completed]' : i === currentIndex ? '[current]' : '[pending]';
+    return `${i + 1}. (${task.taskType}): ${task.instruction} ${status}`;
   }).join('\n');
 }
 
 const testTaskCommon: PromptModule<PlanningContext> = {
-  terms: [
-    '- Objective: 最終的に解決すべき目標',
-    '- Plan: Objectiveを解決するためのTaskのフロー',
-    '- Task: AIが実行する作業単位'
-  ],
   methodology: [
     '- このワークフローは、タスクを順次実行することで目標を達成します',
-    '- あなたが担当する現在のTaskを把握し、Instructionsの指示に従ってください',
-    {
-      type: 'subsection' as const,
-      title: '現在のタスク',
-      items: [
-        (ctx: PlanningContext) => {
-          const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-          if (!task) return '現在のタスクなし';
-          return `${task.taskType}: ${task.instruction}`;
-        },
-      ],
-    },
     {
       type: 'subsection' as const,
       title: '現在のタスクリスト',
@@ -94,57 +70,43 @@ const testTaskCommon: PromptModule<PlanningContext> = {
       ],
     },
   ],
-  state: [
-    (ctx: PlanningContext) => {
-      return ctx.state || '(保存された状態なし)';
-    },
-  ],
 };
 
 const testPlanningModule: PromptModule<PlanningContext> = {
   objective: [
-    '',
-    '- 以上の目標を達成するためのプランを作成・更新してください',
+    '与えられた指示文を分析し、複雑さを抽出してタスクを組み立てる',
   ],
-  instructions: [
-    '- 目的を達成するためのプランを策定し、`__insert_tasks` ツールでワークフローにタスクを挿入します',
-    '- 『分解すべき指示』『遵守すべきガイドライン』『Materials』『Inputs』を把握し、具体的な指示を作成してください',
-    {
-      type: 'subsection' as const,
-      title: '計画の立て方',
-      items: [
-        '1. **複雑さの評価**: 目標と利用可能な情報を考慮します。単純な目標なら出力前に1タスクで十分な場合もあります。複雑な目標には複数のステップが必要です。',
-        '2. **必要なアクションの特定**: どの情報を収集する必要があるか？どの分析が必要か？どのツールを呼び出す必要があるか？',
-        '3. **タスク順序の設計**: 各タスクが前のタスクの結果を活用できるように順序を決めます。',
-        '4. **タスクの挿入**: `__insert_tasks` を呼び出し、タスクをワークフローに挿入します。',
-      ],
-    },
-  ],
-
   materials: [
     (ctx: PlanningContext) => {
-      const text = extractTextFromSection(ctx.userModule?.instructions);
-      if (!text) return null;
+      if (!ctx.userModule) return null;
+      const compiled = distribute(ctx.userModule);
+      const text = formatCompletionPrompt(compiled, {
+        sectionDescriptions: {},
+      });
+      if (!text.trim()) return null;
       return {
         type: 'material' as const,
-        id: 'user-instructions',
-        title: '分解すべき指示',
+        id: 'user-prompt',
+        title: 'Prompt to analyze',
         content: text,
       };
     },
-    (ctx: PlanningContext) => {
-      const text = extractTextFromSection(ctx.userModule?.guidelines);
-      if (!text) return null;
-      return {
-        type: 'material' as const,
-        id: 'user-guidelines',
-        title: '遵守すべきガイドライン',
-        content: text,
-      };
-    },
-    (ctx: PlanningContext) => {
-      if (!ctx.materials?.length) return null;
-      return ctx.materials;
+  ],
+  instructions: [
+    '- "Prompt to analyze" に示された指示文を分析し、実行に必要なタスクを設計してください',
+    '- `__insert_tasks` ツールを呼び出し、全タスクをまとめて登録してください',
+    '- 各タスクには「何に注意すべきか」「何をすべきか」だけを簡潔に指示してください',
+    '- 各タスクはそれまでに実行された処理結果をすべて受け取ります',
+    '- ツール呼び出しは各タスクから行うことができますが、ツールの結果はその次のタスクが受け取ります',
+    {
+      type: 'subsection' as const,
+      title: '分析の観点',
+      items: [
+        '1. **入力と出力**: 最終的に何が必要か、何が与えられているか把握',
+        '2. **複雑さの特定**: 指示文のどの部分が複雑で、分割が必要か',
+        '3. **依存関係**: どの情報が先に必要で、どの順序で処理すべきか',
+        '4. **ツール利用**: ツールの呼び出しが必要な箇所はどこか',
+      ],
     },
   ],
 
@@ -159,7 +121,7 @@ const testPlanningModule: PromptModule<PlanningContext> = {
     {
       type: 'message' as const,
       role: 'user' as const,
-      content: '`__insert_tasks` を呼び出し、ワークフローにタスクを挿入してください。',
+      content: '指示文を分析し、`__insert_tasks` でタスクを登録してください。',
     },
   ],
 };

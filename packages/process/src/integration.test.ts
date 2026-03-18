@@ -83,21 +83,23 @@ describe('integration tests', () => {
     // Planning → Think×2 → OutputMessage の4タスクシーケンス
     const driver = new TestDriver({
       responses: [
-        // Planning: __insert_tasks で2タスク登録（v2では id パラメータなし）
+        // Planning: __insert_tasks で2タスク登録（stopAfterToolCallで1回で終了）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__insert_tasks', arguments: { instruction: '入力データを分析する' } },
-            { id: 'tc-2', name: '__insert_tasks', arguments: { instruction: '分析結果をまとめる' } },
+            { id: 'tc-1', name: '__insert_tasks', arguments: {
+              tasks: [
+                { instruction: '入力データを分析する' },
+                { instruction: '分析結果をまとめる' },
+              ]
+            }},
           ]
         },
-        // Planning: ツール結果受け取り後に終了
-        'Plan complete.',
-        // Think task 1: テキスト出力が result
+        // Think task 1
         'データは正しい形式です',
-        // Think task 2: テキスト出力が result
+        // Think task 2
         '重要な発見: データ品質が良好',
-        // OutputMessage
+        // Auto-appended output
         'データ分析とまとめが完了しました。データ品質は良好で、次のステップに進む準備が整いました。'
       ]
     });
@@ -120,11 +122,9 @@ describe('integration tests', () => {
 
     expect(result.output).toBeDefined();
     // v2では phase なし、taskList あり
-    expect(result.context.taskList).toHaveLength(4); // planning + think×2 + outputMessage
-    // executionLog には4タスク分
+    expect(result.context.taskList).toHaveLength(4); // planning + think×2 + auto output
     expect(result.context.executionLog).toHaveLength(4);
-    expect(result.metadata?.planTasks).toBe(4);
-    expect(result.metadata?.executedTasks).toBe(4);
+    expect(result.context.executionLog?.[3].taskType).toBe('output');
   });
 
   it('agenticProcessで外部ツール呼び出しがpendingとして返される', async () => {
@@ -146,23 +146,26 @@ describe('integration tests', () => {
 
     const driver = new TestDriver({
       responses: [
-        // Planning: __insert_tasks で2タスク登録（v2では id パラメータなし）
+        // Planning: stopAfterToolCallで1回で終了
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__insert_tasks', arguments: { instruction: 'データを取得する' } },
-            { id: 'tc-2', name: '__insert_tasks', arguments: { instruction: 'データを処理する' } },
+            { id: 'tc-1', name: '__insert_tasks', arguments: {
+              tasks: [
+                { instruction: 'データを取得する' },
+                { instruction: 'データを処理する' },
+              ]
+            }},
           ]
         },
-        'Plan done.',
         // Think task 1: AI calls external tool → returned as pending
         {
           content: 'データ取得が必要',
           toolCalls: [{ id: 'call-1', name: 'fetchData', arguments: { source: 'api' } }]
         },
-        // Think task 2: テキスト出力のみ
+        // Think task 2
         '処理完了',
-        // OutputMessage
+        // Auto-appended output
         '全ての処理が完了しました'
       ]
     });

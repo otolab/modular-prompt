@@ -132,7 +132,7 @@ export async function loadEvaluators(
  * - module: inline PromptModule definition (static content only)
  */
 export type ModuleReference =
-  | { name: string; path: string; description?: string }
+  | { name: string; path: string; export?: string; description?: string }
   | { name: string; module: Record<string, any>; description?: string };
 
 /**
@@ -161,10 +161,11 @@ export async function loadModules(
 
     const filePath = resolve(basePath, ref.path);
     const imported = await importFile(filePath);
-    const module = imported.default;
+    const exportName = ref.export || 'default';
+    const module = imported[exportName];
 
     if (!module) {
-      logger.warn(`No default export in ${ref.path}`);
+      logger.warn(`No export '${exportName}' in ${ref.path}`);
       continue;
     }
 

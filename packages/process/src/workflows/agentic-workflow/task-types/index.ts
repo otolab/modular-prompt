@@ -5,10 +5,11 @@
 import type { PromptModule, MaterialElement, SectionContent } from '@modular-prompt/core';
 import type { AgenticWorkflowContext, TaskType, AgenticTaskExecutionLog } from '../types.js';
 import { config as planningConfig } from './planning.js';
+import { config as toolCallConfig } from './tool-call.js';
 import { config as thinkConfig } from './think.js';
+import { config as verifyConfig } from './verify.js';
 import { config as extractContextConfig } from './extract-context.js';
-import { config as outputMessageConfig } from './output-message.js';
-import { config as outputStructuredConfig } from './output-structured.js';
+import { config as outputConfig } from './output.js';
 
 /**
  * Task type configuration
@@ -25,10 +26,11 @@ export interface TaskTypeConfig {
  */
 const TASK_TYPE_REGISTRY: Record<TaskType, TaskTypeConfig> = {
   planning: planningConfig,
+  toolCall: toolCallConfig,
   think: thinkConfig,
+  verify: verifyConfig,
   extractContext: extractContextConfig,
-  outputMessage: outputMessageConfig,
-  outputStructured: outputStructuredConfig,
+  output: outputConfig,
 };
 
 /**
@@ -86,27 +88,14 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
  * Provides workflow terms, methodology, and state information.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
-  terms: [
-    '- Objective: The final goal we are working to achieve',
-    '- Plan: A sequence of Tasks we execute to accomplish the Objective',
-    '- Task: A unit of work executed by one of our AI instances',
-  ],
   methodology: [
     '- We accomplish the Objective by executing Tasks sequentially.',
-    '- You are now working on the Task marked [current] below. Follow the "Instructions" section.',
     {
       type: 'subsection' as const,
-      title: 'Workflow Status',
+      title: 'Workflow Status / Current Task List',
       items: [
-        '- This is the current state of our workflow.',
-        '- The [current] Task is what you are doing right now — do not re-register it.',
         (ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx),
       ],
-    },
-  ],
-  state: [
-    (ctx: AgenticWorkflowContext) => {
-      return ctx.state || '(no saved state)';
     },
   ],
 };

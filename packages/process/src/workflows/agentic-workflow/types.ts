@@ -37,20 +37,22 @@ export interface ToolCallLog {
  */
 export type TaskType =
   | 'planning'
+  | 'toolCall'
   | 'think'
+  | 'verify'
   | 'extractContext'
-  | 'outputMessage'
-  | 'outputStructured';
+  | 'output';
 
 /**
  * Default driver role for each task type
  */
 export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
   planning: 'plan',
+  toolCall: 'instruct',
   think: 'instruct',
+  verify: 'instruct',
   extractContext: 'instruct',
-  outputMessage: 'chat',
-  outputStructured: 'chat',
+  output: 'chat',
 };
 
 /**
@@ -58,10 +60,11 @@ export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
  */
 export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withMessages: boolean; withMaterials: boolean }> = {
   planning: { withInputs: true, withMessages: false, withMaterials: true },
+  toolCall: { withInputs: false, withMessages: false, withMaterials: false },
   think: { withInputs: false, withMessages: false, withMaterials: false },
+  verify: { withInputs: false, withMessages: false, withMaterials: false },
   extractContext: { withInputs: true, withMessages: true, withMaterials: true },
-  outputMessage: { withInputs: false, withMessages: false, withMaterials: false },
-  outputStructured: { withInputs: false, withMessages: false, withMaterials: false },
+  output: { withInputs: false, withMessages: false, withMaterials: false },
 };
 
 // ---------------------------------------------------------------------------

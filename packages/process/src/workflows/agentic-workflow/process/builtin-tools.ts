@@ -24,7 +24,7 @@ export function isBuiltinTool(name: string): boolean {
 function findDefaultInsertIndex(taskList: AgenticTask[]): number {
   const lastIndex = taskList.length - 1;
   const lastTask = taskList[lastIndex];
-  if (lastTask && (lastTask.taskType === 'outputMessage' || lastTask.taskType === 'outputStructured')) {
+  if (lastTask && lastTask.taskType === 'output') {
     return lastIndex;
   }
   return taskList.length;
@@ -49,11 +49,11 @@ interface TaskEntry {
 const TASK_ENTRY_SCHEMA = {
   type: 'object',
   properties: {
-    instruction: { type: 'string', description: 'Specific instruction for the task executor. This is the only guidance the executor receives, so be concrete and self-contained.' },
+    instruction: { type: 'string', description: 'Specific instruction for the task executor.' },
     taskType: {
       type: 'string',
-      enum: ['planning', 'think', 'extractContext', 'outputMessage', 'outputStructured'],
-      description: 'Type of task. Default: think',
+      enum: ['toolCall', 'think', 'verify', 'extractContext', 'output'],
+      description: 'toolCall: call external tools. think: general reasoning/analysis. verify: validate previous results. extractContext: extract from inputs/materials. output: generate final output (must be the last task). Default: think',
     },
     driverRole: {
       type: 'string',
@@ -77,7 +77,7 @@ const TASK_ENTRY_SCHEMA = {
       description: 'Index to insert at. Defaults to just before the output task.',
     },
   },
-  required: ['instruction'],
+  required: ['instruction', 'taskType'],
 } as const;
 
 /**
@@ -108,29 +108,24 @@ export function createPlanningTools(taskList: AgenticTask[]): ToolSpec[] {
   return [{
     definition: {
       name: '__insert_tasks',
-      description: 'Register tasks in the workflow. Tasks are inserted before the output task by default.',
+      description: 'Register tasks in the workflow. Each task is executed by a separate AI instance. Write specific, self-contained instructions.',
       parameters: {
         type: 'object',
         properties: {
           tasks: {
             type: 'array',
-            description: 'List of tasks to register.',
+            description: 'Array of Task objects.',
             items: TASK_ENTRY_SCHEMA,
           },
-          // 後方互換: 単体登録
-          instruction: { type: 'string', description: 'Instruction for a single task.' },
-          taskType: { type: 'string', enum: ['planning', 'think', 'extractContext', 'outputMessage', 'outputStructured'] },
         },
+        required: ['tasks'],
       },
     },
     handler: async (args) => {
-      if (Array.isArray(args.tasks) && args.tasks.length > 0) {
-        (args.tasks as TaskEntry[]).forEach(entry => registerTask(taskList, entry));
-      } else if (args.instruction) {
-        registerTask(taskList, args as unknown as TaskEntry);
-      } else {
-        return 'Error: Provide "tasks" array or "instruction".';
+      if (!Array.isArray(args.tasks) || args.tasks.length === 0) {
+        return 'Error: Provide a non-empty "tasks" array.';
       }
+      (args.tasks as TaskEntry[]).forEach(entry => registerTask(taskList, entry));
 
       // Return full updated task list so the model can see the current plan
       return 'Updated task list:\n' + taskList
