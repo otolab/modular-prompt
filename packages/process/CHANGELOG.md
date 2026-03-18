@@ -1,5 +1,38 @@
 # @modular-prompt/process
 
+## 0.2.0
+
+### Minor Changes
+
+- 6d01df5: agentic-workflow の actions/ActionHandler を tool calling API に置き換え
+
+  - ToolSpec 型（ToolDefinition + handler）を導入
+  - execution フェーズに tool calling loop を実装
+  - agent-workflow（簡易版）を削除
+  - TestDriver に toolCalls サポート追加
+  - experiment dynamic-loader の.ts モジュールファイル対応
+
+- 749e29e: agentic workflow の改善: タスクベース・tool calling 方式への再設計、プロンプト品質向上、insertAt 順序修正
+- fec7974: ワークフローで DriverSet（役割別ドライバー）を受け取れるように
+
+  - `DriverInput` 型を追加: `AIDriver | DriverSet` のユニオン型で後方互換を維持
+  - `ModelRole` 型: `default`, `thinking`, `instruct`, `chat`, `plan` の 5 種類
+  - `resolveDriver()` ヘルパー: 役割に応じたドライバー解決（フォールバック付き）
+  - 全 8 ワークフロー関数の第 1 引数を `DriverInput` に変更
+
+- 0698360: stream/concat ワークフローに内部モジュールを自動 merge
+
+  - `streamProcess`: 既存の `streamProcessing` モジュールを自動 merge
+  - `concatProcess`: 新規 `concatProcessing` モジュールを作成し自動 merge
+
+### Patch Changes
+
+- Updated dependencies [6d01df5]
+- Updated dependencies [749e29e]
+  - @modular-prompt/driver@0.10.0
+  - @modular-prompt/core@0.2.0
+  - @modular-prompt/utils@0.3.0
+
 ## 0.1.28
 
 ### Patch Changes

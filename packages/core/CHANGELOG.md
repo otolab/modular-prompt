@@ -1,5 +1,11 @@
 # @modular-prompt/core
 
+## 0.2.0
+
+### Minor Changes
+
+- 749e29e: agentic workflow の改善: タスクベース・tool calling 方式への再設計、プロンプト品質向上、insertAt 順序修正
+
 ## 0.1.13
 
 ### Patch Changes
