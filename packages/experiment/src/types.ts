@@ -4,9 +4,34 @@
 
 import type { PromptModule } from '@modular-prompt/core';
 import type { QueryResult, QueryOptions, ToolCall } from '@modular-prompt/driver';
+import type { DriverInput, WorkflowResult } from '@modular-prompt/process';
 
 /** テストケースのモデル指定: 文字列はモデル名、オブジェクトはロール→モデル名のマッピング */
 export type TestModelEntry = string | { default: string; [role: string]: string };
+
+/**
+ * カスタムプロセス関数の型
+ *
+ * defaultProcess以外のワークフロー（agenticProcess等）を使用する場合に指定する。
+ * TestCase.processOptionsがoptionsとして渡される。
+ */
+export type ProcessFunction = (
+  driver: DriverInput,
+  module: PromptModule<any>,
+  context: any,
+  options?: any
+) => Promise<WorkflowResult<any>>;
+
+/**
+ * 組み込みプロセス関数名
+ */
+export type BuiltinProcessName =
+  | 'defaultProcess'
+  | 'streamProcess'
+  | 'concatProcess'
+  | 'dialogueProcess'
+  | 'summarizeProcess'
+  | 'agenticProcess';
 
 /**
  * Test case definition
@@ -20,8 +45,14 @@ export interface TestCase {
   input: any;
   /** Model names to use for this test case (optional, uses all enabled models if not specified) */
   models?: TestModelEntry[];
-  /** Query options for this test case (tools, temperature, etc.) */
+  /** Module names to use for this test case (optional, uses all modules if not specified) */
+  modules?: string[];
+  /** Query options for this test case (tools, temperature, etc.) — defaultProcess用 */
   queryOptions?: Partial<QueryOptions>;
+  /** カスタムプロセス関数または組み込みプロセス名（未指定時はdefaultProcess） */
+  process?: ProcessFunction | BuiltinProcessName;
+  /** カスタムプロセス関数に渡すオプション（process指定時のみ有効） */
+  processOptions?: Record<string, unknown>;
 }
 
 /**
@@ -145,4 +176,5 @@ export interface ExtendedExperimentOptions extends ExperimentOptions {
   dryRun?: boolean;
   logFile?: string;
   verbose?: boolean;
+  traceDir?: string;
 }

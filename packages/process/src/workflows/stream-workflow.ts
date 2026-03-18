@@ -1,9 +1,12 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
+import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { streamProcessing } from '../modules/stream-processing.js';
 import type { StreamProcessingContext } from '../modules/stream-processing.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+
+const logger = new Logger({ prefix: 'process', context: 'stream' });
 
 /**
  * Simple token estimation (roughly 4 characters per token)
@@ -76,7 +79,9 @@ export async function streamProcess(
   context: StreamProcessingContext,
   options: StreamWorkflowOptions = {}
 ): Promise<WorkflowResult<StreamProcessingContext>> {
-  
+
+  logger.info('[start] stream workflow');
+
   const {
     tokenLimit,
     maxChunk,
@@ -105,11 +110,13 @@ export async function streamProcess(
     };
 
     const prompt = compile(merge(streamProcessing, module), iterationContext);
-    
+    logger.verbose('[prompt]', JSON.stringify(prompt));
+
     let nextStateContent: string;
     let nextStateUsage: number;
     try {
       const result = await resolveDriver(driver, 'default').query(prompt);
+      logger.verbose('[output]', result.content);
       
       // Check finish reason for dynamic failures
       if (result.finishReason && result.finishReason !== 'stop') {
@@ -160,6 +167,8 @@ export async function streamProcess(
     state,
     range: undefined // Processing complete
   };
+
+  logger.info('[end]');
 
   return {
     output: state.content,

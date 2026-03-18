@@ -8,5 +8,6 @@ export {
 } from './logger.js';
 
 export type {
-  LogLevel
+  LogLevel,
+  LogEntry
 } from './logger.js';

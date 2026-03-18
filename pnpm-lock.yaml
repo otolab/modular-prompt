@@ -169,6 +169,9 @@ importers:
       '@modular-prompt/driver':
         specifier: workspace:*
         version: link:../driver
+      '@modular-prompt/utils':
+        specifier: workspace:*
+        version: link:../utils
     devDependencies:
       '@eslint/js':
         specifier: ^9.34.0

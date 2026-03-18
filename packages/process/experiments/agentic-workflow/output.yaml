@@ -1,0 +1,76 @@
+# Output タスクタイプ実験
+# 前タスク結果を統合して最終出力を生成する能力を検証
+
+models:
+  qwen3.5-27b:
+    model: "mlx-community/Qwen3.5-27B-4bit"
+    provider: "mlx"
+    disabled: true
+  gemma-3-27b:
+    model: "mlx-community/gemma-3-27b-it-qat-4bit"
+    provider: "mlx"
+  qwen3.5-9b:
+    model: mlx-community/Qwen3.5-9B-MLX-4bit
+    provider: "mlx"
+  quen3.5-2b-optiq:
+    model: mlx-community/Qwen3.5-2B-OptiQ-4bit
+    provider: "mlx"
+  qwq-bakeneko-32b:
+    model: mlx-community/qwq-bakeneko-32b-4bit
+    provider: "mlx"
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+
+drivers:
+  mlx: {}
+
+_shared:
+  models: &models
+    - quen3.5-2b-optiq
+
+modules:
+  - name: output
+    path: ./task-type-module.ts
+    export: output
+
+testCases:
+  - name: "output: テキスト出力"
+    description: "前タスク結果を統合して最終出力を生成する"
+    modules: [output]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "技術仕様書の要件分析レポートを作成する"
+        cue:
+          - "分析結果を日本語の箇条書きで報告してください"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "仕様書から要件を抽出する"
+          taskType: think
+        - instruction: "抽出結果を検証する"
+          taskType: verify
+        - instruction: "最終レポートを出力する"
+          taskType: output
+      currentTaskIndex: 3
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+        - taskType: think
+          result: "機能要件: 1. ユーザー認証機能 2. データエクスポート機能 3. 通知機能\n非機能要件: 1. レスポンス200ms以内 2. 99.9%可用性 3. GDPR準拠"
+        - taskType: verify
+          result: "検証結果: 要件の抽出は網羅的。ただしセキュリティ要件（暗号化、アクセス制御）が非機能要件に未分類。追記推奨。"
+    queryOptions:
+      temperature: 0.3
+      maxTokens: 2048
+
+evaluators:
+  - name: structured-output-presence

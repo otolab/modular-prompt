@@ -1,0 +1,362 @@
+# Execution タスクタイプ実験
+# think, toolCall, verify, extractContext 等の実行タスクを個別検証
+
+models:
+  qwen3.5-27b:
+    model: "mlx-community/Qwen3.5-27B-4bit"
+    provider: "mlx"
+    disabled: true
+  gemma-3-27b:
+    model: "mlx-community/gemma-3-27b-it-qat-4bit"
+    provider: "mlx"
+  qwen3.5-9b:
+    model: mlx-community/Qwen3.5-9B-MLX-4bit
+    provider: "mlx"
+  quen3.5-2b-optiq:
+    model: mlx-community/Qwen3.5-2B-OptiQ-4bit
+    provider: "mlx"
+  qwq-bakeneko-32b:
+    model: mlx-community/qwq-bakeneko-32b-4bit
+    provider: "mlx"
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+
+drivers:
+  mlx: {}
+
+_shared:
+  models: &models
+    - quen3.5-2b-optiq
+
+  # ビルトインツール
+  builtinTools: &builtin_tools
+    - name: __insert_tasks
+      description: "Insert tasks into the workflow."
+      parameters:
+        type: object
+        properties:
+          tasks:
+            type: array
+            description: "Tasks to insert."
+            items:
+              type: object
+              properties:
+                instruction:
+                  type: string
+                  description: "Specific instruction for the task executor."
+                taskType:
+                  type: string
+                  enum: [toolCall, think, verify, extractContext, recall, determine, output]
+              required: [instruction]
+        required: [tasks]
+    - name: __time
+      description: "Get the current date and time."
+      parameters:
+        type: object
+        properties: {}
+
+  # 外部ツール
+  externalTools: &external_tools
+    - name: search_documents
+      description: "キーワードでドキュメントを検索する"
+      parameters:
+        type: object
+        properties:
+          query:
+            type: string
+            description: "検索クエリ"
+          limit:
+            type: number
+            description: "取得件数（デフォルト: 5）"
+        required: [query]
+    - name: get_user_info
+      description: "ユーザーIDから情報を取得する"
+      parameters:
+        type: object
+        properties:
+          userId:
+            type: string
+            description: "ユーザーID"
+        required: [userId]
+
+  # queryOptions
+  baseOptions: &base_options
+    temperature: 0.3
+    maxTokens: 2048
+
+  executionOptions: &exec_options
+    temperature: 0.3
+    maxTokens: 2048
+    tools: *builtin_tools
+
+
+modules:
+  - name: think
+    path: ./task-type-module.ts
+    export: think
+
+  - name: toolCall
+    path: ./task-type-module.ts
+    export: toolCall
+
+  - name: verify
+    path: ./task-type-module.ts
+    export: verify
+
+  - name: extractContext
+    path: ./task-type-module.ts
+    export: extractContext
+
+  - name: recall
+    path: ./task-type-module.ts
+    export: recall
+
+  - name: determine
+    path: ./task-type-module.ts
+    export: determine
+
+testCases:
+  - name: "think: データ分析"
+    description: "前タスク結果とinputsを使って分析するタスク"
+    modules: [think]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "収集したデータの分析レポートを作成する"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "データを分析して主要な発見をまとめる"
+          taskType: think
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 1
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+      inputs:
+        activeUsers: 12500
+        averageSession: "8.3分"
+        retention7d: "42%"
+    queryOptions: *exec_options
+
+  - name: "toolCall: ドキュメント検索"
+    description: "search_documentsツールを呼び出すことを期待"
+    modules: [toolCall]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "APIドキュメントを検索して認証方式を調べる"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "search_documentsツールで認証関連のドキュメントを検索する"
+          taskType: toolCall
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 1
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+    queryOptions:
+      <<: *base_options
+      tools:
+        - name: __insert_tasks
+          description: "Insert tasks into the workflow."
+          parameters:
+            type: object
+            properties:
+              tasks:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    instruction: { type: string }
+                    taskType: { type: string }
+                  required: [instruction]
+            required: [tasks]
+        - name: __time
+          description: "Get the current date and time."
+          parameters: { type: object, properties: {} }
+        - name: search_documents
+          description: "キーワードでドキュメントを検索する"
+          parameters:
+            type: object
+            properties:
+              query: { type: string, description: "検索クエリ" }
+              limit: { type: number, description: "取得件数（デフォルト: 5）" }
+            required: [query]
+        - name: get_user_info
+          description: "ユーザーIDから情報を取得する"
+          parameters:
+            type: object
+            properties:
+              userId: { type: string, description: "ユーザーID" }
+            required: [userId]
+      toolChoice: auto
+
+  - name: "verify: 結果検証"
+    description: "前タスクの分析結果を検証する"
+    modules: [verify]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "技術仕様書の要件抽出レポートを作成する"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "仕様書から要件を抽出する"
+          taskType: think
+        - instruction: "抽出した要件に漏れがないか、機能要件と非機能要件の分類が正しいか検証する"
+          taskType: verify
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 2
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+        - taskType: think
+          result: "機能要件: 1. ユーザー認証機能 2. データエクスポート機能\n非機能要件: 1. レスポンス200ms以内 2. 99.9%可用性"
+    queryOptions: *base_options
+
+  - name: "extractContext: メッセージからコンテキスト抽出"
+    description: "messagesとinputsからコンテキストを抽出する（デフォルトで全データアクセス）"
+    modules: [extractContext]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "ユーザーの質問に基づいて適切な情報を収集する"
+        messages:
+          - type: message
+            role: user
+            content: "先月のアクティブユーザー数と、離脱率の高いページを教えて"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "ユーザーの質問から必要な情報の種類を特定し、利用可能なデータから関連情報を抽出する"
+          taskType: extractContext
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 1
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+      inputs:
+        activeUsers: 12500
+        bounceRateTop:
+          - page: "/pricing"
+            rate: "68%"
+          - page: "/signup"
+            rate: "45%"
+    queryOptions: *base_options
+
+  - name: "recall: OAuth 2.0の知識取得"
+    description: "学習済み知識からOAuth 2.0の仕組みを取得する"
+    modules: [recall]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "OAuth 2.0を使った認証機能の設計書を作成する"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "OAuth 2.0の認可フロー（Authorization Code Flow）の標準的な手順と必要なエンドポイントを取得する"
+          taskType: recall
+        - instruction: "取得した情報をもとに設計書を作成する"
+          taskType: think
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 1
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+    queryOptions: *base_options
+
+  - name: "recall: 未知の情報（検索ツール使用を期待）"
+    description: "学習データにない情報に対して検索ツールを使用することを期待"
+    modules: [recall]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "「バーベナ・クエスト」というゲームについて調べる"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "「バーベナ・クエスト」のゲームジャンル、開発元、主なゲームシステムについて調べる"
+          taskType: recall
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 1
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+    queryOptions:
+      <<: *base_options
+      tools:
+        - name: __insert_tasks
+          description: "Insert tasks into the workflow."
+          parameters:
+            type: object
+            properties:
+              tasks:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    instruction: { type: string }
+                    taskType: { type: string }
+                  required: [instruction]
+            required: [tasks]
+        - name: __time
+          description: "Get the current date and time."
+          parameters: { type: object, properties: {} }
+        - name: search_documents
+          description: "キーワードでドキュメントを検索する"
+          parameters:
+            type: object
+            properties:
+              query: { type: string, description: "検索クエリ" }
+              limit: { type: number, description: "取得件数（デフォルト: 5）" }
+            required: [query]
+      toolChoice: auto
+
+  - name: "determine: 判定タスク"
+    description: "収集した情報に基づいて判断を下す"
+    modules: [determine]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "新機能のリリース可否を判断する"
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+        - instruction: "テスト結果と品質指標を確認する"
+          taskType: think
+        - instruction: "テスト結果と品質指標に基づき、リリース可否を判定する。合格基準: テストカバレッジ80%以上、重大バグ0件"
+          taskType: determine
+        - instruction: "最終出力を生成する"
+          taskType: output
+      currentTaskIndex: 2
+      executionLog:
+        - taskType: planning
+          result: "Tasks registered."
+        - taskType: think
+          result: "テストカバレッジ: 85%。重大バグ: 0件。軽微なバグ: 3件（UI表示崩れ）。パフォーマンス: レスポンス平均150ms（基準200ms以内）。"
+    queryOptions: *base_options
+
+evaluators:
+  - name: structured-output-presence

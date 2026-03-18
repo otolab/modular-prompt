@@ -108,15 +108,16 @@ interface ParsedToolCall {
  * - 数値文字列 → number
  */
 function coerceValue(value: string | undefined): unknown {
-  if (value === undefined || value === 'None' || value === 'null') return null;
-  if (value === 'True' || value === 'true') return true;
-  if (value === 'False' || value === 'false') return false;
+  if (value === undefined) return null;
 
-  // 数値判定
-  const num = Number(value);
-  if (!isNaN(num) && value !== '') return num;
+  // Python形式の変換
+  const normalized = value === 'None' ? 'null' : value === 'True' ? 'true' : value === 'False' ? 'false' : value;
 
-  return value;
+  try {
+    return JSON.parse(normalized);
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -198,17 +199,78 @@ function parsePythonicToolCallContent(content: string): ParsedToolCall | null {
   const args: Record<string, unknown> = {};
 
   if (argsStr) {
-    // key=value ペアを抽出
-    const argRegex = /(\w+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^,)]+?))\s*(?:,|$)/g;
-    let argMatch;
-    while ((argMatch = argRegex.exec(argsStr)) !== null) {
-      const key = argMatch[1];
-      const value = argMatch[2] ?? argMatch[3] ?? argMatch[4]?.trim();
+    // key=value ペアを抽出（値が括弧構造を含む場合は括弧対応で取得）
+    let pos = 0;
+    while (pos < argsStr.length) {
+      // key の抽出
+      const keyMatch = argsStr.slice(pos).match(/^(\w+)\s*=\s*/);
+      if (!keyMatch) break;
+      const key = keyMatch[1];
+      pos += keyMatch[0].length;
+
+      // value の抽出
+      const ch = argsStr[pos];
+      let value: string;
+
+      if (ch === '[' || ch === '{') {
+        // 括弧対応で値を抽出
+        const extracted = extractBracketedValue(argsStr, pos);
+        if (!extracted) break;
+        value = extracted;
+        pos += value.length;
+      } else if (ch === '"' || ch === "'") {
+        // 引用符で囲まれた文字列
+        const quote = ch;
+        let end = pos + 1;
+        while (end < argsStr.length && argsStr[end] !== quote) {
+          if (argsStr[end] === '\\') end++;
+          end++;
+        }
+        value = argsStr.slice(pos + 1, end);
+        pos = end + 1;
+      } else {
+        // カンマまたは末尾まで
+        const endMatch = argsStr.slice(pos).match(/^([^,)]*)/);
+        value = endMatch ? endMatch[1].trim() : '';
+        pos += endMatch ? endMatch[0].length : 0;
+      }
+
       args[key] = coerceValue(value);
+
+      // カンマをスキップ
+      const sep = argsStr.slice(pos).match(/^\s*,\s*/);
+      if (sep) pos += sep[0].length;
     }
   }
 
   return { name, arguments: args };
+}
+
+/**
+ * 括弧対応で値を抽出（[...] や {...}）
+ */
+function extractBracketedValue(text: string, start: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+
+    if (ch === '[' || ch === '{') depth++;
+    else if (ch === ']' || ch === '}') depth--;
+
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -348,35 +410,80 @@ function parseGenericToolCalls(text: string): ToolCallParseResult {
   const toolCalls: ToolCall[] = [];
   let content = text;
   let callIndex = 0;
+  const matched: string[] = [];
 
-  // 汎用パターン: {"name": "...", "arguments": {...}} を検出
-  // 行頭からJSONオブジェクトが始まるか、テキスト末尾のJSONブロックを検出
-  const jsonPattern = /\{[\s\S]*?"name"\s*:\s*"[^"]+?"[\s\S]*?(?:"arguments"|"parameters")\s*:\s*\{[\s\S]*?\}\s*\}/g;
+  // テキスト中の JSON オブジェクトを括弧対応で抽出し、tool call か判定
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '{') continue;
 
-  let match;
-  while ((match = jsonPattern.exec(text)) !== null) {
+    const jsonStr = extractJsonObject(text, i);
+    if (!jsonStr) continue;
+
     try {
-      const parsed = JSON.parse(match[0]);
-      if (parsed.name && (parsed.arguments || parsed.parameters)) {
+      const parsed = JSON.parse(jsonStr);
+      const normalized = normalizeJsonToolCall(parsed);
+      if (normalized) {
         toolCalls.push({
           id: `call_${callIndex++}`,
-          name: parsed.name,
-          arguments: parsed.arguments || parsed.parameters || {}
+          name: normalized.name,
+          arguments: normalized.arguments || {}
         });
+        matched.push(jsonStr);
+        i += jsonStr.length - 1; // skip past this JSON
       }
     } catch {
-      // JSONパース失敗 → スキップ
+      // パース失敗 → スキップ
     }
   }
 
-  if (toolCalls.length > 0) {
-    // tool call部分をテキストから除去（最後のJSON部分のみ）
-    for (const match2 of [...text.matchAll(jsonPattern)]) {
-      content = content.replace(match2[0], '').trim();
+  if (matched.length > 0) {
+    for (const m of matched) {
+      content = content.replace(m, '').trim();
     }
   }
 
   return { content, toolCalls };
+}
+
+/**
+ * テキスト中の位置 start から括弧対応で JSON オブジェクトを抽出
+ */
+function extractJsonObject(text: string, start: number): string | null {
+  if (text[start] !== '{') return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 function parseMistralStyleToolCalls(
@@ -425,6 +532,36 @@ function escapeRegExp(str: string): string {
 }
 
 /**
+ * パラメータ properties を再帰的にフォーマット
+ */
+function formatProperties(
+  lines: string[],
+  properties: Record<string, any>,
+  required?: string[],
+  depth: number = 1
+): void {
+  const indent = '  '.repeat(depth);
+  for (const [name, schema] of Object.entries(properties)) {
+    const req = required?.includes(name) ? ' (required)' : '';
+    const desc = schema.description ? `: ${schema.description}` : '';
+    const type = schema.type || 'any';
+
+    if (type === 'array' && schema.items) {
+      lines.push(`${indent}- ${name}: array${req}${desc}`);
+      if (schema.items.properties) {
+        lines.push(`${indent}  Each item:`);
+        formatProperties(lines, schema.items.properties, schema.items.required, depth + 2);
+      }
+    } else if (type === 'object' && schema.properties) {
+      lines.push(`${indent}- ${name}: object${req}${desc}`);
+      formatProperties(lines, schema.properties, schema.required, depth + 1);
+    } else {
+      lines.push(`${indent}- ${name}: ${type}${req}${desc}`);
+    }
+  }
+}
+
+/**
  * tool定義をテキスト形式にフォーマット
  * tool_call_formatまたは特殊トークンがある場合はそのフォーマットに合わせた指示を生成
  */
@@ -441,18 +578,13 @@ export function formatToolDefinitionsAsText(
       lines.push(tool.description);
     }
     if (tool.parameters) {
-      // パラメータを簡潔に表現
       const params = tool.parameters as {
-        properties?: Record<string, { type?: string; description?: string }>;
+        properties?: Record<string, any>;
         required?: string[];
       };
       if (params.properties) {
         lines.push('Parameters:');
-        for (const [name, schema] of Object.entries(params.properties)) {
-          const req = params.required?.includes(name) ? ' (required)' : '';
-          const desc = schema.description ? `: ${schema.description}` : '';
-          lines.push(`- ${name}: ${schema.type || 'any'}${req}${desc}`);
-        }
+        formatProperties(lines, params.properties, params.required, 1);
       } else {
         lines.push(`Parameters: ${JSON.stringify(tool.parameters)}`);
       }
@@ -460,11 +592,12 @@ export function formatToolDefinitionsAsText(
     lines.push('');
   }
 
-  // tool call出力フォーマットの指示（既存ロジック維持）
+  // tool call出力フォーマットの指示
+  const example = '{"name": "tool_name", "arguments": {"key": "value", "list": [...], "obj": {...}}}';
   if (toolCallFormat?.call_start && toolCallFormat?.call_end) {
     lines.push('To call a tool, respond with:');
     lines.push(toolCallFormat.call_start);
-    lines.push('{"name": "tool_name", "arguments": {"param": "value"}}');
+    lines.push(example);
     lines.push(toolCallFormat.call_end);
   } else {
     const toolCallToken = specialTokens?.tool_call;
@@ -472,12 +605,12 @@ export function formatToolDefinitionsAsText(
       const pair = toolCallToken as SpecialTokenPair;
       lines.push('To call a tool, respond with:');
       lines.push(`${pair.start.text}`);
-      lines.push('{"name": "tool_name", "arguments": {"param": "value"}}');
+      lines.push(example);
       lines.push(`${pair.end.text}`);
     } else {
       lines.push('To call a tool, respond with:');
       lines.push('```json:toolCall');
-      lines.push('{"name": "tool_name", "arguments": {"param": "value"}}');
+      lines.push(example);
       lines.push('```');
     }
   }

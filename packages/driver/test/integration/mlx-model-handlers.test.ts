@@ -70,7 +70,7 @@ describe('MLX Model Handlers', () => {
   });
 
   describe('processCodeLlamaChat', () => {
-    it('should merge system messages and add user if needed', () => {
+    it('should merge system messages', () => {
       const messages: MlxMessage[] = [
         { role: 'system', content: 'System prompt' },
         { role: 'assistant', content: 'Response' }
@@ -78,18 +78,15 @@ describe('MLX Model Handlers', () => {
 
       const result = processCodeLlamaChat(messages);
 
-      expect(result).toHaveLength(3);
+      // userメッセージ補完はapplyChatSpecificProcessingの責務
+      expect(result).toHaveLength(2);
       expect(result[0]).toEqual({ role: 'system', content: 'System prompt' });
       expect(result[1]).toEqual({ role: 'assistant', content: 'Response' });
-      expect(result[2]).toEqual({
-        role: 'user',
-        content: 'Read the system prompt and output the appropriate content.'
-      });
     });
   });
 
   describe('processGemmaChat', () => {
-    it('should ensure conversation ends with user message', () => {
+    it('should merge system messages', () => {
       const messages: MlxMessage[] = [
         { role: 'system', content: 'System' },
         { role: 'user', content: 'Question' },
@@ -98,10 +95,11 @@ describe('MLX Model Handlers', () => {
 
       const result = processGemmaChat(messages);
 
-      expect(result[result.length - 1].role).toBe('user');
-      expect(result[result.length - 1].content).toBe(
-        'Read the system prompt and output the appropriate content.'
-      );
+      // userメッセージ補完はapplyChatSpecificProcessingの責務
+      expect(result).toHaveLength(3);
+      expect(result[0]).toEqual({ role: 'system', content: 'System' });
+      expect(result[1]).toEqual({ role: 'user', content: 'Question' });
+      expect(result[2]).toEqual({ role: 'assistant', content: 'Answer' });
     });
   });
 

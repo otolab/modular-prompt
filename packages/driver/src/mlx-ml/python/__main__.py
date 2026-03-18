@@ -10,8 +10,17 @@ model_kind = detect_model_kind(model_name)
 
 if model_kind == "vlm":
     from mlx_vlm import load as vlm_load, stream_generate as vlm_stream_generate
-    model, processor = vlm_load(model_name)
-    tokenizer = processor  # capabilities取得用（VLMのprocessorもtokenizer互換）
+    try:
+        model, processor = vlm_load(model_name)
+        tokenizer = processor  # capabilities取得用（VLMのprocessorもtokenizer互換）
+    except (ValueError, Exception) as e:
+        # mlx_vlm.models にモジュールが存在しても、実際のモデルに vision コンポーネントが
+        # ない場合（例: Qwen3.5 テキストモデルが qwen2_vl として認識される）にフォールバック
+        sys.stderr.write(f"VLM load failed, falling back to LM: {e}\n")
+        model_kind = "lm"
+        from mlx_lm import load, stream_generate
+        from mlx_lm.sample_utils import make_sampler
+        model, tokenizer = load(model_name)
 else:
     from mlx_lm import load, stream_generate
     from mlx_lm.sample_utils import make_sampler

@@ -22,6 +22,7 @@ export function parseArgs(): ExtendedExperimentOptions {
     .option('--dry-run', 'Display execution plan without running the experiment', false)
     .option('--log-file <path>', 'Log file path for JSONL output (detailed logs)')
     .option('--verbose', 'Enable verbose output (show detailed internal operations)', false)
+    .option('--trace-dir <dir>', 'Trace output directory (structured execution logs)')
     .parse();
 
   const config = program.args[0];
@@ -38,5 +39,6 @@ export function parseArgs(): ExtendedExperimentOptions {
     dryRun: options.dryRun,
     logFile: options.logFile,
     verbose: options.verbose,
+    traceDir: options.traceDir,
   };
 }

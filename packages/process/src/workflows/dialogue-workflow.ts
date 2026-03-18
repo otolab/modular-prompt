@@ -1,5 +1,6 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
+import { Logger } from '@modular-prompt/utils';
 import {
   firstOfTwoPassResponse,
   secondOfTwoPassResponse,
@@ -10,6 +11,8 @@ import type { DialogueContext } from '../modules/dialogue.js';
 import type { MaterialContext } from '../modules/material.js';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+
+const logger = new Logger({ prefix: 'process', context: 'dialogue' });
 
 /**
  * Extended dialogue context with materials and preparation note
@@ -38,7 +41,9 @@ export async function dialogueProcess(
   context: DialogueWorkflowContext,
   options: DialogueWorkflowOptions = {}
 ): Promise<WorkflowResult<DialogueWorkflowContext>> {
-  
+
+  logger.info('[start] dialogue workflow');
+
   const { twoPass = false, maintainState = false, includematerials = false } = options;
   
   // Build the module based on options
@@ -56,10 +61,12 @@ export async function dialogueProcess(
     // First pass: Generate preparation notes
     const firstPassModule = merge(workflowModule, firstOfTwoPassResponse);
     const firstPassPrompt = compile(firstPassModule, context);
-    
+    logger.verbose('[prompt]', JSON.stringify(firstPassPrompt));
+
     let preparationNote: string;
     try {
       const queryResult = await resolveDriver(driver, 'default').query(firstPassPrompt);
+      logger.verbose('[output]', queryResult.content);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -96,10 +103,12 @@ export async function dialogueProcess(
     // Second pass: Generate actual response
     const secondPassModule = merge(workflowModule, secondOfTwoPassResponse);
     const secondPassPrompt = compile(secondPassModule, updatedContext);
-    
+    logger.verbose('[prompt]', JSON.stringify(secondPassPrompt));
+
     let response: string;
     try {
       const queryResult = await resolveDriver(driver, 'default').query(secondPassPrompt);
+      logger.verbose('[output]', queryResult.content);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -135,7 +144,9 @@ export async function dialogueProcess(
         { role: 'assistant', content: response }
       ]
     };
-    
+
+    logger.info('[end]');
+
     return {
       output: response,
       context: finalContext,
@@ -147,10 +158,12 @@ export async function dialogueProcess(
   } else {
     // Single pass response
     const prompt = compile(workflowModule, context);
-    
+    logger.verbose('[prompt]', JSON.stringify(prompt));
+
     let response: string;
     try {
       const queryResult = await resolveDriver(driver, 'default').query(prompt);
+      logger.verbose('[output]', queryResult.content);
       
       // Check finish reason for dynamic failures
       if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
@@ -186,7 +199,9 @@ export async function dialogueProcess(
         { role: 'assistant', content: response }
       ]
     };
-    
+
+    logger.info('[end]');
+
     return {
       output: response,
       context: finalContext,

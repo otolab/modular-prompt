@@ -1,4 +1,10 @@
-import type { ToolDefinition } from '@modular-prompt/driver';
+import type { ToolDefinition, QueryResult, ToolCall } from '@modular-prompt/driver';
+import type { ResolvedModule } from '@modular-prompt/core';
+import type { ModelRole } from '../driver-input.js';
+
+// ---------------------------------------------------------------------------
+// Tool specification
+// ---------------------------------------------------------------------------
 
 /**
  * Tool specification: definition for AI + handler for execution
@@ -9,17 +15,7 @@ export interface ToolSpec {
 }
 
 /**
- * Agentic workflow step definition
- */
-export interface AgenticStep {
-  id: string;
-  description: string;
-  guidelines?: string[];  // Actions or principles to follow in this step
-  constraints?: string[]; // Limitations or prohibitions for this step
-}
-
-/**
- * Tool call log entry
+ * Tool call log entry (builtin tool execution record)
  */
 export interface ToolCallLog {
   name: string;
@@ -27,49 +23,138 @@ export interface ToolCallLog {
   result: unknown;
 }
 
-/**
- * Agentic workflow execution log entry
- */
-export interface AgenticExecutionLog {
-  stepId: string;
-  reasoning: string;    // Thought process and analysis
-  result: string;       // Execution result
-  toolCalls?: ToolCallLog[];
-  metadata?: any;
-}
+// ---------------------------------------------------------------------------
+// Task types
+// ---------------------------------------------------------------------------
 
 /**
- * Agentic workflow plan (structured output from planning phase)
+ * Built-in task types.
+ *
+ * Each type defines its own input contract:
+ * - What context data it receives (instructions vs data)
+ * - What tools are available
+ * - Default driver role
  */
-export interface AgenticPlan {
-  steps: AgenticStep[];
-}
+export type TaskType =
+  | 'planning'
+  | 'toolCall'
+  | 'think'
+  | 'verify'
+  | 'extractContext'
+  | 'recall'
+  | 'determine'
+  | 'output';
 
 /**
- * Context for agentic workflow
+ * Default driver role for each task type.
+ * planning/output are hardcoded; execution tasks are derived from EXECUTION_TASK_DEFS.
+ */
+export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
+  planning: 'plan',
+  toolCall: 'instruct',
+  think: 'instruct',
+  verify: 'instruct',
+  extractContext: 'thinking',
+  recall: 'instruct',
+  determine: 'instruct',
+  output: 'chat',
+};
+
+/**
+ * Default withXxx options for each task type
+ */
+export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withMessages: boolean; withMaterials: boolean }> = {
+  planning: { withInputs: true, withMessages: false, withMaterials: true },
+  toolCall: { withInputs: false, withMessages: false, withMaterials: false },
+  think: { withInputs: false, withMessages: false, withMaterials: false },
+  verify: { withInputs: false, withMessages: false, withMaterials: false },
+  extractContext: { withInputs: true, withMessages: true, withMaterials: true },
+  recall: { withInputs: false, withMessages: false, withMaterials: false },
+  determine: { withInputs: true, withMessages: true, withMaterials: true },
+  output: { withInputs: false, withMessages: false, withMaterials: false },
+};
+
+// ---------------------------------------------------------------------------
+// Task definition
+// ---------------------------------------------------------------------------
+
+/**
+ * Agentic workflow task definition
+ */
+export interface AgenticTask {
+  /** What this task should accomplish */
+  instruction: string;
+  /** Task type determining prompt construction and input contract */
+  taskType: TaskType;
+  /** Driver role override (defaults per task type) */
+  driverRole?: ModelRole;
+  /** Include ctx.inputs in data */
+  withInputs?: boolean;
+  /** Include ctx.messages in data */
+  withMessages?: boolean;
+  /** Include ctx.materials in data */
+  withMaterials?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Execution log
+// ---------------------------------------------------------------------------
+
+/**
+ * Record of a single task execution
+ */
+export interface AgenticTaskExecutionLog {
+  taskType: TaskType;
+  result: string;
+  pendingToolCalls?: ToolCall[];
+  metadata?: {
+    usage?: QueryResult['usage'];
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Context
+// ---------------------------------------------------------------------------
+
+/**
+ * Context for agentic workflow.
+ *
+ * Passed through the entire workflow lifecycle.
+ * Each task type selects what it needs from this context.
  */
 export interface AgenticWorkflowContext {
-  objective: string;              // 達成目標
-  inputs?: any;                   // 入力データ
-  state?: {                       // 前ステップからの申し送り事項
-    content: string;
-    usage?: number;
-  };
-  plan?: AgenticPlan;               // 実行計画
-  executionLog?: AgenticExecutionLog[];  // 実行履歴
-  currentStep?: AgenticStep;        // 現在実行中のステップ
-  availableTools?: ToolDefinition[];  // 利用可能なツール一覧（planningモジュール用）
-  phase?: 'planning' | 'execution' | 'integration' | 'complete';
+  /** Primary objective (passed as instruction to all tasks) */
+  objective: string;
+  /** Resolved user module (set by agenticProcess via resolve()) */
+  userModule?: ResolvedModule;
+  /** Structured input data */
+  inputs?: Record<string, unknown>;
+  /** Current task list */
+  taskList?: AgenticTask[];
+  /** Execution log of completed tasks */
+  executionLog?: AgenticTaskExecutionLog[];
+  /** Index of the currently executing task */
+  currentTaskIndex?: number;
+  /** Persisted state string from previous task execution */
+  state?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------
 
 /**
  * Options for agentic workflow
  */
 export interface AgenticWorkflowOptions {
-  maxSteps?: number;              // 最大ステップ数（デフォルト: 5）
-  tools?: ToolSpec[];             // 利用可能なツール
-  maxToolCalls?: number;          // ステップあたりの最大ツール呼び出し数（デフォルト: 10）
-  enablePlanning?: boolean;       // 計画フェーズの有効化（デフォルト: true）
-  useFreeformExecution?: boolean; // Use freeform execution module (デフォルト: false)
-  logger?: any;                   // Logger instance for debug output
+  /** Maximum number of tasks (default: 10) */
+  maxTasks?: number;
+  /** External tools available to tasks */
+  tools?: ToolSpec[];
+  /** Maximum tool call iterations per task (default: 10) */
+  maxToolCalls?: number;
+  /** Skip planning and use provided taskList (default: true) */
+  enablePlanning?: boolean;
+  /** Include intermediate task results wrapped in <think> tags before the final output (default: false) */
+  includeThinking?: boolean;
 }

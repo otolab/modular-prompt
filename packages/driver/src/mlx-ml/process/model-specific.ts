@@ -10,6 +10,37 @@ import { mergeSystemMessages, selectChatProcessor, selectCompletionProcessor } f
 
 type ChatRestrictions = MlxRuntimeInfo['chat_restrictions'];
 
+/**
+ * API選択ロジック（純粋関数）
+ *
+ * 判定優先順位:
+ * 1. force-chat → 常にchat
+ * 2. force-completion → completion（ただしプロセッサなし+chat templateありならchatにフォールバック）
+ * 3. mode指定 → instruct=completion, chat=chat
+ * 4. auto → chat templateがあればchat、なければcompletion
+ */
+export function selectApi(
+  strategy: string,
+  mode: string | undefined,
+  hasChatTemplate: boolean,
+  hasCompletionProc: boolean
+): 'chat' | 'completion' {
+  if (strategy === 'force-chat') return 'chat';
+
+  if (strategy === 'force-completion') {
+    // ブラックリスト対象はchatにフォールバック
+    if (!hasCompletionProc && hasChatTemplate) return 'chat';
+    return 'completion';
+  }
+
+  // mode-based selection (auto strategy)
+  if (mode === 'instruct') return 'completion';
+  if (mode === 'chat') return 'chat';
+
+  // auto: use chat if chat template is available
+  return hasChatTemplate ? 'chat' : 'completion';
+}
+
 export interface ModelSpecificProcessor {
   /**
    * Chat API用のモデル固有処理
@@ -22,6 +53,11 @@ export interface ModelSpecificProcessor {
    * プロンプト文字列を受け取り、モデルに最適化されたプロンプトを返す
    */
   applyCompletionSpecificProcessing(prompt: string): string;
+
+  /**
+   * Completion API用のモデル固有プロセッサが存在するか
+   */
+  hasCompletionProcessor(): boolean;
 
   /**
    * runtimeInfo取得後に制約・モデル情報を反映
@@ -59,17 +95,33 @@ export class DefaultModelSpecificProcessor implements ModelSpecificProcessor {
    */
   applyChatSpecificProcessing(messages: MlxMessage[]): MlxMessage[] {
     const processor = selectChatProcessor(this.modelName);
+    let processed: MlxMessage[];
     if (processor) {
       // モデル固有ハンドラは内部でmergeSystemMessagesを呼ぶ
-      return processor(messages);
+      processed = processor(messages);
+    } else if (this.needsSystemMerge()) {
+      // モデル固有ハンドラがない場合、制約に基づいて汎用処理
+      processed = mergeSystemMessages(messages);
+    } else {
+      processed = [...messages];
     }
 
-    // モデル固有ハンドラがない場合、制約に基づいて汎用処理
-    if (this.needsSystemMerge()) {
-      return mergeSystemMessages(messages);
+    // userメッセージがない場合は補完（chat APIはuserメッセージを要求するモデルが多い）
+    if (!processed.some(m => m.role === 'user')) {
+      processed.push({
+        role: 'user',
+        content: 'Read the system prompt and follow the instructions.',
+      });
     }
 
-    return messages;
+    return processed;
+  }
+
+  /**
+   * Completion API用のモデル固有プロセッサが存在するか
+   */
+  hasCompletionProcessor(): boolean {
+    return selectCompletionProcessor(this.modelName) !== null;
   }
 
   /**

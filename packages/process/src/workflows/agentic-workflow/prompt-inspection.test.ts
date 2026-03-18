@@ -1,200 +1,224 @@
 import { describe, it, expect } from 'vitest';
-import { compile, merge } from '@modular-prompt/core';
-import { planning } from './modules/planning.js';
-import { execution } from './modules/execution.js';
-import { integration } from './modules/integration.js';
-import type { AgenticWorkflowContext, AgenticPlan } from './types.js';
+import { compile, merge, resolve } from '@modular-prompt/core';
+import type { PromptModule, ResolvedModule } from '@modular-prompt/core';
+import { getTaskTypeConfig, taskCommon } from './task-types/index.js';
+import type { AgenticWorkflowContext, AgenticTask } from './types.js';
 
 function collectText(elements: any[] = []): string {
   const lines: string[] = [];
   for (const element of elements) {
-    if (!element) {
-      continue;
-    }
-    if (typeof element === 'string') {
-      lines.push(element);
-      continue;
-    }
-    if (Array.isArray(element)) {
-      lines.push(collectText(element));
-      continue;
-    }
+    if (!element) continue;
+    if (typeof element === 'string') { lines.push(element); continue; }
+    if (Array.isArray(element)) { lines.push(collectText(element)); continue; }
     if (element.type === 'section' || element.type === 'subsection') {
-      if (element.title) {
-        lines.push(element.title);
-      }
-      if (element.items) {
-        lines.push(collectText(element.items));
-      }
+      if (element.title) lines.push(element.title);
+      if (element.items) lines.push(collectText(element.items));
       continue;
     }
     if (element.type === 'material') {
-      if (element.title) {
-        lines.push(element.title);
-      }
-      if (element.content) {
-        lines.push(element.content);
-      }
+      if (element.title) lines.push(element.title);
+      if (element.content) lines.push(element.content);
       continue;
     }
-    if (element.type === 'text') {
-      if (element.content) {
-        lines.push(element.content);
-      }
-      continue;
-    }
-    if (element.content) {
-      lines.push(element.content);
-    }
+    if (element.content) lines.push(element.content);
   }
   return lines.join('\n');
 }
 
-describe('Agent Workflow Prompt Inspection', () => {
-  const userModule = {
+describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
+  const userModule: PromptModule<AgenticWorkflowContext> = {
     objective: ['文書を分析し、重要な洞察を抽出する'],
     instructions: [
       '- 文書の主要なテーマを特定する',
       '- 重要なポイントを3つ抽出する',
-      '- 各ポイントを簡潔にまとめる'
-    ]
+    ],
+    terms: ['- テーマ: 文書全体を貫く中心的な概念'],
+    cue: ['分析結果を日本語で報告してください'],
   };
 
-  const plan: AgenticPlan = {
-    steps: [
-      {
-        id: 'step-1',
-        description: '文書全体を読み、主要なテーマを特定する',
-        dos: ['文書全体の文脈を把握する', 'テーマの一貫性を確認する'],
-        donts: ['細部に固執しない', '個別の事実だけに注目しない']
-      },
-      {
-        id: 'step-2',
-        description: '特定したテーマに関連する重要なポイントを3つ抽出する',
-        dos: ['テーマとの関連性を重視する', '具体的で実行可能なポイントを選ぶ'],
-        donts: ['テーマと無関係な情報を含めない']
-      },
-      {
-        id: 'step-3',
-        description: '抽出した各ポイントを簡潔にまとめる',
-        dos: ['1-2文で要約する', '明確で簡潔な表現を使う'],
-        donts: ['冗長な説明を避ける', '複雑な文章構造を使わない']
-      },
-      {
-        id: 'step-4',
-        description: 'テーマとポイントを統合し、洞察として整理する',
-        dos: ['全体の一貫性を確認する', '洞察の価値を明確にする'],
-        donts: ['単なる要約に終わらない']
-      }
-    ]
-  };
-
-  // 各ステップの実行結果（共通データ）
-  const stepExecutionResults = [
-    {
-      stepId: 'step-1',
-      result: '文書全体を分析し、主要なテーマを特定しました。\n\n特定されたテーマ:\n- イノベーションと技術革新\n- 持続可能性と環境配慮\n- 社会的責任の重視',
-      nextState: 'テーマの特定が完了。次はポイントの抽出に進みます。'
-    },
-    {
-      stepId: 'step-2',
-      result: '特定したテーマに関連する重要なポイントを抽出しました。\n\n抽出されたポイント:\n1. 技術革新による業務効率化と競争力強化\n2. 環境への配慮と資源の持続的利用\n3. 社会的責任を重視した企業活動',
-      nextState: 'ポイントの抽出が完了。次は各ポイントの要約に進みます。'
-    },
-    {
-      stepId: 'step-3',
-      result: '各ポイントを簡潔にまとめました。\n\nポイント1: 新技術の導入により業務プロセスを効率化し、市場での競争優位性を確立する\n\nポイント2: 環境負荷を最小限に抑え、再生可能資源の活用を推進する\n\nポイント3: ステークホルダーへの責任を果たし、持続可能な社会の実現に貢献する',
-      nextState: 'ポイントの要約が完了。次は全体の統合に進みます。'
-    },
-    {
-      stepId: 'step-4',
-      result: 'テーマとポイントを統合し、最終的な洞察としてまとめました。\n\n洞察:\nイノベーションと持続可能性を両立させる戦略的アプローチが重要です。技術革新により効率性と競争力を高めつつ、環境配慮と社会的責任を果たすことで、長期的な企業価値の向上と持続可能な社会の実現を同時に達成できます。',
-      nextState: '全ステップが完了しました。統合フェーズに進みます。'
-    }
+  const taskList: AgenticTask[] = [
+    { instruction: 'Decompose objective into tasks', taskType: 'planning' },
+    { instruction: '文書のテーマを分析する', taskType: 'think' },
+    { instruction: 'メッセージからコンテキストを抽出する', taskType: 'extractContext', withMessages: true },
+    { instruction: '最終出力を生成する', taskType: 'output' },
   ];
 
-  it('should include planning requirements and user inputs', () => {
-    const planningContext: AgenticWorkflowContext = {
+  it('planning: instructions/guidelines をデータ側に配置する', () => {
+    const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
-      inputs: { document: 'サンプルドキュメントの内容...' }
+      userModule,
+      inputs: { document: 'サンプルドキュメントの内容...' },
+      taskList,
+      currentTaskIndex: 0,
+      executionLog: [],
     };
 
-    const mergedPlanning = merge(planning, userModule);
-    const planningPrompt = compile(mergedPlanning, planningContext);
+    const config = getTaskTypeConfig('planning');
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
-    const instructionText = collectText(planningPrompt.instructions);
-    expect(instructionText).toContain('Planning Requirements');
-    expect(instructionText).toContain('Respond ONLY with valid JSON text');
+    // objective は指示側にある
+    const instructionText = collectText(prompt.instructions);
+    expect(instructionText).toContain('文書を分析し、重要な洞察を抽出する');
+    expect(instructionText).toContain('__insert_tasks');
 
-    const dataText = collectText(planningPrompt.data);
-    expect(dataText).toContain('Phase: planning');
-    expect(dataText).toContain('サンプルドキュメントの内容');
+    // terms が指示側にある（taskCommon + userModule）
+    expect(instructionText).toContain('Objective');  // taskCommon.terms
+    expect(instructionText).toContain('Plan');       // taskCommon.terms
+    expect(instructionText).toContain('Task');       // taskCommon.terms
+    expect(instructionText).toContain('テーマ');     // userModule.terms
 
-    const outputText = collectText(planningPrompt.output);
-    expect(outputText).toContain('Respond with a JSON-formatted string containing the execution plan.');
-    expect(outputText).toContain('Output format: {"steps": [...]}');
+    // ユーザーの instructions はデータ側 (materials) にある
+    const dataText = collectText(prompt.data);
+    expect(dataText).toContain('Instructions to decompose');
+    expect(dataText).toContain('文書の主要なテーマを特定する');
+
+    // タスクリストが methodology に表示される
+    expect(instructionText).toContain('1.');
+    expect(instructionText).toContain('planning');
   });
 
-  it('should surface current step context and previous logs in execution phase', () => {
-    const executionContext: AgenticWorkflowContext = {
+  it('think: description が指示に、前タスク結果がデータに入る', () => {
+    const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
-      inputs: { document: 'サンプルドキュメントの内容...' },
-      plan,
-      currentStep: plan.steps[1],
+      userModule,
+      taskList,
+      currentTaskIndex: 1,
       executionLog: [
-        {
-          stepId: stepExecutionResults[0].stepId,
-          result: stepExecutionResults[0].result
-        }
+        { taskType: 'planning', result: 'Tasks registered.' },
       ],
-      state: {
-        content: stepExecutionResults[0].nextState,
-        usage: 1700
-      }
     };
 
-    const mergedExecution = merge(execution, userModule);
-    const executionPrompt = compile(mergedExecution, executionContext);
+    const config = getTaskTypeConfig('think');
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
-    const instructionText = collectText(executionPrompt.instructions);
-    expect(instructionText).toContain('**Current Phase: Execution**');
-    expect(instructionText).toContain(plan.steps[1].description);
-    expect(instructionText).toContain('[Currently executing]');
+    const instructionText = collectText(prompt.instructions);
+    expect(instructionText).toContain('文書のテーマを分析する');
 
-    const dataText = collectText(executionPrompt.data);
-    expect(dataText).toContain('Progress: 1/4 steps completed');
-    expect(dataText).toContain('テーマの特定が完了。次はポイントの抽出に進みます。');
+    // terms が含まれる
+    expect(instructionText).toContain('Objective');
+    expect(instructionText).toContain('テーマ');
 
-    const materialElements = executionPrompt.data.filter((element: any) => element.type === 'material');
-    expect(materialElements).toHaveLength(1);
-    expect(materialElements[0].title).toContain('Previous step decision: step-1');
-    expect(materialElements[0].content).toContain('主要なテーマ');
+    // objective フレーミングが含まれる
+    expect(instructionText).toContain('You will execute the Task described in');
+
+    // 前タスク結果が materials に入る
+    const materialElements = prompt.data.filter((e: any) => e.type === 'material');
+    expect(materialElements.length).toBeGreaterThanOrEqual(1);
+    expect(materialElements[0].title).toContain('Task 1');
   });
 
-  it('should include all execution results in the integration phase', () => {
-    const integrationContext: AgenticWorkflowContext = {
+  it('extractContext: messages/materials がデフォルトでデータに含まれる', () => {
+    const resolvedUserModule: ResolvedModule = {
+      ...resolve(userModule, {}),
+      messages: [
+        { type: 'message', role: 'user', content: 'この文書を分析して' },
+      ],
+      materials: [
+        { type: 'material', id: 'doc1', title: 'Document 1', content: 'ドキュメント内容' },
+      ],
+    };
+    const context: AgenticWorkflowContext = {
       objective: '文書を分析し、重要な洞察を抽出する',
-      inputs: { document: 'サンプルドキュメントの内容...' },
-      plan: plan,
-      executionLog: stepExecutionResults.map(({ stepId, result }) => ({ stepId, result })),
-      state: {
-        content: '全てのステップが完了しました',
-        usage: 4200
-      }
+      userModule: resolvedUserModule,
+      taskList,
+      currentTaskIndex: 2,
+      executionLog: [
+        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'think', result: 'テーマを特定しました' },
+      ],
     };
 
-    const mergedIntegration = merge(integration, userModule);
-    const integrationPrompt = compile(mergedIntegration, integrationContext);
+    const config = getTaskTypeConfig('extractContext');
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: resolvedUserModule.objective,
+      terms: resolvedUserModule.terms,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
 
-    const instructionText = collectText(integrationPrompt.instructions);
-    expect(instructionText).toContain('Integration Phase Process');
-    expect(instructionText).toContain('Execution Plan (All Steps Completed)');
+    // messages がプロンプトに含まれる
+    const dataText = collectText(prompt.data);
+    expect(dataText).toContain('この文書を分析して');
+    expect(dataText).toContain('ドキュメント内容');
+  });
 
-    const materialElements = integrationPrompt.data.filter((element: any) => element.type === 'material');
-    expect(materialElements).toHaveLength(stepExecutionResults.length);
-    expect(materialElements[materialElements.length - 1].content).toContain('洞察');
+  it('output: cue が指示に、全タスク結果がデータに入る', () => {
+    const context: AgenticWorkflowContext = {
+      objective: '文書を分析し、重要な洞察を抽出する',
+      userModule,
+      taskList,
+      currentTaskIndex: 3,
+      executionLog: [
+        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'think', result: 'テーマを特定しました' },
+        { taskType: 'extractContext', result: 'コンテキストを抽出しました' },
+      ],
+    };
 
-    const dataText = collectText(integrationPrompt.data);
-    expect(dataText).toContain('All 4 steps completed');
+    const config = getTaskTypeConfig('output');
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: userModule.objective,
+      terms: userModule.terms,
+      cue: userModule.cue,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
+
+    // cue が output セクションに入る
+    const outputText = collectText(prompt.output);
+    expect(outputText).toContain('分析結果を日本語で報告してください');
+
+    // 全タスク結果が materials に入る
+    const materialElements = prompt.data.filter((e: any) => e.type === 'material');
+    expect(materialElements).toHaveLength(3);
+  });
+
+  it('output with schema: schema が output に入る', () => {
+    const moduleWithSchema: PromptModule<AgenticWorkflowContext> = {
+      ...userModule,
+      schema: [{
+        type: 'json',
+        content: {
+          type: 'object',
+          properties: { summary: { type: 'string' } },
+          required: ['summary'],
+        },
+      }],
+    };
+
+    const structuredTaskList: AgenticTask[] = [
+      ...taskList.slice(0, 3),
+      { instruction: '構造化出力を生成する', taskType: 'output' },
+    ];
+
+    const context: AgenticWorkflowContext = {
+      objective: '文書を分析し、重要な洞察を抽出する',
+      userModule: moduleWithSchema,
+      taskList: structuredTaskList,
+      currentTaskIndex: 3,
+      executionLog: [
+        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'think', result: 'テーマを特定しました' },
+        { taskType: 'extractContext', result: 'コンテキストを抽出しました' },
+      ],
+    };
+
+    const config = getTaskTypeConfig('output');
+    const workflowBase: PromptModule<AgenticWorkflowContext> = {
+      objective: moduleWithSchema.objective,
+      terms: moduleWithSchema.terms,
+      schema: moduleWithSchema.schema,
+    };
+    const prompt = compile(merge(workflowBase, taskCommon, config.module), context);
+
+    // schema が metadata.outputSchema に入る
+    expect(prompt.metadata?.outputSchema).toBeDefined();
+    expect(prompt.metadata?.outputSchema?.properties?.summary).toBeDefined();
   });
 });

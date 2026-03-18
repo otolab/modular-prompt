@@ -6,14 +6,35 @@ import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
 import type { AIService, QueryResult, ModelSpec } from '@modular-prompt/driver';
-import { defaultProcess, type DriverInput } from '@modular-prompt/process';
-import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult } from '../types.js';
+import {
+  defaultProcess, streamProcess, concatProcess, dialogueProcess,
+  summarizeProcess, agenticProcess,
+  type DriverInput
+} from '@modular-prompt/process';
+import type { ModuleDefinition, TestResult, TestCase, EvaluationContext, EvaluationResult, ProcessFunction, BuiltinProcessName } from '../types.js';
 import type { DriverManager } from './driver-manager.js';
 import type { LoadedEvaluator } from '../config/dynamic-loader.js';
 import { EvaluatorRunner } from './evaluator.js';
 import { logger as baseLogger } from '../logger.js';
 
 const logger = baseLogger.context('runner');
+
+const builtinProcesses: Record<BuiltinProcessName, ProcessFunction> = {
+  defaultProcess,
+  streamProcess,
+  concatProcess,
+  dialogueProcess,
+  summarizeProcess,
+  agenticProcess,
+};
+
+function resolveProcess(process: ProcessFunction | BuiltinProcessName | undefined): ProcessFunction {
+  if (!process) return defaultProcess;
+  if (typeof process === 'function') return process;
+  const fn = builtinProcesses[process];
+  if (!fn) throw new Error(`Unknown builtin process: '${process}'`);
+  return fn;
+}
 
 interface TestPlanItem {
   order: number;
@@ -96,7 +117,12 @@ export class ExperimentRunner {
             .map(([name, spec]) => ({ name, modelSpec: spec }));
 
       for (const model of modelsToTest) {
-        for (const module of this.modules) {
+        // テストケースで使うモジュールを決定
+        const modulesToTest = testCase.modules
+          ? this.modules.filter(m => testCase.modules!.includes(m.name))
+          : this.modules;
+
+        for (const module of modulesToTest) {
           const compiled = compile(module.module, testCase.input);
           const prompt = formatCompletionPrompt(compiled);
 
@@ -163,7 +189,6 @@ export class ExperimentRunner {
         console.log(`🤖 Model: ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
         console.log('='.repeat(80));
 
-        logger.info(`Creating driver for ${modelName} (${modelSpec.provider}:${modelSpec.model})`);
         driverInput = await this.driverManager.getOrCreate(this.aiService, modelName, modelSpec);
       }
 
@@ -242,13 +267,17 @@ export class ExperimentRunner {
 
       const startTime = Date.now();
       try {
-        const workflowResult = await defaultProcess(driver, module, testCase.input, {
-          queryOptions: {
-            temperature: 0.7,
-            maxTokens: 2048,
-            ...testCase.queryOptions,
-          },
-        });
+        const processFn = resolveProcess(testCase.process);
+        const processOptions = testCase.process
+          ? testCase.processOptions
+          : {
+              queryOptions: {
+                temperature: 0.7,
+                maxTokens: 2048,
+                ...testCase.queryOptions,
+              },
+            };
+        const workflowResult = await processFn(driver, module, testCase.input, processOptions);
         const elapsed = Date.now() - startTime;
 
         // Convert workflow result to QueryResult-like structure

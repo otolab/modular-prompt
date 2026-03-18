@@ -1,0 +1,125 @@
+# Planning タスクタイプ実験
+# プロンプトを分析し、__insert_tasks でタスク登録する能力を検証
+
+models:
+  qwen3.5-27b:
+    model: "mlx-community/Qwen3.5-27B-4bit"
+    provider: "mlx"
+    disabled: true
+  gemma-3-27b:
+    model: "mlx-community/gemma-3-27b-it-qat-4bit"
+    provider: "mlx"
+  qwen3.5-9b:
+    model: mlx-community/Qwen3.5-9B-MLX-4bit
+    provider: "mlx"
+  quen3.5-2b-optiq:
+    model: mlx-community/Qwen3.5-2B-OptiQ-4bit
+    provider: "mlx"
+  qwq-bakeneko-32b:
+    model: mlx-community/qwq-bakeneko-32b-4bit
+    provider: "mlx"
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+
+drivers:
+  mlx: {}
+
+_shared:
+  models: &models
+    - quen3.5-2b-optiq
+
+  # Planning用ツール
+  planningTools: &planning_tools
+    - name: __insert_tasks
+      description: "Register tasks in the workflow. Each task is executed by a separate AI instance. Write specific, self-contained instructions."
+      parameters:
+        type: object
+        properties:
+          tasks:
+            type: array
+            description: "Array of Task objects."
+            items:
+              type: object
+              properties:
+                instruction:
+                  type: string
+                  description: "Specific instruction for the task executor."
+                taskType:
+                  type: string
+                  enum: [toolCall, think, verify, extractContext, recall, determine, output]
+                  description: "toolCall: call external tools. think: general reasoning/analysis. verify: validate previous results. extractContext: extract from inputs/materials. recall: retrieve information via search tools or training knowledge. determine: make a decision or judgment. output: generate final output (must be the last task)."
+              required: [instruction, taskType]
+        required: [tasks]
+    - name: __time
+      description: "Get the current date and time."
+      parameters:
+        type: object
+        properties: {}
+
+modules:
+  - name: planning
+    path: ./planning-module.ts
+    description: "Planning タスクタイプ"
+
+testCases:
+  - name: "計画生成: ドキュメント分析"
+    description: "__insert_tasksツールでタスク登録を期待、thinkやverifyが使われていること"
+    modules: [planning]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - "- 技術仕様書を分析し、主要な要件と制約事項を抽出してレポートを作成する"
+        instructions:
+          - "- 仕様書の各セクションから要件を漏れなく抽出すること"
+          - "- 機能要件と非機能要件を区別して整理すること"
+          - "- 制約事項は技術的制約とビジネス制約に分類すること"
+        guidelines:
+          - "- 出力は日本語で作成すること"
+          - "- 箇条書きで簡潔にまとめること"
+      inputs:
+        documentType: "技術仕様書"
+        pages: 50
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+      currentTaskIndex: 0
+    queryOptions:
+      temperature: 0.3
+      maxTokens: 2048
+      tools: *planning_tools
+      toolChoice: required
+
+  - name: "計画生成: 時刻確認（簡単なツール呼び出し）"
+    description: "シンプルなプロンプトに対して最小限のタスク登録を期待"
+    modules: [planning]
+    models: *models
+    input:
+      userModule:
+        objective:
+          - ユーザメッセージを理解して適切な応答を返す。
+        instructions:
+          - 日本語で応答する
+        messages:
+          - type: message
+            role: user
+            content: 現在の日時を確認して。
+      taskList:
+        - instruction: "指示文を分析してタスクを組み立てる"
+          taskType: planning
+      currentTaskIndex: 0
+    queryOptions:
+      temperature: 0.3
+      maxTokens: 2048
+      tools: *planning_tools
+      toolChoice: required
+
+evaluators:
+  - name: structured-output-presence

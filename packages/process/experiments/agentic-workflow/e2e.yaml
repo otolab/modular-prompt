@@ -1,0 +1,62 @@
+# Agentic Workflow エンドツーエンド実験
+# agenticProcess を通して planning → execution → output の全フローを検証
+
+models:
+  qwen3.5-27b:
+    model: "mlx-community/Qwen3.5-27B-4bit"
+    provider: "mlx"
+    disabled: true
+  gemma-3-27b:
+    model: "mlx-community/gemma-3-27b-it-qat-4bit"
+    provider: "mlx"
+  qwen3.5-9b:
+    model: mlx-community/Qwen3.5-9B-MLX-4bit
+    provider: "mlx"
+  quen3.5-2b-optiq:
+    model: mlx-community/Qwen3.5-2B-OptiQ-4bit
+    provider: "mlx"
+  qwq-bakeneko-32b:
+    model: mlx-community/qwq-bakeneko-32b-4bit
+    provider: "mlx"
+  lfm2.5-jp:
+    model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
+    provider: "mlx"
+  lfm2.5-instruct:
+    model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
+    provider: "mlx"
+  lfm2.5-thinking:
+    model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
+    provider: "mlx"
+
+drivers:
+  mlx: {}
+
+_shared:
+  models: &models
+    - quen3.5-2b-optiq
+
+modules:
+  - name: agentic-time-check
+    description: "時刻確認用インラインモジュール"
+    module:
+      objective:
+        - ユーザメッセージを理解して適切な応答を返す。
+      instructions:
+        - 日本語で応答する
+      messages:
+        - type: message
+          role: user
+          content: 現在の日時を確認して。
+
+testCases:
+  - name: "agenticProcess: 時刻確認"
+    description: "__timeビルトインツールを使って現在時刻を聞き出す"
+    modules: [agentic-time-check]
+    models: *models
+    input: {}
+    process: agenticProcess
+    processOptions:
+      maxTasks: 5
+
+evaluators:
+  - name: structured-output-presence
