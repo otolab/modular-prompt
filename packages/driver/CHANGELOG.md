@@ -1,5 +1,25 @@
 # @modular-prompt/driver
 
+## 0.10.0
+
+### Minor Changes
+
+- 749e29e: agentic workflow の改善: タスクベース・tool calling 方式への再設計、プロンプト品質向上、insertAt 順序修正
+
+### Patch Changes
+
+- 6d01df5: agentic-workflow の actions/ActionHandler を tool calling API に置き換え
+
+  - ToolSpec 型（ToolDefinition + handler）を導入
+  - execution フェーズに tool calling loop を実装
+  - agent-workflow（簡易版）を削除
+  - TestDriver に toolCalls サポート追加
+  - experiment dynamic-loader の.ts モジュールファイル対応
+
+- Updated dependencies [749e29e]
+  - @modular-prompt/core@0.2.0
+  - @modular-prompt/utils@0.3.0
+
 ## 0.9.3
 
 ### Patch Changes
