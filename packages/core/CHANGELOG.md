@@ -1,5 +1,11 @@
 # @modular-prompt/core
 
+## 0.2.1
+
+### Patch Changes
+
+- 47b9eda: PromptModule に persona セクション追加、agentic workflow に state 伝播と\_\_update_state ツール追加
+
 ## 0.2.0
 
 ### Minor Changes
