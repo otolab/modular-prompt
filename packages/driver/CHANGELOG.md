@@ -1,5 +1,13 @@
 # @modular-prompt/driver
 
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [47b9eda]
+  - @modular-prompt/core@0.3.0
+  - @modular-prompt/utils@0.3.1
+
 ## 0.10.0
 
 ### Minor Changes

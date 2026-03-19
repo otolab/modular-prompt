@@ -1,5 +1,18 @@
 # @modular-prompt/process
 
+## 0.3.0
+
+### Minor Changes
+
+- 47b9eda: PromptModule に persona セクション追加、agentic workflow に state 伝播と\_\_update_state ツール追加
+
+### Patch Changes
+
+- Updated dependencies [47b9eda]
+  - @modular-prompt/core@0.3.0
+  - @modular-prompt/driver@0.10.1
+  - @modular-prompt/utils@0.3.1
+
 ## 0.2.0
 
 ### Minor Changes
