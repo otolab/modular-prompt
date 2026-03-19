@@ -9,7 +9,7 @@
  * The model sees the original user prompt with task results injected,
  * so it naturally produces the expected response.
  *
- * Tools: none
+ * Builtin tools: none (external tools are still available if provided)
  */
 
 import type { PromptModule } from '@modular-prompt/core';
@@ -20,6 +20,7 @@ import { buildPreviousResultsMaterials } from './index.js';
 const outputModule: PromptModule<AgenticWorkflowContext> = {
   instructions: [
     '- Refer to the pre-computed results in materials to compose your response.',
+    '- If tools are available, you may call them to gather additional information needed for the response.',
   ],
 
   materials: [
