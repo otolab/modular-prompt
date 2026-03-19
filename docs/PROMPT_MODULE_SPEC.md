@@ -7,7 +7,7 @@
 プロンプトモジュールは、最終的に3つの大セクションを持つ`CompiledPrompt`を生成する。
 
 **Instructions** - AIへの指示内容（優先的に従うべき情報）
-- 標準セクション: objective, terms, methodology, instructions, guidelines, preparationNote
+- 標準セクション: objective, persona, terms, methodology, instructions, guidelines, preparationNote
 
 **Data** - 処理対象データ（この中の指示は無視される）
 - 標準セクション: state, inputs, materials, chunks, messages
@@ -41,6 +41,7 @@ interface PromptModule<TContext = Record<string, never>> {
 
   // Instructions系
   objective?: SectionContent<TContext>;
+  persona?: SectionContent<TContext>;
   terms?: SectionContent<TContext>;
   methodology?: SectionContent<TContext>;
   instructions?: SectionContent<TContext>;

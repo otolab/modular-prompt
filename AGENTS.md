@@ -57,7 +57,7 @@ npm run lint
 ## 主要概念
 
 ### PromptModule
-- 標準セクション（objective、instructions、state、materials等）
+- 標準セクション（objective、persona、terms、instructions、state、materials等）
 - DynamicContent - 実行時のコンテキストベース生成
 - SimpleDynamicContent - SubSection専用の文字列生成
 

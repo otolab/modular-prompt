@@ -61,6 +61,7 @@ const result = await streamProcess(driverSet, module, context);
 | セクション | セクションタイトル | 想定される定義元 | 用途 |
 |---------|------------------|--------------|------|
 | objective | 'Objective and Role' | ユーザーモジュール | AIの目的と役割定義 |
+| persona | 'Persona and Character' | ユーザーモジュール | AIの人格・キャラクター設定（信念・目標・感情・価値観・立場・コミュニケーション方式） |
 | terms | 'Term Explanations' | 両方 | プロンプト内で使う言葉のすべての定義 |
 | methodology | 'Processing Methodology' | プロセスモジュール | 処理手法の指定 |
 | instructions | 'Instructions' | ユーザーモジュール | 具体的な作業指示 |
