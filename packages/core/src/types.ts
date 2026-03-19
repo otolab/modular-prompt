@@ -147,6 +147,7 @@ export interface PromptModule<TContext = any> {
   
   // Instructions セクション
   objective?: SectionContent<TContext>;
+  persona?: SectionContent<TContext>;
   terms?: SectionContent<TContext>;
   methodology?: SectionContent<TContext>;
   instructions?: SectionContent<TContext>;
@@ -172,6 +173,7 @@ export interface PromptModule<TContext = any> {
 export const STANDARD_SECTIONS = {
   // Instructions
   objective: { type: 'instructions' as const, title: 'Objective and Role' },
+  persona: { type: 'instructions' as const, title: 'Persona and Character' },
   terms: { type: 'instructions' as const, title: 'Term Explanations' },
   methodology: { type: 'instructions' as const, title: 'Processing Methodology' },
   instructions: { type: 'instructions' as const, title: 'Instructions' },
