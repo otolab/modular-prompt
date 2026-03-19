@@ -88,6 +88,12 @@ export const taskCommon: PromptModule<AgenticWorkflowContext> = {
     '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
     '- **Focus**: The specific directive for the current Task — what to concentrate on and accomplish.',
   ],
+  state: [
+    (ctx: AgenticWorkflowContext) => {
+      if (!ctx.state) return null;
+      return ctx.state;
+    },
+  ],
   methodology: [
     '- We accomplish the Objective by executing Tasks sequentially.',
     {

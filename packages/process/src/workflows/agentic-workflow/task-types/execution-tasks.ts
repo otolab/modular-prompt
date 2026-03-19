@@ -172,7 +172,7 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
 function buildConfig(def: ExecutionTaskDef): TaskTypeConfig {
   return {
     module: buildModule(def),
-    builtinToolNames: ['__insert_tasks', '__time'],
+    builtinToolNames: ['__insert_tasks', '__update_state', '__time'],
   };
 }
 

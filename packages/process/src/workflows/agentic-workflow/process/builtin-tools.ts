@@ -2,6 +2,7 @@
  * Agentic workflow 組み込みツール定義 (v2)
  *
  * - __insert_tasks: タスク登録（全タスクから利用可能）
+ * - __update_state: ワークフロー状態の更新
  * - __time: 現在時刻取得
  */
 
@@ -131,6 +132,30 @@ export function createPlanningTools(taskList: AgenticTask[], currentIndex: numbe
         .join('\n');
     },
   }];
+}
+
+/**
+ * ワークフロー状態を更新する組み込みツール
+ */
+export function createUpdateStateTool(context: { state?: string }): ToolSpec {
+  return {
+    definition: {
+      name: '__update_state',
+      description: 'Update the workflow state. The state is a free-form string that persists across tasks and is visible to all subsequent tasks in the "Current State" section.',
+      parameters: {
+        type: 'object',
+        properties: {
+          state: { type: 'string', description: 'The new state content. This replaces the current state entirely.' },
+        },
+        required: ['state'],
+      },
+    },
+    handler: async (args) => {
+      const newState = args.state as string;
+      context.state = newState;
+      return `State updated.`;
+    },
+  };
 }
 
 /**
