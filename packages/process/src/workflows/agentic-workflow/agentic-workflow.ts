@@ -29,6 +29,7 @@ import { getTaskTypeConfig, taskCommon } from './task-types/index.js';
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
+  createUpdateStateTool,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 
@@ -80,7 +81,8 @@ function bootstrap(module: ResolvedModule, enablePlanning: boolean): AgenticTask
 function getBuiltinToolsForTask(
   taskType: TaskType,
   taskList: AgenticTask[],
-  currentIndex: number
+  currentIndex: number,
+  context: AgenticWorkflowContext
 ): ToolSpec[] {
   const config = getTaskTypeConfig(taskType);
   const toolNames = new Set(config.builtinToolNames);
@@ -89,6 +91,10 @@ function getBuiltinToolsForTask(
 
   if (toolNames.has('__insert_tasks')) {
     allTools.push(...createPlanningTools(taskList, currentIndex));
+  }
+
+  if (toolNames.has('__update_state')) {
+    allTools.push(createUpdateStateTool(context));
   }
 
   if (toolNames.has('__time')) {
@@ -121,18 +127,19 @@ async function executeTask(
   const taskConfig = getTaskTypeConfig(task.taskType);
 
   // Build workflowBase from resolved userModule
-  // output tasks get the full userModule; other tasks get objective/terms only
+  // output tasks get the full userModule; other tasks get objective/terms/state only
   const workflowBase: PromptModule<AgenticWorkflowContext> = task.taskType === 'output'
     ? { ...userModule } as PromptModule<AgenticWorkflowContext>
     : {
         objective: userModule.objective,
         terms: userModule.terms,
+        state: userModule.state,
       };
 
   // Merge and resolve (taskCommon first for objective framing)
   const resolved = resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
 
-  const builtinTools = getBuiltinToolsForTask(task.taskType, taskList, taskIndex);
+  const builtinTools = getBuiltinToolsForTask(task.taskType, taskList, taskIndex, context);
   const externalToolDefs = externalTools.map(t => t.definition);
   const allToolNames = [...builtinTools.map(t => t.definition.name), ...externalToolDefs.map(t => t.name)];
   taskLogger.verbose('[prompt]', JSON.stringify(resolved), allToolNames.length > 0 ? `tools: [${allToolNames.join(', ')}]` : '');

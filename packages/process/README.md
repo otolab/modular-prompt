@@ -132,77 +132,53 @@ const context = {
   }
 };
 
-// ワークフロー実行（計画→実行→統合）
+// ワークフロー実行（planning → execution tasks → output）
 const result = await agenticProcess(driver, userModule, context, {
-  maxSteps: 5  // 最大5ステップまで
+  maxTasks: 5,  // 最大5タスクまで
 });
 
 console.log(result.output);  // 最終的な献立提案
-console.log(result.metadata); // { planSteps: 5, executedSteps: 5, actionsUsed: 0 }
+console.log(result.metadata); // { planTasks, executedTasks, toolCallsUsed, finishReason }
 ```
 
-### 簡易エージェントワークフロー
-
-```typescript
-import { agentProcess } from '@modular-prompt/process';
-import { TestDriver } from '@modular-prompt/driver';
-
-const driver = new TestDriver();
-
-const userModule = {
-  objective: ['週末旅行プランを提案する'],
-  instructions: [
-    '- 交通手段・宿泊先・食事プランを検討する',
-    '- 入力データに応じて実行計画を自律的に組み立てる'
-  ]
-};
-
-const context = {
-  objective: '週末旅行プランを提案する',
-  inputs: {
-    budget: '50,000円',
-    city: '箱根'
-  }
-};
-
-const actions = {
-  lookupHotel: async (params: { city: string }) => {
-    return { recommended: [`${params.city} 温泉旅館`] };
-  }
-};
-
-const result = await agentProcess(driver, userModule, context, {
-  maxSteps: 4,
-  actions
-});
-
-console.log(result.output);
-console.log(result.metadata); // { planSteps: 3, executedSteps: 3, actionsUsed: 1 }
-```
-
-### アクション（外部ツール）の使用
+### 外部ツールの使用
 
 ```typescript
 import { agenticProcess } from '@modular-prompt/process';
+import type { ToolSpec } from '@modular-prompt/process';
 
-// 外部ツール/APIの定義
-const actions = {
-  fetchWeather: async (params: { location: string }) => {
-    const response = await fetch(`https://api.weather.com/${params.location}`);
-    return response.json();
+// 外部ツールの定義（definition + handler）
+const tools: ToolSpec[] = [
+  {
+    definition: {
+      name: 'fetchWeather',
+      description: 'Get weather information for a location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'City name' }
+        },
+        required: ['location'],
+      },
+    },
+    handler: async (params) => {
+      const response = await fetch(`https://api.weather.com/${params.location}`);
+      return JSON.stringify(await response.json());
+    },
   },
-  searchRecipes: async (params: { ingredients: string[] }) => {
-    // レシピ検索APIを呼び出し
-    return { recipes: [...] };
-  }
-};
+];
 
 const result = await agenticProcess(driver, userModule, context, {
-  maxSteps: 5,
-  actions  // アクションを渡す
+  tools,       // 外部ツールを渡す
+  maxTasks: 5,
 });
 
-// AIが計画フェーズで必要なアクションを判断し、実行フェーズで自動的に呼び出す
+// 外部ツール呼び出しが発生するとワークフローは中断し、
+// pendingToolCalls として返却される
+if (result.metadata.finishReason === 'tool_calls') {
+  // 呼び出し元でツールを実行し、結果を渡して再開する
+  console.log(result.context.executionLog);
+}
 ```
 
 ## 開発者向けドキュメント

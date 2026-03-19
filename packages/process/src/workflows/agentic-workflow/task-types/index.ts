@@ -87,6 +87,13 @@ export const taskCommon: PromptModule<AgenticWorkflowContext> = {
     '- **Task**: A unit of work in the workflow. Each Task is executed by a separate AI instance.',
     '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
     '- **Focus**: The specific directive for the current Task — what to concentrate on and accomplish.',
+    '- **State**: Persistent information shared across Tasks. Updated via `__update_state` and visible to all subsequent Tasks in the "Current State" section.',
+  ],
+  state: [
+    (ctx: AgenticWorkflowContext) => {
+      if (!ctx.state) return null;
+      return ctx.state;
+    },
   ],
   methodology: [
     '- We accomplish the Objective by executing Tasks sequentially.',
