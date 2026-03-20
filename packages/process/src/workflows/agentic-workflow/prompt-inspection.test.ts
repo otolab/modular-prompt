@@ -173,6 +173,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     expect(outputText).toContain('分析結果を日本語で報告してください');
 
     // 全タスク結果が preparationNote (instructions内) に入る
+    const instructionText = collectText(prompt.instructions);
     expect(instructionText).toContain('Tasks registered.');
     expect(instructionText).toContain('テーマを特定しました');
     expect(instructionText).toContain('コンテキストを抽出しました');
