@@ -88,7 +88,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
       taskList,
       currentTaskIndex: 1,
       executionLog: [
-        { taskType: 'planning', result: 'Tasks registered.' },
+        { taskType: 'planning', instruction: 'Analyze the prompt and register tasks', result: 'Tasks registered.' },
       ],
     };
 
@@ -131,8 +131,8 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
       taskList,
       currentTaskIndex: 2,
       executionLog: [
-        { taskType: 'planning', result: 'Tasks registered.' },
-        { taskType: 'think', result: 'テーマを特定しました' },
+        { taskType: 'planning', instruction: 'Analyze the prompt and register tasks', result: 'Tasks registered.' },
+        { taskType: 'think', instruction: '文書のテーマを分析する', result: 'テーマを特定しました' },
       ],
     };
 
@@ -156,9 +156,9 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
       taskList,
       currentTaskIndex: 3,
       executionLog: [
-        { taskType: 'planning', result: 'Tasks registered.' },
-        { taskType: 'think', result: 'テーマを特定しました' },
-        { taskType: 'extractContext', result: 'コンテキストを抽出しました' },
+        { taskType: 'planning', instruction: 'Analyze the prompt and register tasks', result: 'Tasks registered.' },
+        { taskType: 'think', instruction: '文書のテーマを分析する', result: 'テーマを特定しました' },
+        { taskType: 'extractContext', instruction: 'コンテキストを抽出する', result: 'コンテキストを抽出しました' },
       ],
     };
 
@@ -203,9 +203,9 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
       taskList: structuredTaskList,
       currentTaskIndex: 3,
       executionLog: [
-        { taskType: 'planning', result: 'Tasks registered.' },
-        { taskType: 'think', result: 'テーマを特定しました' },
-        { taskType: 'extractContext', result: 'コンテキストを抽出しました' },
+        { taskType: 'planning', instruction: 'Analyze the prompt and register tasks', result: 'Tasks registered.' },
+        { taskType: 'think', instruction: '文書のテーマを分析する', result: 'テーマを特定しました' },
+        { taskType: 'extractContext', instruction: 'コンテキストを抽出する', result: 'コンテキストを抽出しました' },
       ],
     };
 

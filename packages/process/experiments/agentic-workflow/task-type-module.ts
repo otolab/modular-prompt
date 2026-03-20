@@ -15,7 +15,7 @@ interface TaskTypeTestContext {
   inputs?: Record<string, unknown>;
   taskList?: { instruction: string; taskType: string }[];
   currentTaskIndex?: number;
-  executionLog?: { taskType: string; result: string }[];
+  executionLog?: { taskType: string; instruction: string; result: string }[];
 }
 
 const workflowBase: PromptModule<TaskTypeTestContext> = {

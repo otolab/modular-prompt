@@ -83,6 +83,10 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
  * Provides workflow terms, methodology, and state information.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
+  instructions: [
+    '- Do not perform work outside the scope of the current Task.',
+    '- It is a valid and sufficient response to report: instructions are contradictory, there is insufficient information, you lack the required knowledge, or the work is unnecessary.',
+  ],
   terms: [
     '- **Task**: A unit of work in the workflow. Each Task is executed by a separate AI instance.',
     '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',

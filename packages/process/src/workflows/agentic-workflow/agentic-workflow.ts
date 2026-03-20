@@ -167,6 +167,7 @@ async function executeTask(
 
     return {
       taskType: task.taskType,
+      instruction: task.instruction,
       result: stripThinkBlocks(result.content),
       pendingToolCalls: result.pendingToolCalls,
       metadata: {
@@ -236,11 +237,20 @@ export async function agenticProcess(
       tools, maxToolCalls
     );
     executionLog.push(logEntry);
+
+    // Stop workflow if external tool calls are pending
+    if (logEntry.pendingToolCalls && logEntry.pendingToolCalls.length > 0) {
+      logger.info('[suspended] External tool call requested');
+      break;
+    }
   }
 
-  // Auto-append output task if the last executed task was not output
+  // Check if workflow was suspended by external tool calls
   const lastExecuted = executionLog[executionLog.length - 1];
-  if (lastExecuted && lastExecuted.taskType !== 'output') {
+  const hasPendingToolCalls = lastExecuted?.pendingToolCalls && lastExecuted.pendingToolCalls.length > 0;
+
+  // Auto-append output task if the last executed task was not output and no pending tool calls
+  if (lastExecuted && lastExecuted.taskType !== 'output' && !hasPendingToolCalls) {
     const outputTask: AgenticTask = {
       instruction: 'Compose the response using the preceding task results.',
       taskType: 'output',
@@ -262,7 +272,7 @@ export async function agenticProcess(
     executionLog.push(outputLog);
   }
 
-  // Final output: last task's result, optionally prefixed with intermediate results as <think>
+  // Final output
   const lastLog = executionLog[executionLog.length - 1];
   const finalResult = lastLog?.result || '';
 
@@ -270,17 +280,13 @@ export async function agenticProcess(
   if (includeThinking && executionLog.length > 1) {
     const intermediateLog = executionLog.slice(0, -1);
     const thinkingLines = intermediateLog
-      .map(log => `[${log.taskType}]\n${log.result}`)
+      .map(log => `[${log.taskType}: ${log.instruction}]\n${log.result}`)
       .join('\n\n');
     output = `<think>\n${thinkingLines}\n</think>\n\n${finalResult}`;
   } else {
     output = finalResult;
   }
 
-  // Determine finishReason
-  const hasPendingToolCalls = executionLog.some(
-    log => log.pendingToolCalls && log.pendingToolCalls.length > 0
-  );
   const finishReason: FinishReason | undefined = hasPendingToolCalls
     ? 'tool_calls'
     : 'stop';
