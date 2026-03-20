@@ -25,7 +25,7 @@ import type {
 } from './types.js';
 import { DEFAULT_DRIVER_ROLE } from './types.js';
 import { type DriverInput, resolveDriver } from '../driver-input.js';
-import { getTaskTypeConfig, taskCommon } from './task-types/index.js';
+import { getTaskTypeConfig, taskCommon, MAX_TOKENS_VALUES } from './task-types/index.js';
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
@@ -148,7 +148,7 @@ async function executeTask(
 
   try {
     const isPlanning = task.taskType === 'planning';
-    const toolChoice = isPlanning ? 'required' as const : 'auto' as const;
+    const maxTokens = MAX_TOKENS_VALUES[taskConfig.maxTokensTier];
 
     const result = await queryWithTools(
       resolveDriver(driver, driverRole),
@@ -156,8 +156,9 @@ async function executeTask(
       builtinTools,
       {
         externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,
-        toolChoice,
+        toolChoice: 'auto',
         maxIterations: maxToolCalls,
+        maxTokens,
         stopAfterToolCall: isPlanning,
         logger: taskLogger,
       }

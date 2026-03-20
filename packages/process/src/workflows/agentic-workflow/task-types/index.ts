@@ -2,7 +2,7 @@
  * Task type registry and shared utilities
  */
 
-import type { PromptModule, MaterialElement, SectionContent } from '@modular-prompt/core';
+import type { PromptModule, TextElement, SectionContent } from '@modular-prompt/core';
 import type { AgenticWorkflowContext, TaskType, AgenticTaskExecutionLog } from '../types.js';
 import { config as planningConfig } from './planning.js';
 import { config as outputConfig } from './output.js';
@@ -11,11 +11,27 @@ import { executionTaskConfigs } from './execution-tasks.js';
 /**
  * Task type configuration
  */
+/**
+ * maxTokens tier for task types.
+ * Actual values: low=1024, middle=4096, high=8192 (capped by model maxOutputTokens).
+ */
+export type MaxTokensTier = 'low' | 'middle' | 'high';
+
+// TODO: high tier should be capped by ModelSpec.maxOutputTokens at query time.
+// Currently the driver's defaultOptions-level cap (validateAndClampMaxTokens) does not apply to per-query maxTokens.
+export const MAX_TOKENS_VALUES: Record<MaxTokensTier, number> = {
+  low: 2048,
+  middle: 4096,
+  high: 8192,
+};
+
 export interface TaskTypeConfig {
   /** Static prompt module for this task type */
   module: PromptModule<AgenticWorkflowContext>;
   /** List of builtin tool names available for this task type */
   builtinToolNames: string[];
+  /** maxTokens tier (default: 'middle') */
+  maxTokensTier: MaxTokensTier;
 }
 
 /**
@@ -36,17 +52,16 @@ export function getTaskTypeConfig(taskType: TaskType): TaskTypeConfig {
 }
 
 /**
- * Convert execution log to MaterialElement array (previous task results)
+ * Convert execution log to a TextElement for preparationNote.
+ * Each task result is formatted as a labeled block.
  */
-export function buildPreviousResultsMaterials(
+export function buildPreviousResultsNote(
   executionLog: AgenticTaskExecutionLog[]
-): MaterialElement[] {
-  return executionLog.map((log, index) => ({
-    type: 'material' as const,
-    id: `task-result-${index}`,
-    title: `Task ${index + 1} result`,
-    content: log.result,
-  }));
+): TextElement {
+  const content = executionLog
+    .map((log, index) => `[Task ${index + 1}: ${log.taskType}] ${log.instruction}\n${log.result}`)
+    .join('\n\n');
+  return { type: 'text' as const, content };
 }
 
 /**
@@ -85,7 +100,7 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
   instructions: [
     '- Do not perform work outside the scope of the current Task.',
-    '- It is a valid and sufficient response to report: instructions are contradictory, there is insufficient information, you lack the required knowledge, or the work is unnecessary.',
+    '- If the instructions are contradictory, there is insufficient information, you lack the required knowledge, or the work is unnecessary — do not attempt to produce a speculative result. Instead, report that you did not perform the work and explain the reason. This is a valid and sufficient response.',
   ],
   terms: [
     '- **Task**: A unit of work in the workflow. Each Task is executed by a separate AI instance.',
