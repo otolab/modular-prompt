@@ -1,5 +1,11 @@
 # @modular-prompt/process
 
+## 0.2.2
+
+### Patch Changes
+
+- 5590292: agentic workflow: 外部ツール呼び出し時にタスクループを即停止、タスク指示の改善
+
 ## 0.2.1
 
 ### Patch Changes
