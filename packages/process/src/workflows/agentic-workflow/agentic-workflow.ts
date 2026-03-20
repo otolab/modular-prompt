@@ -167,6 +167,7 @@ async function executeTask(
 
     return {
       taskType: task.taskType,
+      instruction: task.instruction,
       result: stripThinkBlocks(result.content),
       pendingToolCalls: result.pendingToolCalls,
       metadata: {
@@ -279,7 +280,7 @@ export async function agenticProcess(
   if (includeThinking && executionLog.length > 1) {
     const intermediateLog = executionLog.slice(0, -1);
     const thinkingLines = intermediateLog
-      .map(log => `[${log.taskType}]\n${log.result}`)
+      .map(log => `[${log.taskType}: ${log.instruction}]\n${log.result}`)
       .join('\n\n');
     output = `<think>\n${thinkingLines}\n</think>\n\n${finalResult}`;
   } else {

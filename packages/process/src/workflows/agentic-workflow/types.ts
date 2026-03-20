@@ -105,6 +105,7 @@ export interface AgenticTask {
  */
 export interface AgenticTaskExecutionLog {
   taskType: TaskType;
+  instruction: string;
   result: string;
   pendingToolCalls?: ToolCall[];
   metadata?: {

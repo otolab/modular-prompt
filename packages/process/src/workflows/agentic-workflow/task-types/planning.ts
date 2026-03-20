@@ -28,7 +28,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
   instructions: [
     '- Analyze the prompt shown in "Prompt to analyze" and design the Tasks needed for execution.',
     '- Call `__insert_tasks` once with a `tasks` array to register all Tasks.',
-    '- Each Task instruction should be concise: describe only what to focus on and what to do.',
+    '- Each Task instruction should be a single sentence — but a longer, descriptive paragraph is appropriate. Step-by-step procedural instructions are unnecessary; instead, make it immediately clear what the Task should accomplish and what outcome is expected.',
     '- Each Task receives all previous task results, so earlier results are available to later Tasks.',
     '- Tools can be called from each Task, but tool results are received by the next Task.',
     {
