@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { agenticProcess } from './agentic-workflow.js';
 import { TestDriver } from '@modular-prompt/driver';
-import type { AgenticWorkflowContext, ToolSpec } from './types.js';
+import type { ToolSpec } from './types.js';
 
 describe('agenticProcess v2', () => {
   // 1. 基本ワークフロー
@@ -29,11 +29,7 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Process data'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Process data'] }, context);
+    const result = await agenticProcess(driver, { objective: ['Process data'] }, {});
 
     expect(result.output).toBe('Final result');
     expect(result.context.taskList).toHaveLength(4); // planning + think×2 + auto output
@@ -88,14 +84,10 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Get and process data'
-    };
-
     const result = await agenticProcess(
       driver,
       { objective: ['Test'] },
-      context,
+      {},
       { tools }
     );
 
@@ -124,11 +116,7 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Simple workflow'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
+    const result = await agenticProcess(driver, { objective: ['Test'] }, {});
 
     expect(result.output).toBe('Final output');
     expect(result.metadata?.toolCallsUsed).toBe(0);
@@ -160,14 +148,10 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Test max tasks'
-    };
-
     const result = await agenticProcess(
       driver,
       { objective: ['Test'] },
-      context,
+      {},
       { maxTasks: 3 }
     );
 
@@ -185,14 +169,10 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Direct output',
-    };
-
     const result = await agenticProcess(
       driver,
       { objective: ['Test'] },
-      context,
+      {},
       { enablePlanning: false }
     );
 
@@ -224,11 +204,7 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Check time'
-    };
-
-    const result = await agenticProcess(driver, { objective: ['Test'] }, context);
+    const result = await agenticProcess(driver, { objective: ['Test'] }, {});
 
     expect(result.context.executionLog?.[1].result).toBe('Current time noted.');
     expect(result.context.executionLog?.[1].pendingToolCalls).toBeUndefined();
@@ -253,10 +229,6 @@ describe('agenticProcess v2', () => {
       ]
     });
 
-    const context: AgenticWorkflowContext = {
-      objective: 'Generate structured output'
-    };
-
     const userModule = {
       objective: ['Test'],
       schema: {
@@ -267,7 +239,7 @@ describe('agenticProcess v2', () => {
       }
     };
 
-    const result = await agenticProcess(driver, userModule, context);
+    const result = await agenticProcess(driver, userModule, {});
 
     const lastTask = result.context.taskList?.[result.context.taskList.length - 1];
     expect(lastTask?.taskType).toBe('output');

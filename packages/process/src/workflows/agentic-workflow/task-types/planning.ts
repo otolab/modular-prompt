@@ -6,8 +6,7 @@
  * using distribute() + formatCompletionPrompt().
  *
  * Data side:
- * - userModule compiled as "Prompt to analyze" material
- * - ctx.inputs
+ * - userModule compiled as "Prompt to analyze" material (includes inputs)
  *
  * Output side:
  * - cue: user message instructing to call __insert_tasks tool
@@ -57,13 +56,6 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
         title: 'Prompt to analyze',
         content: text,
       };
-    },
-  ],
-
-  inputs: [
-    (ctx: AgenticWorkflowContext) => {
-      if (!ctx.inputs) return null;
-      return JSON.stringify(ctx.inputs, null, 2);
     },
   ],
 

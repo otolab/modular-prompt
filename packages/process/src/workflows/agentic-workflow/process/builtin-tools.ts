@@ -54,15 +54,15 @@ const TASK_ENTRY_SCHEMA = {
     },
     withInputs: {
       type: 'boolean',
-      description: 'Include ctx.inputs in data. Defaults per task type.',
+      description: 'Include user inputs in data. Defaults per task type.',
     },
     withMessages: {
       type: 'boolean',
-      description: 'Include ctx.messages in data. Defaults per task type.',
+      description: 'Include user messages in data. Defaults per task type.',
     },
     withMaterials: {
       type: 'boolean',
-      description: 'Include ctx.materials in data. Defaults per task type.',
+      description: 'Include user materials in data. Defaults per task type.',
     },
     insertAt: {
       type: 'number',

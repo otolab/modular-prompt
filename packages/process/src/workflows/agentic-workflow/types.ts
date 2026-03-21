@@ -88,11 +88,11 @@ export interface AgenticTask {
   taskType: TaskType;
   /** Driver role override (defaults per task type) */
   driverRole?: ModelRole;
-  /** Include ctx.inputs in data */
+  /** Include user inputs in data */
   withInputs?: boolean;
-  /** Include ctx.messages in data */
+  /** Include user messages in data */
   withMessages?: boolean;
-  /** Include ctx.materials in data */
+  /** Include user materials in data */
   withMaterials?: boolean;
 }
 
@@ -114,22 +114,19 @@ export interface AgenticTaskExecutionLog {
 }
 
 // ---------------------------------------------------------------------------
-// Context
+// Context (internal)
 // ---------------------------------------------------------------------------
 
 /**
- * Context for agentic workflow.
+ * Internal context for agentic workflow.
  *
- * Passed through the entire workflow lifecycle.
- * Each task type selects what it needs from this context.
+ * This is NOT the user-facing API. Users pass their own context type `T`
+ * (for module DynamicContent resolution) and optionally an `AgenticResumeState`
+ * (via options) to resume a previously suspended workflow.
  */
 export interface AgenticWorkflowContext {
-  /** Primary objective (passed as instruction to all tasks) */
-  objective: string;
   /** Resolved user module (set by agenticProcess via resolve()) */
   userModule?: ResolvedModule;
-  /** Structured input data */
-  inputs?: Record<string, unknown>;
   /** Current task list */
   taskList?: AgenticTask[];
   /** Execution log of completed tasks */
@@ -137,6 +134,25 @@ export interface AgenticWorkflowContext {
   /** Index of the currently executing task */
   currentTaskIndex?: number;
   /** Persisted state string from previous task execution */
+  state?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Resume state (public)
+// ---------------------------------------------------------------------------
+
+/**
+ * State for resuming a previously suspended agentic workflow.
+ *
+ * Returned by agenticProcess in the result and can be passed back
+ * via options.resumeState to continue execution.
+ */
+export interface AgenticResumeState {
+  /** Task list from the previous run */
+  taskList?: AgenticTask[];
+  /** Execution log from the previous run */
+  executionLog?: AgenticTaskExecutionLog[];
+  /** Persisted state from the previous run */
   state?: string;
 }
 
@@ -158,4 +174,6 @@ export interface AgenticWorkflowOptions {
   enablePlanning?: boolean;
   /** Include intermediate task results wrapped in <think> tags before the final output (default: false) */
   includeThinking?: boolean;
+  /** Resume state from a previously suspended workflow */
+  resumeState?: AgenticResumeState;
 }
