@@ -3,8 +3,8 @@
  *
  * Uses the full userModule (passed via workflowBase) as the prompt.
  * This module only adds:
- * - An instruction to refer to the pre-computed task results in materials
- * - The execution log as materials
+ * - An instruction to refer to the pre-computed task results in preparationNote
+ * - The execution log as preparationNote
  *
  * The model sees the original user prompt with task results injected,
  * so it naturally produces the expected response.
@@ -15,18 +15,18 @@
 import type { PromptModule } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
-import { buildPreviousResultsMaterials } from './index.js';
+import { buildPreviousResultsNote } from './index.js';
 
 const outputModule: PromptModule<AgenticWorkflowContext> = {
   instructions: [
-    '- Refer to the pre-computed results in materials to compose your response.',
+    '- Refer to the pre-computed results in "Response Preparation Note" to compose your response.',
     '- If tools are available, you may call them to gather additional information needed for the response.',
   ],
 
-  materials: [
+  preparationNote: [
     (ctx: AgenticWorkflowContext) => {
       if (!ctx.executionLog?.length) return null;
-      return buildPreviousResultsMaterials(ctx.executionLog);
+      return buildPreviousResultsNote(ctx.executionLog);
     },
   ],
 };
@@ -34,4 +34,5 @@ const outputModule: PromptModule<AgenticWorkflowContext> = {
 export const config: TaskTypeConfig = {
   module: outputModule,
   builtinToolNames: [],
+  maxTokensTier: 'middle',
 };

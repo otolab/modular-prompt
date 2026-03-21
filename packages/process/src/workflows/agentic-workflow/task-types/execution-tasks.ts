@@ -14,8 +14,8 @@
 import type { PromptModule, DynamicElement } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
-import type { TaskTypeConfig } from './index.js';
-import { buildPreviousResultsMaterials } from './index.js';
+import type { TaskTypeConfig, MaxTokensTier } from './index.js';
+import { buildPreviousResultsNote } from './index.js';
 
 // ---------------------------------------------------------------------------
 // Task definition schema
@@ -32,6 +32,8 @@ interface ExecutionTaskDef {
   defaults: { withInputs: boolean; withMessages: boolean; withMaterials: boolean };
   /** Description for __insert_tasks tool enum */
   toolDescription: string;
+  /** maxTokens tier (default: 'middle') */
+  maxTokensTier: MaxTokensTier;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,6 +51,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     driverRole: 'thinking',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
     toolDescription: 'general reasoning/analysis',
+    maxTokensTier: 'high',
   },
   toolCall: {
     objective: '- Call external tools as described in the Focus and report the results.',
@@ -59,6 +62,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
     toolDescription: 'call external tools',
+    maxTokensTier: 'low',
   },
   verify: {
     objective: '- Verify or validate results from previous Tasks as described in the Focus.',
@@ -70,6 +74,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     driverRole: 'thinking',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
     toolDescription: 'validate previous results',
+    maxTokensTier: 'low',
   },
   extractContext: {
     objective: '- Extract relevant information from the provided data according to the Focus.',
@@ -83,6 +88,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     driverRole: 'thinking',
     defaults: { withInputs: true, withMessages: true, withMaterials: true },
     toolDescription: 'extract from inputs/materials',
+    maxTokensTier: 'high',
   },
   recall: {
     objective: '- Retrieve information relevant to the Focus using search tools or training knowledge.',
@@ -95,6 +101,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
     toolDescription: 'retrieve information via search tools or training knowledge',
+    maxTokensTier: 'middle',
   },
   determine: {
     objective: '- Make a decision or judgment based on the available information as described in the Focus.',
@@ -106,6 +113,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     driverRole: 'thinking',
     defaults: { withInputs: true, withMessages: true, withMaterials: true },
     toolDescription: 'make a decision or judgment',
+    maxTokensTier: 'middle',
   },
 };
 
@@ -134,11 +142,14 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
       },
     ],
 
-    materials: [
+    preparationNote: [
       (ctx: AgenticWorkflowContext) => {
         if (!ctx.executionLog?.length) return null;
-        return buildPreviousResultsMaterials(ctx.executionLog);
+        return buildPreviousResultsNote(ctx.executionLog);
       },
+    ],
+
+    materials: [
       (ctx: AgenticWorkflowContext) => {
         const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
         const withMaterials = task?.withMaterials ?? def.defaults.withMaterials;
@@ -173,6 +184,7 @@ function buildConfig(def: ExecutionTaskDef): TaskTypeConfig {
   return {
     module: buildModule(def),
     builtinToolNames: ['__insert_tasks', '__update_state', '__time'],
+    maxTokensTier: def.maxTokensTier,
   };
 }
 

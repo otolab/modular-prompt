@@ -79,4 +79,5 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
 export const config: TaskTypeConfig = {
   module: planningModule,
   builtinToolNames: ['__insert_tasks'],
+  maxTokensTier: 'high',
 };

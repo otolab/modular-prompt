@@ -109,10 +109,8 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     // objective フレーミングが含まれる
     expect(instructionText).toContain('You will execute the Task described in');
 
-    // 前タスク結果が materials に入る
-    const materialElements = prompt.data.filter((e: any) => e.type === 'material');
-    expect(materialElements.length).toBeGreaterThanOrEqual(1);
-    expect(materialElements[0].title).toContain('Task 1');
+    // 前タスク結果が preparationNote (instructions内) に入る
+    expect(instructionText).toContain('Tasks registered.');
   });
 
   it('extractContext: messages/materials がデフォルトでデータに含まれる', () => {
@@ -174,9 +172,11 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     const outputText = collectText(prompt.output);
     expect(outputText).toContain('分析結果を日本語で報告してください');
 
-    // 全タスク結果が materials に入る
-    const materialElements = prompt.data.filter((e: any) => e.type === 'material');
-    expect(materialElements).toHaveLength(3);
+    // 全タスク結果が preparationNote (instructions内) に入る
+    const instructionText = collectText(prompt.instructions);
+    expect(instructionText).toContain('Tasks registered.');
+    expect(instructionText).toContain('テーマを特定しました');
+    expect(instructionText).toContain('コンテキストを抽出しました');
   });
 
   it('output with schema: schema が output に入る', () => {

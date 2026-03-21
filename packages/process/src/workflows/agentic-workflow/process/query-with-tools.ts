@@ -54,6 +54,8 @@ export interface QueryWithToolsOptions {
   externalToolDefs?: ToolDefinition[];
   toolChoice?: ToolChoice;
   maxIterations?: number;
+  /** Maximum output tokens per query */
+  maxTokens?: number;
   /** Stop after first builtin tool execution without sending result back to model */
   stopAfterToolCall?: boolean;
   logPrefix?: string;
@@ -103,6 +105,7 @@ export async function queryWithTools(
     const queryResult = await driver.query(prompt, {
       tools: allToolDefs.length > 0 ? allToolDefs : undefined,
       toolChoice: i === 0 ? (options.toolChoice ?? 'auto') : 'auto',
+      ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
     });
 
     qLogger.verbose('[output]', queryResult.content);
