@@ -26,7 +26,7 @@ function collectText(elements: any[] = []): string {
 }
 
 describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
-  const userModule: PromptModule<AgenticWorkflowContext> = {
+  const userModule: PromptModule<any> = {
     objective: ['文書を分析し、重要な洞察を抽出する'],
     instructions: [
       '- 文書の主要なテーマを特定する',
@@ -36,7 +36,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     cue: ['分析結果を日本語で報告してください'],
   };
 
-  const taskList: AgenticTask[] = [
+  const taskList = [
     { instruction: 'Decompose objective into tasks', taskType: 'planning' },
     { instruction: '文書のテーマを分析する', taskType: 'think' },
     { instruction: 'メッセージからコンテキストを抽出する', taskType: 'extractContext', withMessages: true },
@@ -45,9 +45,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
 
   it('planning: instructions/guidelines をデータ側に配置する', () => {
     const context: AgenticWorkflowContext = {
-      objective: '文書を分析し、重要な洞察を抽出する',
       userModule,
-      inputs: { document: 'サンプルドキュメントの内容...' },
       taskList,
       currentTaskIndex: 0,
       executionLog: [],
@@ -83,7 +81,6 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
 
   it('think: description が指示に、前タスク結果がデータに入る', () => {
     const context: AgenticWorkflowContext = {
-      objective: '文書を分析し、重要な洞察を抽出する',
       userModule,
       taskList,
       currentTaskIndex: 1,
@@ -124,7 +121,6 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
       ],
     };
     const context: AgenticWorkflowContext = {
-      objective: '文書を分析し、重要な洞察を抽出する',
       userModule: resolvedUserModule,
       taskList,
       currentTaskIndex: 2,
@@ -149,7 +145,6 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
 
   it('output: cue が指示に、全タスク結果がデータに入る', () => {
     const context: AgenticWorkflowContext = {
-      objective: '文書を分析し、重要な洞察を抽出する',
       userModule,
       taskList,
       currentTaskIndex: 3,
@@ -198,7 +193,6 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     ];
 
     const context: AgenticWorkflowContext = {
-      objective: '文書を分析し、重要な洞察を抽出する',
       userModule: moduleWithSchema,
       taskList: structuredTaskList,
       currentTaskIndex: 3,

@@ -162,8 +162,8 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
       (ctx: AgenticWorkflowContext) => {
         const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
         const withInputs = task?.withInputs ?? def.defaults.withInputs;
-        if (!withInputs || !ctx.inputs) return null;
-        return JSON.stringify(ctx.inputs, null, 2);
+        if (!withInputs || !ctx.userModule?.inputs?.length) return null;
+        return ctx.userModule.inputs as DynamicElement[];
       },
     ],
 

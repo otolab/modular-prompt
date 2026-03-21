@@ -9,7 +9,7 @@ import { Logger } from '@modular-prompt/utils';
 import { WorkflowExecutionError } from '../../types.js';
 import type { AIDriver } from '../../types.js';
 import type { QueryResult } from '@modular-prompt/driver';
-import type { ToolSpec, ToolCallLog, AgenticWorkflowContext } from '../types.js';
+import type { ToolSpec, ToolCallLog } from '../types.js';
 import { isBuiltinTool } from './builtin-tools.js';
 
 const logger = new Logger({ prefix: 'process', context: 'agentic' });
@@ -171,7 +171,7 @@ export async function queryWithTools(
 
 export function rethrowAsWorkflowError(
   error: unknown,
-  context: AgenticWorkflowContext,
+  context: unknown,
   details: Record<string, unknown>
 ): never {
   if (error instanceof WorkflowExecutionError) throw error;

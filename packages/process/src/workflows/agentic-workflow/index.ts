@@ -5,6 +5,7 @@ export { agenticProcess } from './agentic-workflow.js';
 export type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
+  AgenticResumeState,
   AgenticTask,
   AgenticTaskExecutionLog,
   TaskType,

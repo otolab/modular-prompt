@@ -18,6 +18,7 @@ import type { WorkflowResult } from '../types.js';
 import type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
+  AgenticResumeState,
   AgenticTask,
   AgenticTaskExecutionLog,
   TaskType,
@@ -187,12 +188,12 @@ async function executeTask(
 // Main workflow
 // ---------------------------------------------------------------------------
 
-export async function agenticProcess(
+export async function agenticProcess<T>(
   driver: DriverInput,
-  module: PromptModule<AgenticWorkflowContext>,
-  context: AgenticWorkflowContext,
+  module: PromptModule<T>,
+  context: T,
   options: AgenticWorkflowOptions = {}
-): Promise<WorkflowResult<AgenticWorkflowContext>> {
+): Promise<WorkflowResult<AgenticResumeState>> {
   logger.info('[start] agentic workflow');
 
   const {
@@ -201,19 +202,22 @@ export async function agenticProcess(
     maxToolCalls = 10,
     enablePlanning = true,
     includeThinking = false,
+    resumeState,
   } = options;
 
   // Resolve user module: DynamicContent → static values
-  // userModule is available throughout the workflow via context.userModule
   const userModule = resolve(module, context);
-  context.userModule = userModule;
 
-  // Bootstrap task list
-  const taskList = bootstrap(userModule, enablePlanning);
+  // Build internal context (mutable — shared across tasks)
+  const internalContext: AgenticWorkflowContext = {
+    userModule,
+    taskList: resumeState?.taskList ?? bootstrap(userModule, enablePlanning),
+    executionLog: resumeState?.executionLog ? [...resumeState.executionLog] : [],
+    currentTaskIndex: 0,
+    state: resumeState?.state,
+  };
 
-  const executionLog: AgenticTaskExecutionLog[] = context.executionLog
-    ? [...context.executionLog]
-    : [];
+  const { taskList, executionLog } = internalContext as Required<Pick<AgenticWorkflowContext, 'taskList' | 'executionLog'>>;
   const startIndex = executionLog.length;
 
   // Task loop
@@ -225,16 +229,10 @@ export async function agenticProcess(
     }
 
     const task = taskList[i];
-
-    const currentContext: AgenticWorkflowContext = {
-      ...context,
-      taskList,
-      executionLog,
-      currentTaskIndex: i,
-    };
+    internalContext.currentTaskIndex = i;
 
     const logEntry = await executeTask(
-      driver, userModule, currentContext, task, i, taskList,
+      driver, userModule, internalContext, task, i, taskList,
       tools, maxToolCalls
     );
     executionLog.push(logEntry);
@@ -258,16 +256,10 @@ export async function agenticProcess(
     };
     taskList.push(outputTask);
     const outputIndex = taskList.length - 1;
-
-    const outputContext: AgenticWorkflowContext = {
-      ...context,
-      taskList,
-      executionLog,
-      currentTaskIndex: outputIndex,
-    };
+    internalContext.currentTaskIndex = outputIndex;
 
     const outputLog = await executeTask(
-      driver, userModule, outputContext, outputTask, outputIndex, taskList,
+      driver, userModule, internalContext, outputTask, outputIndex, taskList,
       tools, maxToolCalls
     );
     executionLog.push(outputLog);
@@ -301,10 +293,9 @@ export async function agenticProcess(
   return {
     output,
     context: {
-      ...context,
       taskList,
       executionLog,
-      currentTaskIndex: taskList.length,
+      state: internalContext.state,
     },
     metadata: {
       planTasks: taskList.length,
