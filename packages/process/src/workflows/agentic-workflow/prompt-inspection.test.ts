@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { compile, merge, resolve } from '@modular-prompt/core';
 import type { PromptModule, ResolvedModule } from '@modular-prompt/core';
 import { getTaskTypeConfig, taskCommon } from './task-types/index.js';
-import type { AgenticWorkflowContext } from './types.js';
+import type { AgenticWorkflowContext, AgenticTask } from './types.js';
 
 function collectText(elements: any[] = []): string {
   const lines: string[] = [];
