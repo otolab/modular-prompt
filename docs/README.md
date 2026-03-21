@@ -29,6 +29,10 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 - **[Structured Outputs仕様](./STRUCTURED_OUTPUTS.md)** - 構造化出力の仕様と実装ガイド
 - **[テスト用ドライバーガイド](./TEST_DRIVERS.md)** - TestDriverとEchoDriverの使い方
 
+### モデル固有の挙動
+
+- **[MLX - Qwen系モデル](./models/MLX_QWEN.md)** - Qwen系モデルのtool call時のcontent挙動
+
 ## プロセスモジュール
 
 ### ワークフロー処理のための再利用可能モジュール
@@ -89,6 +93,7 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 1. [Driver APIリファレンス](./DRIVER_API.md)でインターフェースを確認
 2. [Structured Outputs仕様](./STRUCTURED_OUTPUTS.md)で構造化出力を実装
 3. [テスト用ドライバーガイド](./TEST_DRIVERS.md)を参考にテストを作成
+4. [モデル固有の挙動](./models/)で使用するモデルの特性を確認
 
 ### アーキテクト
 

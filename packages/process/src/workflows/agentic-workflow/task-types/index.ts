@@ -100,6 +100,7 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
   instructions: [
     '- Do not perform work outside the scope of the current Task.',
+    '- If "Response Preparation Note" is present, it contains results from previously completed Tasks. Refer to it as the basis for your work.',
     '- If the instructions are contradictory, there is insufficient information, you lack the required knowledge, or the work is unnecessary — do not attempt to produce a speculative result. Instead, report that you did not perform the work and explain the reason. This is a valid and sufficient response.',
   ],
   terms: [
@@ -107,6 +108,7 @@ export const taskCommon: PromptModule<AgenticWorkflowContext> = {
     '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
     '- **Focus**: The specific directive for the current Task — what to concentrate on and accomplish.',
     '- **State**: Persistent information shared across Tasks. Updated via `__update_state` and visible to all subsequent Tasks in the "Current State" section.',
+    '- **Response Preparation Note**: Results from all previously completed Tasks. Use this as your primary reference for what has already been done.',
   ],
   state: [
     (ctx: AgenticWorkflowContext) => {
