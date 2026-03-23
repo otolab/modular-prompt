@@ -67,6 +67,7 @@ close(): Promise<void>
 |----------|------------|-------------------|------|
 | OllamaDriver | Ollama | ✅ ネイティブ（継承） | ローカルLLM（OpenAI互換） |
 | MlxDriver | MLX | ✅ JSON抽出 | Apple Silicon最適化 |
+| VllmDriver | vLLM | ✅ JSON抽出 | CUDA GPU推論（Linux） |
 
 ### テスト用
 
@@ -180,6 +181,7 @@ type DriverProvider =
   | 'vertexai'
   | 'ollama'
   | 'mlx'
+  | 'vllm'
   | 'test'
   | 'echo'
   | string;  // カスタムプロバイダー

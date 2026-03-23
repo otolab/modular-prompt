@@ -287,6 +287,7 @@ interface ApplicationConfig {
     vertexai?: { project?: string; location?: string; region?: string };
     mlx?: { baseURL?: string; pythonPath?: string };
     ollama?: { baseURL?: string };
+    vllm?: { socketPath?: string };
   };
   defaultOptions?: {
     temperature?: number;
@@ -306,6 +307,7 @@ interface ApplicationConfig {
 | vertexai | project, location | region |
 | mlx | なし | baseURL, pythonPath |
 | ollama | なし | baseURL |
+| vllm | socketPath | なし |
 
 ## まとめ
 

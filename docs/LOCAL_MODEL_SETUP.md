@@ -15,6 +15,11 @@
   - [サービスの起動](#サービスの起動)
   - [モデルのダウンロード](#モデルのダウンロード-1)
   - [トラブルシューティング](#トラブルシューティング-ollama)
+- [vLLM (CUDA GPU)](#vllm-cuda-gpu)
+  - [環境要件](#環境要件-1)
+  - [初回セットアップ](#初回セットアップ-1)
+  - [エンジンの起動](#エンジンの起動)
+  - [トラブルシューティング](#トラブルシューティング-vllm)
 
 ## MLX (Apple Silicon)
 
@@ -222,6 +227,138 @@ ollama serve
 
 Ollamaはモデルをメモリに読み込むため、モデルサイズの1.5〜2倍のRAMが推奨されます。
 
+## vLLM (CUDA GPU)
+
+CUDA GPU環境（Linux）専用の高速LLM推論エンジン。
+
+### 環境要件
+
+- **ハードウェア**: NVIDIA CUDA対応GPU
+- **OS**: Linux（CUDA環境）
+- **Python**: 3.10以上（3.14未満）
+- **uv**: Pythonパッケージマネージャー
+
+### 初回セットアップ
+
+vLLMドライバーのPython環境をセットアップします：
+
+```bash
+cd node_modules/@modular-prompt/driver/src/vllm/python
+uv sync
+```
+
+**セットアップ内容：**
+
+1. Python仮想環境の作成
+2. vLLM関連パッケージのインストール（vLLM >= 0.8.0、transformers >= 4.45）
+
+**注意：**
+- vLLMはCUDA GPU環境（Linux）でのみ動作します
+- Apple SiliconやWindowsでは使用できません
+
+### エンジンの起動
+
+vLLMエンジンはTypeScriptドライバーとは独立して起動します。Unix ドメインソケットを通じて通信します。
+
+#### 基本的な起動
+
+```bash
+uv --project node_modules/@modular-prompt/driver/src/vllm/python run python __main__.py \
+  --model Qwen/Qwen2.5-7B-Instruct \
+  --socket /tmp/vllm.sock
+```
+
+#### ツールコール対応モデルの起動
+
+```bash
+uv --project node_modules/@modular-prompt/driver/src/vllm/python run python __main__.py \
+  --model Qwen/Qwen2.5-7B-Instruct \
+  --socket /tmp/vllm.sock \
+  --tool-call-parser hermes
+```
+
+**利用可能なツールパーサー：**
+- `hermes` - Hermes形式のツールコール
+- `mistral` - Mistral形式のツールコール
+- その他、vLLMのToolParserManagerがサポートするパーサー
+
+#### オプション設定
+
+```bash
+uv --project ... run python __main__.py \
+  --model <model-name> \
+  --socket <socket-path> \
+  --tool-call-parser <parser-name> \
+  --gpu-memory-utilization 0.9 \
+  --tensor-parallel-size 2 \
+  --max-model-len 8192
+```
+
+**主要オプション：**
+- `--model`: HuggingFace モデルID（必須）
+- `--socket`: Unix ソケットパス（必須）
+- `--tool-call-parser`: ツールコールパーサー名（オプション）
+- `--gpu-memory-utilization`: GPU メモリ使用率（0.0-1.0）
+- `--tensor-parallel-size`: テンソル並列サイズ
+- `--max-model-len`: 最大モデル長（トークン数）
+
+#### エンジンの動作確認
+
+エンジンが正常に起動すると、次のメッセージが表示されます：
+
+```
+Loading model: Qwen/Qwen2.5-7B-Instruct
+Model loaded: Qwen/Qwen2.5-7B-Instruct
+Tool parser initialized: hermes
+vLLM engine listening on /tmp/vllm.sock
+```
+
+### トラブルシューティング (vLLM)
+
+#### CUDA環境が見つからない
+
+```bash
+# CUDA バージョン確認
+nvidia-smi
+
+# vLLM が CUDA を認識しているか確認
+uv --project ... run python -c "import torch; print(torch.cuda.is_available())"
+```
+
+#### メモリ不足エラー
+
+GPU メモリが不足している場合は、以下のオプションを調整してください：
+
+```bash
+# GPU メモリ使用率を下げる
+--gpu-memory-utilization 0.7
+
+# より小さいモデルを使用
+--model mlx-community/gemma-2-2b-it-4bit
+```
+
+#### ソケット接続エラー
+
+```bash
+# ソケットファイルが残っている場合は削除
+rm /tmp/vllm.sock
+
+# エンジンを再起動
+uv --project ... run python __main__.py ...
+```
+
+#### モデルのダウンロードが失敗する
+
+初回起動時、HuggingFace Hubからモデルが自動的にダウンロードされます。ネットワーク接続を確認してください。
+
+```bash
+# キャッシュをクリア
+rm -rf ~/.cache/huggingface/hub/
+
+# 再度起動
+uv --project ... run python __main__.py ...
+```
+
 ## 使用例
 
 ### MLX
@@ -258,6 +395,55 @@ const driver = new OllamaDriver({
 
 const result = await driver.query(prompt);
 console.log(result.content);
+```
+
+### vLLM
+
+```typescript
+import { VllmDriver } from '@modular-prompt/driver';
+
+// エンジンを事前に起動しておく必要があります
+// uv --project ... run python __main__.py --model Qwen/Qwen2.5-7B-Instruct --socket /tmp/vllm.sock
+
+const driver = new VllmDriver({
+  socketPath: '/tmp/vllm.sock',
+  defaultOptions: {
+    maxTokens: 500,
+    temperature: 0.7
+  }
+});
+
+const result = await driver.query(prompt);
+console.log(result.content);
+
+await driver.close();
+```
+
+### vLLM - ツールコール付き
+
+```typescript
+const driver = new VllmDriver({
+  socketPath: '/tmp/vllm.sock'
+});
+
+const result = await driver.query(prompt, {
+  tools: [
+    {
+      name: 'get_weather',
+      description: 'Get weather information',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: { type: 'string' }
+        }
+      }
+    }
+  ]
+});
+
+if (result.toolCalls) {
+  console.log('Tool calls:', result.toolCalls);
+}
 ```
 
 ## 関連ドキュメント
