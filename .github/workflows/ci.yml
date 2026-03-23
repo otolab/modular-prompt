@@ -45,6 +45,43 @@ jobs:
           packages/*/coverage/
         retention-days: 7
 
+  changeset-check:
+    # PRの場合のみ実行（release/*, chore/*, dependabot/* ブランチは除外）
+    if: >-
+      github.event_name == 'pull_request'
+      && !startsWith(github.head_ref, 'release/')
+      && !startsWith(github.head_ref, 'chore/')
+      && !startsWith(github.head_ref, 'dependabot/')
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for changeset
+      run: |
+        # [skip-changeset] がコミットメッセージに含まれていればスキップ
+        if git log origin/${{ github.base_ref }}..HEAD --format=%s | grep -q '\[skip-changeset\]'; then
+          echo "✅ [skip-changeset] found, skipping changeset check"
+          exit 0
+        fi
+
+        # .changeset/ 配下に新規追加された .md ファイル（README.md 除く）があるか
+        CHANGESETS=$(git diff --name-only --diff-filter=A origin/${{ github.base_ref }}...HEAD -- '.changeset/*.md' | grep -v README.md || true)
+
+        if [ -z "$CHANGESETS" ]; then
+          echo "❌ No changeset found in this PR"
+          echo ""
+          echo "Please add a changeset by running: npx changeset"
+          echo "Or add [skip-changeset] to a commit message to skip this check."
+          exit 1
+        fi
+
+        echo "✅ Changeset found:"
+        echo "$CHANGESETS"
+
   validate-release-version:
     # release/*ブランチからのPRの場合のみ実行
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
