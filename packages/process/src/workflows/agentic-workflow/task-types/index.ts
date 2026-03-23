@@ -59,7 +59,16 @@ export function buildPreviousResultsNote(
   executionLog: AgenticTaskExecutionLog[]
 ): TextElement {
   const content = executionLog
-    .map((log, index) => `[Task ${index + 1}: ${log.taskType}] ${log.instruction}\n${log.result}`)
+    .map((log, index) => {
+      let text = `[Task ${index + 1}: ${log.taskType}] ${log.instruction}\n${log.result}`;
+      if (log.toolCallLog?.length) {
+        const toolResults = log.toolCallLog
+          .map(tc => `  [tool: ${tc.name}] ${typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result)}`)
+          .join('\n');
+        text += `\n${toolResults}`;
+      }
+      return text;
+    })
     .join('\n\n');
   return { type: 'text' as const, content };
 }
@@ -98,32 +107,34 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
  * Provides workflow terms, methodology, and state information.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
-  instructions: [
-    '- Do not perform work outside the scope of the current Task.',
-    '- If "Response Preparation Note" is present, it contains results from previously completed Tasks. Refer to it as the basis for your work.',
-    '- If the instructions are contradictory, there is insufficient information, you lack the required knowledge, or the work is unnecessary — do not attempt to produce a speculative result. Instead, report that you did not perform the work and explain the reason. This is a valid and sufficient response.',
-  ],
   terms: [
-    '- **Task**: A unit of work in the workflow. Each Task is executed by a separate AI instance.',
+    '- **Workflow**: The entire process that achieves the Objective by executing a sequence of Tasks.',
+    '- **Task**: A unit of work in the Workflow. Each Task is executed by a separate AI instance.',
     '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
     '- **Focus**: The specific directive for the current Task — what to concentrate on and accomplish.',
     '- **State**: Persistent information shared across Tasks. Updated via `__update_state` and visible to all subsequent Tasks in the "Current State" section.',
     '- **Response Preparation Note**: Results from all previously completed Tasks. Use this as your primary reference for what has already been done.',
   ],
-  state: [
-    (ctx: AgenticWorkflowContext) => {
-      if (!ctx.state) return null;
-      return ctx.state;
-    },
-  ],
   methodology: [
-    '- We accomplish the Objective by executing Tasks sequentially.',
+    `- We accomplish the Workflow's Objective by executing Tasks sequentially.`,
     {
       type: 'subsection' as const,
       title: 'Workflow Status / Current Task List',
       items: [
         (ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx),
       ],
+    },
+  ],
+  instructions: [
+    '- Do not perform work outside the scope of the current Task\'s Focus.',
+    '- If "Response Preparation Note" is present, refer to it as the basis for your work.',
+    '- If the instructions are contradictory, there is insufficient information, or you lack the required knowledge — report the issue instead of producing a speculative result.',
+    '- If the work is unnecessary given the current context, skip it and explain why. This is a valid and sufficient response.',
+  ],
+  state: [
+    (ctx: AgenticWorkflowContext) => {
+      if (!ctx.state) return null;
+      return ctx.state;
     },
   ],
 };
