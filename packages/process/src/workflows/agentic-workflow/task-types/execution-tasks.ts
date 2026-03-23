@@ -34,6 +34,8 @@ interface ExecutionTaskDef {
   toolDescription: string;
   /** maxTokens tier (default: 'middle') */
   maxTokensTier: MaxTokensTier;
+  /** Builtin tool names (default: ['__insert_tasks', '__update_state', '__time']) */
+  builtinToolNames?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -42,10 +44,10 @@ interface ExecutionTaskDef {
 
 export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
   think: {
-    objective: '- Perform reasoning, analysis, or processing as described in the Focus.',
+    objective: '- Perform reasoning, analysis, or processing according to your Focus.',
     instructions: [
       '- You will perform reasoning, analysis, or processing as instructed.',
-      '- You may call external tools if needed to gather information or perform actions.',
+      '- You may call tools if needed to gather information or perform actions.',
       '- If additional tasks are needed to complete the objective, use `__insert_tasks` to register them.',
     ],
     driverRole: 'thinking',
@@ -54,18 +56,19 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     maxTokensTier: 'high',
   },
   toolCall: {
-    objective: '- Call external tools as described in the Focus and report the results.',
+    objective: '- Call the tools needed according to your Focus.',
     instructions: [
-      '- You will call external tools as instructed to gather information or perform actions.',
-      '- Report the tool results clearly for subsequent Tasks.',
+      '- Call the appropriate tools to accomplish your Focus.',
+      '- Tool results are automatically passed to subsequent Tasks.',
     ],
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'call external tools',
+    toolDescription: 'call tools',
     maxTokensTier: 'low',
+    builtinToolNames: ['__time'],
   },
   verify: {
-    objective: '- Verify or validate results from previous Tasks as described in the Focus.',
+    objective: '- Verify or validate results from previous Tasks according to your Focus.',
     instructions: [
       '- You will verify or validate results from previous Tasks as instructed.',
       '- Report any issues, inconsistencies, or confirmations clearly.',
@@ -77,9 +80,9 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     maxTokensTier: 'low',
   },
   extractContext: {
-    objective: '- Extract relevant information from the provided data according to the Focus.',
+    objective: '- Extract relevant information from the provided data according to your Focus.',
     instructions: [
-      '- Extract information from the provided inputs, messages, and materials as specified in the Focus.',
+      '- Extract information from the provided inputs, messages, and materials according to your Focus.',
       '- Be exhaustive — do not omit any relevant information.',
       '- Combine direct quoting and summarization: quote key phrases or data verbatim, and summarize surrounding context.',
       '- This is an extraction task: gather and organize what is present in the data. Do not interpret, infer, or add your own reasoning.',
@@ -91,9 +94,9 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     maxTokensTier: 'high',
   },
   recall: {
-    objective: '- Retrieve information relevant to the Focus using search tools or training knowledge.',
+    objective: '- Retrieve information relevant to your Focus using search tools or training knowledge.',
     instructions: [
-      '- You will retrieve information relevant to the Focus.',
+      '- You will retrieve information relevant to your Focus.',
       '- If search tools are available, formulate appropriate search queries and use them.',
       '- If the information is already known from your training data and no search is needed, return it directly.',
       '- Do not fabricate information. If uncertain, state what you know and what is unverified.',
@@ -104,7 +107,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     maxTokensTier: 'middle',
   },
   determine: {
-    objective: '- Make a decision or judgment based on the available information as described in the Focus.',
+    objective: '- Make a decision or judgment based on the available information according to your Focus.',
     instructions: [
       '- You will make a decision or judgment based on the available information.',
       '- You MUST reach a definitive conclusion. Do not defer, leave open, or suggest further investigation.',
@@ -125,7 +128,7 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
   const module: PromptModule<AgenticWorkflowContext> = {
     objective: [
       '',
-      def.objective ?? '- You will execute the Task described in "Focus" below.',
+      def.objective ?? '- Execute the current Task according to your Focus.',
     ],
 
     instructions: [
@@ -180,10 +183,12 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
   return module;
 }
 
+const DEFAULT_BUILTIN_TOOLS = ['__insert_tasks', '__update_state', '__time'];
+
 function buildConfig(def: ExecutionTaskDef): TaskTypeConfig {
   return {
     module: buildModule(def),
-    builtinToolNames: ['__insert_tasks', '__update_state', '__time'],
+    builtinToolNames: def.builtinToolNames ?? DEFAULT_BUILTIN_TOOLS,
     maxTokensTier: def.maxTokensTier,
   };
 }

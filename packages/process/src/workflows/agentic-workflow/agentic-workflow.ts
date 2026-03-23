@@ -31,6 +31,7 @@ import {
   createPlanningTools,
   createExecutionBuiltinTools,
   createUpdateStateTool,
+  getBuiltinToolDefinitions,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 
@@ -119,11 +120,10 @@ async function executeTask(
   task: AgenticTask,
   taskIndex: number,
   taskList: AgenticTask[],
-  externalTools: ToolSpec[],
-  maxToolCalls: number
+  externalTools: ToolSpec[]
 ): Promise<AgenticTaskExecutionLog> {
   const taskLogger = logger.context(`agentic:task:${taskIndex + 1}:${task.taskType}`);
-  taskLogger.info('[start]', task.instruction);
+  taskLogger.info(`[start] (${task.taskType})`, task.instruction);
 
   const taskConfig = getTaskTypeConfig(task.taskType);
 
@@ -137,8 +137,10 @@ async function executeTask(
         state: userModule.state,
       };
 
-  // Merge and resolve (taskCommon first for objective framing)
-  const resolved = resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
+  // Merge and resolve: planning has its own terms/methodology, others use taskCommon
+  const resolved = task.taskType === 'planning'
+    ? resolve(merge(workflowBase, taskConfig.module), context)
+    : resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList, taskIndex, context);
   const externalToolDefs = externalTools.map(t => t.definition);
@@ -148,7 +150,6 @@ async function executeTask(
   const driverRole = task.driverRole || DEFAULT_DRIVER_ROLE[task.taskType];
 
   try {
-    const isPlanning = task.taskType === 'planning';
     const maxTokens = MAX_TOKENS_VALUES[taskConfig.maxTokensTier];
 
     const result = await queryWithTools(
@@ -158,9 +159,7 @@ async function executeTask(
       {
         externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,
         toolChoice: 'auto',
-        maxIterations: maxToolCalls,
         maxTokens,
-        stopAfterToolCall: isPlanning,
         logger: taskLogger,
       }
     );
@@ -171,6 +170,7 @@ async function executeTask(
       taskType: task.taskType,
       instruction: task.instruction,
       result: stripThinkBlocks(result.content),
+      toolCallLog: result.toolCallLog.length > 0 ? result.toolCallLog : undefined,
       pendingToolCalls: result.pendingToolCalls,
       metadata: {
         usage: result.usage,
@@ -199,7 +199,6 @@ export async function agenticProcess<T>(
   const {
     maxTasks = 10,
     tools = [],
-    maxToolCalls = 10,
     enablePlanning = true,
     includeThinking = false,
     resumeState,
@@ -215,6 +214,11 @@ export async function agenticProcess<T>(
     executionLog: resumeState?.executionLog ? [...resumeState.executionLog] : [],
     currentTaskIndex: 0,
     state: resumeState?.state,
+    // planningがタスク設計時にツールの存在を把握し、適切なtoolCallタスクを計画できるようにする
+    availableTools: [
+      ...getBuiltinToolDefinitions(),
+      ...tools.map(t => t.definition),
+    ],
   };
 
   const { taskList, executionLog } = internalContext as Required<Pick<AgenticWorkflowContext, 'taskList' | 'executionLog'>>;
@@ -233,7 +237,7 @@ export async function agenticProcess<T>(
 
     const logEntry = await executeTask(
       driver, userModule, internalContext, task, i, taskList,
-      tools, maxToolCalls
+      tools
     );
     executionLog.push(logEntry);
 
@@ -260,7 +264,7 @@ export async function agenticProcess<T>(
 
     const outputLog = await executeTask(
       driver, userModule, internalContext, outputTask, outputIndex, taskList,
-      tools, maxToolCalls
+      tools
     );
     executionLog.push(outputLog);
   }

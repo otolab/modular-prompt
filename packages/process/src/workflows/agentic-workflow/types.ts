@@ -107,6 +107,8 @@ export interface AgenticTaskExecutionLog {
   taskType: TaskType;
   instruction: string;
   result: string;
+  /** Builtin tool call results from this task */
+  toolCallLog?: ToolCallLog[];
   pendingToolCalls?: ToolCall[];
   metadata?: {
     usage?: QueryResult['usage'];
@@ -135,6 +137,8 @@ export interface AgenticWorkflowContext {
   currentTaskIndex?: number;
   /** Persisted state string from previous task execution */
   state?: string;
+  /** External tool definitions available to tasks (for planning visibility) */
+  availableTools?: ToolDefinition[];
 }
 
 // ---------------------------------------------------------------------------
@@ -168,8 +172,6 @@ export interface AgenticWorkflowOptions {
   maxTasks?: number;
   /** External tools available to tasks */
   tools?: ToolSpec[];
-  /** Maximum tool call iterations per task (default: 10) */
-  maxToolCalls?: number;
   /** Skip planning and use provided taskList (default: true) */
   enablePlanning?: boolean;
   /** Include intermediate task results wrapped in <think> tags before the final output (default: false) */
