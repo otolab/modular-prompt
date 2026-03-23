@@ -165,7 +165,8 @@ export class VllmDriver implements AIDriver {
 
     // ツールなし: ストリーミングモード
     const { stream, result } = await this.streamQuery(prompt, options);
-    for await (const _chunk of stream) { /* consume */ }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    for await (const _ of stream) { /* consume */ }
     return result;
   }
 
