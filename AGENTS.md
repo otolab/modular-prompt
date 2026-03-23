@@ -15,7 +15,7 @@ AIアシスタントがコードベースを効率的に理解・操作するた
 
 ### ドライバー
 - `packages/driver/src/types.ts` - ドライバーインターフェース定義
-- `packages/driver/src/*/` - 各AIサービス実装（openai、anthropic、vertexai、googlegenai、mlx等）
+- `packages/driver/src/*/` - 各AIサービス実装（openai、anthropic、vertexai、googlegenai、mlx、vllm等）
 
 ### ユーティリティ
 - `packages/utils/src/driver-registry/` - ドライバーレジストリ実装
@@ -112,7 +112,7 @@ npm run lint
 
 ### ドライバーパッケージ
 - `@modular-prompt/driver` - AIモデルドライバー
-  - OpenAI、Anthropic、VertexAI、GoogleGenAI、Ollama、MLX
+  - OpenAI、Anthropic、VertexAI、GoogleGenAI、Ollama、MLX、vLLM
   - 統一インターフェースとストリーミングサポート
   - StreamResult型: stream（AsyncIterable<string>）+ result（Promise<QueryResult>）
 
@@ -135,7 +135,7 @@ npm run lint
 
 ## ドライバーアーキテクチャ
 
-利用可能なドライバー: OpenAI、Anthropic、VertexAI、GoogleGenAI、Ollama、MLX、Test
+利用可能なドライバー: OpenAI、Anthropic、VertexAI、GoogleGenAI、Ollama、MLX、vLLM、Test
 
 詳細は [ドライバーAPI](./docs/DRIVER_API.md) および [AIサービスガイド](./docs/AI_SERVICE_GUIDE.md) を参照してください。
 

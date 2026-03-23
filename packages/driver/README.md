@@ -40,6 +40,7 @@ await driver.close();
 | `GoogleGenAIDriver` | Google | APIキーのみで利用可能 |
 | `OllamaDriver` | Ollama | ローカルLLM |
 | `MlxDriver` | MLX | Apple Silicon専用 |
+| `VllmDriver` | vLLM | CUDA GPU推論（Linux） |
 | `TestDriver` | - | モックレスポンス |
 | `EchoDriver` | - | プロンプトをそのまま返す |
 
@@ -74,9 +75,11 @@ export class CustomDriver implements AIDriver {
 }
 ```
 
-## MLX セットアップ
+## ローカルモデルのセットアップ
 
-MLXドライバーはインストール時に自動でPython環境をセットアップする。手動で実行する場合:
+### MLX（Apple Silicon）
+
+MLXドライバーはインストール時に自動でPython環境をセットアップします。手動で実行する場合:
 
 ```bash
 cd node_modules/@modular-prompt/driver
@@ -84,6 +87,26 @@ npm run setup-mlx
 ```
 
 前提条件: Python 3.11以上、Apple Silicon Mac、uv。
+
+### vLLM（CUDA GPU）
+
+vLLMドライバーは独立したPythonエンジンプロセスとして起動します。
+
+```bash
+# 環境のセットアップ
+cd node_modules/@modular-prompt/driver/src/vllm/python
+uv sync
+
+# エンジンの起動
+uv --project . run python __main__.py \
+  --model Qwen/Qwen2.5-7B-Instruct \
+  --socket /tmp/vllm.sock \
+  --tool-call-parser hermes
+```
+
+前提条件: Python 3.10以上、CUDA対応GPU、Linux。
+
+詳細は [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
 ## Skills（Claude Code向け）
 

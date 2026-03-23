@@ -16,6 +16,7 @@ import { AnthropicDriver } from '../anthropic/anthropic-driver.js';
 import { VertexAIDriver } from '../vertexai/vertexai-driver.js';
 import { GoogleGenAIDriver } from '../google-genai/google-genai-driver.js';
 import { OllamaDriver } from '../ollama/ollama-driver.js';
+import { VllmDriver } from '../vllm/vllm-driver.js';
 import { EchoDriver } from '../echo-driver.js';
 import { TestDriver } from '../test-driver.js';
 
@@ -55,6 +56,11 @@ export interface ApplicationConfig {
     /** Ollama設定 */
     ollama?: {
       baseURL?: string;
+    };
+    /** vLLM設定 */
+    vllm?: {
+      /** Unix ドメインソケットパス（vLLM エンジンが listen しているパス） */
+      socketPath?: string;
     };
   };
 
@@ -138,6 +144,16 @@ export function registerFactories(
       baseURL: ollamaConfig?.baseURL || 'http://localhost:11434',
       model: spec.model,
       defaultOptions: config.defaultOptions
+    });
+  });
+
+  // vLLM Driver Factory
+  registry.registerFactory('vllm', (spec) => {
+    const vllmConfig = config.drivers?.vllm;
+    const socketPath = vllmConfig?.socketPath || `/tmp/vllm-${spec.model.replace(/\//g, '-')}.sock`;
+    return new VllmDriver({
+      socketPath,
+      defaultOptions: config.defaultOptions,
     });
   });
 
