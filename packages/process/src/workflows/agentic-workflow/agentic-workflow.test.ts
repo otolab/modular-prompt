@@ -181,8 +181,8 @@ describe('agenticProcess v2', () => {
     expect(result.output).toBe('Final output');
   });
 
-  // 6. __time ビルトインツール
-  it('should handle __time builtin tool and continue loop', async () => {
+  // 6. __time ビルトインツール（1回のqueryでtool実行、結果は次タスクに渡る）
+  it('should execute __time builtin tool and pass result to next task', async () => {
     const driver = new TestDriver({
       responses: [
         // Planning
@@ -192,13 +192,11 @@ describe('agenticProcess v2', () => {
             tasks: [{ instruction: 'Check time' }]
           }}]
         },
-        // Think: __time ツール呼び出し → ループ継続
+        // Think: __time ツール呼び出し（1回のqueryで完了、tool結果は次タスクへ）
         {
-          content: '',
+          content: 'Checking time now.',
           toolCalls: [{ id: 'c1', name: '__time', arguments: {} }]
         },
-        // Think: テキスト結果
-        'Current time noted.',
         // Auto-appended output
         'Final output'
       ]
@@ -206,7 +204,9 @@ describe('agenticProcess v2', () => {
 
     const result = await agenticProcess(driver, { objective: ['Test'] }, {});
 
-    expect(result.context.executionLog?.[1].result).toBe('Current time noted.');
+    expect(result.context.executionLog?.[1].result).toBe('Checking time now.');
+    expect(result.context.executionLog?.[1].toolCallLog).toHaveLength(1);
+    expect(result.context.executionLog?.[1].toolCallLog?.[0].name).toBe('__time');
     expect(result.context.executionLog?.[1].pendingToolCalls).toBeUndefined();
     expect(result.metadata?.finishReason).toBe('stop');
   });

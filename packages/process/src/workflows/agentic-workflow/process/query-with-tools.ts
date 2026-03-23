@@ -2,7 +2,7 @@
  * Tool calling loop implementation
  */
 
-import type { ToolCall, ToolResultMessageElement, StandardMessageElement, ResolvedModule } from '@modular-prompt/core';
+import type { ToolCall, ToolResultMessageElement, ResolvedModule } from '@modular-prompt/core';
 import { distribute } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
@@ -34,7 +34,7 @@ async function executeBuiltinToolCalls(
     }
     try {
       const result = await spec.handler(tc.arguments);
-      logger.debug('[tool:result]', tc.name, result);
+      logger.info('[tool:result]', tc.name, result);
       results.push({
         type: 'message', role: 'tool', toolCallId: tc.id, name: tc.name,
         kind: typeof result === 'string' ? 'text' : 'data', value: result
@@ -53,12 +53,8 @@ export interface QueryWithToolsOptions {
   /** External tool definitions (passed to driver, NOT executed internally) */
   externalToolDefs?: ToolDefinition[];
   toolChoice?: ToolChoice;
-  maxIterations?: number;
   /** Maximum output tokens per query */
   maxTokens?: number;
-  /** Stop after first builtin tool execution without sending result back to model */
-  stopAfterToolCall?: boolean;
-  logPrefix?: string;
   logger?: Logger;
 }
 
@@ -72,11 +68,12 @@ export interface QueryWithToolsResult {
 }
 
 /**
- * Run a query with tool calling loop.
+ * Run a single query and handle tool calls.
  *
- * Only builtin tools (__ prefix) are executed internally.
- * External tool calls cause the loop to stop immediately and
- * return the pending calls for the caller to handle.
+ * Each task queries the model exactly once.
+ * Builtin tools (__ prefix) are executed and their results recorded.
+ * External tool calls are returned as pending for the caller to handle.
+ * Tool results are passed to subsequent tasks via preparationNote.
  */
 export async function queryWithTools(
   driver: AIDriver,
@@ -84,89 +81,62 @@ export async function queryWithTools(
   builtinTools: ToolSpec[],
   options: QueryWithToolsOptions = {}
 ): Promise<QueryWithToolsResult> {
-  const { externalToolDefs = [], maxIterations = 10, logger: qLogger = logger } = options;
+  const { externalToolDefs = [], logger: qLogger = logger } = options;
   const allToolDefs = [
     ...builtinTools.map(t => t.definition),
     ...externalToolDefs,
   ];
 
-  const conversation: (StandardMessageElement | ToolResultMessageElement)[] = [];
   const toolCallLog: ToolCallLog[] = [];
-  let content = '';
-  let lastResult: { usage?: QueryWithToolsResult['usage']; finishReason?: FinishReason } = {};
 
-  for (let i = 0; i <= maxIterations; i++) {
-    // Distribute resolved module to CompiledPrompt, appending conversation history
-    const prompt = distribute(
-      conversation.length > 0
-        ? { ...resolved, messages: [...(resolved.messages || []), ...conversation] }
-        : resolved
-    );
-    const queryResult = await driver.query(prompt, {
-      tools: allToolDefs.length > 0 ? allToolDefs : undefined,
-      toolChoice: i === 0 ? (options.toolChoice ?? 'auto') : 'auto',
-      ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
-    });
+  // Single query
+  const prompt = distribute(resolved);
+  const queryResult = await driver.query(prompt, {
+    tools: allToolDefs.length > 0 ? allToolDefs : undefined,
+    toolChoice: options.toolChoice ?? 'auto',
+    ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
+  });
 
-    qLogger.verbose('[output]', queryResult.content);
+  qLogger.verbose('[output]', queryResult.content);
 
-    if (queryResult.content) {
-      content = queryResult.content;
-    }
-    lastResult = { usage: queryResult.usage, finishReason: queryResult.finishReason };
+  const content = queryResult.content || '';
 
-    if (!queryResult.toolCalls || queryResult.toolCalls.length === 0 || i === maxIterations) {
-      break;
-    }
-
-    // Partition tool calls into builtin and external
-    const builtinCalls = queryResult.toolCalls.filter(tc => isBuiltinTool(tc.name));
-    const externalCalls = queryResult.toolCalls.filter(tc => !isBuiltinTool(tc.name));
-
-    // Log tool calls
-    for (const tc of queryResult.toolCalls) {
-      qLogger.debug('[tool:call]', tc.name, JSON.stringify(tc.arguments));
-    }
-
-    // Execute builtin tools
-    if (builtinCalls.length > 0) {
-      const toolResults = await executeBuiltinToolCalls(builtinCalls, builtinTools, qLogger);
-      for (let j = 0; j < builtinCalls.length; j++) {
-        toolCallLog.push({
-          name: builtinCalls[j].name,
-          arguments: builtinCalls[j].arguments,
-          result: toolResults[j].value,
-        });
-      }
-
-      conversation.push(
-        {
-          type: 'message', role: 'assistant',
-          content: queryResult.content || '',
-          toolCalls: builtinCalls,
-        } as StandardMessageElement,
-        ...toolResults
-      );
-
-      // Stop after first tool call if requested (e.g. planning)
-      if (options.stopAfterToolCall) {
-        return { content, toolCallLog, usage: lastResult.usage, finishReason: lastResult.finishReason };
-      }
-    }
-
-    // External tool calls → stop immediately and return them
-    if (externalCalls.length > 0) {
-      return {
-        content, toolCallLog,
-        pendingToolCalls: externalCalls,
-        usage: lastResult.usage, finishReason: lastResult.finishReason
-      };
-    }
-
-    // conversation is accumulated; next iteration will distribute with updated messages
+  // No tool calls → return immediately
+  if (!queryResult.toolCalls || queryResult.toolCalls.length === 0) {
+    return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
   }
 
-  return { content, toolCallLog, usage: lastResult.usage, finishReason: lastResult.finishReason };
+  // Partition tool calls into builtin and external
+  const builtinCalls = queryResult.toolCalls.filter(tc => isBuiltinTool(tc.name));
+  const externalCalls = queryResult.toolCalls.filter(tc => !isBuiltinTool(tc.name));
+
+  // Log tool calls
+  for (const tc of queryResult.toolCalls) {
+    qLogger.info('[tool:call]', tc.name, JSON.stringify(tc.arguments));
+  }
+
+  // Execute builtin tools and record results
+  if (builtinCalls.length > 0) {
+    const toolResults = await executeBuiltinToolCalls(builtinCalls, builtinTools, qLogger);
+    for (let j = 0; j < builtinCalls.length; j++) {
+      toolCallLog.push({
+        name: builtinCalls[j].name,
+        arguments: builtinCalls[j].arguments,
+        result: toolResults[j].value,
+      });
+    }
+  }
+
+  // External tool calls → return as pending
+  if (externalCalls.length > 0) {
+    return {
+      content, toolCallLog,
+      pendingToolCalls: externalCalls,
+      usage: queryResult.usage, finishReason: queryResult.finishReason,
+    };
+  }
+
+  return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
 }
 
 export function rethrowAsWorkflowError(
