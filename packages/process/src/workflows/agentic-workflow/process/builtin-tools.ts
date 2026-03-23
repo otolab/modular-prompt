@@ -6,6 +6,7 @@
  * - __time: 現在時刻取得
  */
 
+import type { ToolDefinition } from '@modular-prompt/driver';
 import type { ToolSpec, AgenticTask, TaskType } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
 import { EXECUTION_TASK_DEFS } from '../task-types/execution-tasks.js';
@@ -171,9 +172,35 @@ const timeTool: ToolSpec = {
     },
   },
   handler: async () => {
-    return new Date().toISOString();
+    const now = new Date();
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return {
+      utc: now.toISOString(),
+      local: now.toLocaleString(locale, { timeZone }),
+      locale,
+      timeZone,
+    };
   },
 };
+
+/**
+ * ビルトインツールの定義一覧（planning向け情報提供用）
+ *
+ * planningタスクが適切なタスク設計を行うには、各タスクで利用可能な
+ * ツールの全体像が必要。「できないことリスト」ではなく「ツールが
+ * 存在するから使う」形で、必要なtoolCallタスクを計画させる。
+ */
+export function getBuiltinToolDefinitions(): ToolDefinition[] {
+  return [
+    timeTool.definition,
+    {
+      name: '__update_state',
+      description: 'Update the workflow state. The state is a free-form string that persists across tasks and is visible to all subsequent tasks.',
+      parameters: { type: 'object', properties: { state: { type: 'string' } }, required: ['state'] },
+    },
+  ];
+}
 
 /**
  * Execution フェーズ用の組み込みツールを生成
