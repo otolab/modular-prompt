@@ -14,3 +14,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = ["__main__"]
+
+[tool.uv]
+# vLLM は CUDA GPU 環境(Linux)でのみ動作
+required-environments = ["sys_platform == 'linux'"]
