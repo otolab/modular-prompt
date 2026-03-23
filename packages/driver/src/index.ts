@@ -44,6 +44,16 @@ export {
   type OllamaDriverConfig
 } from './ollama/ollama-driver.js';
 
+// vLLM driver
+export {
+  VllmDriver,
+  type VllmDriverConfig
+} from './vllm/vllm-driver.js';
+
+export {
+  VllmProcess
+} from './vllm/vllm-process.js';
+
 // Anthropic driver
 export {
   AnthropicDriver,

@@ -1,0 +1,16 @@
+[project]
+name = "vllm_driver"
+version = "0.1.0"
+description = "vLLM driver for modular-prompt"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "vllm>=0.8.0",
+    "transformers>=4.45",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["__main__"]

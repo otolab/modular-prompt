@@ -15,6 +15,7 @@ export type DriverProvider =
   | 'googlegenai'
   | 'mlx'
   | 'ollama'
+  | 'vllm'
   | 'echo'  // テスト用
   | 'test'; // ユニットテスト用
 
