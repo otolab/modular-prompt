@@ -1,5 +1,16 @@
 # @modular-prompt/driver
 
+## 0.10.2
+
+### Patch Changes
+
+- c2ba74f: AnthropicDriver に VertexAI 経由での Claude 利用をサポートする vertex オプションを追加
+- afe7be5: vLLM ドライバーの追加
+
+  - AsyncLLMEngine を使用したローカル GPU 推論ドライバー
+  - Python エンジンが Unix ドメインソケットで独立稼働、TypeScript が接続
+  - vLLM ネイティブの ToolParserManager でツールコールパース
+
 ## 0.10.1
 
 ### Patch Changes

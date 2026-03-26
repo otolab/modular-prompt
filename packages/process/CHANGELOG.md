@@ -1,5 +1,14 @@
 # @modular-prompt/process
 
+## 0.3.1
+
+### Patch Changes
+
+- ad15839: agentic workflow プロンプト改善: シングルクエリ化、planning 分離、用語明確化、output 指示緩和、\_\_time ローカルタイム対応
+- Updated dependencies [c2ba74f]
+- Updated dependencies [afe7be5]
+  - @modular-prompt/driver@0.10.2
+
 ## 0.3.0
 
 ### Minor Changes
