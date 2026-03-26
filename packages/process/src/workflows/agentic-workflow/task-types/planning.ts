@@ -24,41 +24,66 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
   objective: [
     '- You are the planner. Analysis and task design are your responsibility.',
     '- Analyze the given prompt to understand what needs to be accomplished.',
-    '- Design a Workflow by composing the minimum sequence of Tasks needed.',
+    '- Design a Workflow by composing Tasks that satisfy these principles:',
+    '  - **Solvability**: Each task must be completable by a single AI instance with available tools.',
+    '  - **Completeness**: The full set of tasks must cover the entire user objective.',
+    '  - **Non-redundancy**: No unnecessary or overlapping tasks.',
   ],
   terms: [
-    '- **Workflow**: The entire process that achieves the Objective by executing a sequence of Tasks.',
-    '- **Task**: A unit of work in the Workflow. Each Task is executed by a separate AI instance.',
-    '- **Task Type**: Defines the role of a Task. The prompt is pre-configured for each type.',
-    '- **Tool**: A function that a Task can call to perform actions or retrieve information. See "Available Tools" in Guidelines.',
-    '- **State**: Persistent information shared across Tasks. Updated via `__update_state` and visible to all subsequent Tasks.',
+    '- **Workflow**: A chain of deliverables that achieves the Objective.',
+    '- **Task**: A unit of work that produces a specific deliverable. Each Task is executed by a separate AI instance.',
+    '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
+    '- **Task Type**: Defines the role and prompt structure of a Task.',
+    '- **Tool**: A function a Task can call to perform actions or retrieve information.',
   ],
   methodology: [
+    '- Define Tasks in terms of what they produce (deliverables), not just what they do.',
+    '- Each Task receives the deliverables of all previously completed Tasks.',
+    '- Design the deliverable chain so that each Task has sufficient input to produce its output.',
     '- Tasks are executed sequentially by separate AI instances.',
-    '- Each Task receives results from all previously completed Tasks.',
-    '- Tool call results from one Task are passed to the next Task.',
   ],
   instructions: [
-    '- Read "Prompt to analyze" and determine what the final output should be.',
-    '- Check "Available Tools" to understand what tools can be used in the Workflow.',
-    '- Determine the minimum set of Tasks needed — a simple prompt may need only one.',
-    '- If tools are needed, schedule toolCall Tasks for them.',
-    '- Call `__insert_tasks` to register Tasks. If the work is simple enough (e.g. a single tool call), you may call the tool directly instead of scheduling a Task.',
+    {
+      type: 'subsection' as const,
+      title: 'Analyze',
+      items: [
+        '- Read "Prompt to analyze" and identify the final deliverable.',
+        '- Check "Available Tools" to understand what deliverables tools can produce.',
+      ],
+    },
+    {
+      type: 'subsection' as const,
+      title: 'Design',
+      items: [
+        '- Work backward from the final deliverable: identify what intermediate deliverables are needed.',
+        '- Assign a Task for each deliverable. Choose the Task Type by what it produces.',
+        '- For each Task, clarify why it is necessary (reason) and which prior deliverables it depends on (dep).',
+        '- If a deliverable requires tool execution, use a toolCall Task.',
+      ],
+    },
+    {
+      type: 'subsection' as const,
+      title: 'Register',
+      items: [
+        '- Call `__insert_tasks` to register the designed Tasks.',
+        '- If the work is simple enough (e.g. a single tool call), you may call the tool directly.',
+      ],
+    },
   ],
   guidelines: [
-    '- Only register Tasks for work that requires a separate AI instance to execute.',
-    '- Write each Task instruction as a descriptive action statement — what the Task does and what outcome is expected. A longer paragraph is fine, but step-by-step procedural instructions are unnecessary.',
+    '- Only register a Task when it produces a distinct deliverable that no other Task covers.',
+    '- Write each Task instruction as a description of the deliverable to produce. A longer paragraph is fine, but step-by-step procedural instructions are unnecessary.',
     {
       type: 'subsection' as const,
       title: 'Task Type Guide',
       items: [
-        '- **think**: General reasoning, analysis, or processing.',
-        '- **toolCall**: Call tools and report results.',
-        '- **extractContext**: Extract information from inputs, messages, or materials.',
-        '- **recall**: Retrieve information via search tools or training knowledge.',
-        '- **verify**: Validate results from previous Tasks.',
-        '- **determine**: Make a definitive decision or judgment.',
-        '- **output**: Format and present the final response from previous Task results. No new work is performed. Must be the last Task.',
+        '- **think**: Produces analysis, reasoning, or processed results.',
+        '- **toolCall**: Produces tool execution results.',
+        '- **extractContext**: Produces structured extraction from inputs, messages, or materials.',
+        '- **recall**: Produces retrieved knowledge from search tools or training data.',
+        '- **verify**: Produces a validation report on previous deliverables.',
+        '- **determine**: Produces a definitive decision with supporting reasoning.',
+        '- **output**: Produces the final user-facing response from previous deliverables. Must be the last Task.',
       ],
     },
     {
@@ -103,6 +128,6 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
 
 export const config: TaskTypeConfig = {
   module: planningModule,
-  builtinToolNames: ['__insert_tasks', '__update_state', '__time'],
+  builtinToolNames: ['__insert_tasks', '__time'],
   maxTokensTier: 'high',
 };

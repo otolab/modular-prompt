@@ -82,6 +82,8 @@ export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withM
  * Agentic workflow task definition
  */
 export interface AgenticTask {
+  /** Short identifier for this task (used in dep references and display) */
+  name?: string;
   /** What this task should accomplish */
   instruction: string;
   /** Task type determining prompt construction and input contract */
@@ -104,6 +106,7 @@ export interface AgenticTask {
  * Record of a single task execution
  */
 export interface AgenticTaskExecutionLog {
+  taskName?: string;
   taskType: TaskType;
   instruction: string;
   result: string;
@@ -135,8 +138,6 @@ export interface AgenticWorkflowContext {
   executionLog?: AgenticTaskExecutionLog[];
   /** Index of the currently executing task */
   currentTaskIndex?: number;
-  /** Persisted state string from previous task execution */
-  state?: string;
   /** External tool definitions available to tasks (for planning visibility) */
   availableTools?: ToolDefinition[];
 }
@@ -156,8 +157,6 @@ export interface AgenticResumeState {
   taskList?: AgenticTask[];
   /** Execution log from the previous run */
   executionLog?: AgenticTaskExecutionLog[];
-  /** Persisted state from the previous run */
-  state?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,6 @@ import type { PromptModule, DynamicElement } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
 import type { TaskTypeConfig, MaxTokensTier } from './index.js';
-import { buildPreviousResultsNote } from './index.js';
 
 // ---------------------------------------------------------------------------
 // Task definition schema
@@ -34,7 +33,7 @@ interface ExecutionTaskDef {
   toolDescription: string;
   /** maxTokens tier (default: 'middle') */
   maxTokensTier: MaxTokensTier;
-  /** Builtin tool names (default: ['__insert_tasks', '__update_state', '__time']) */
+  /** Builtin tool names (default: ['__insert_tasks', '__time']) */
   builtinToolNames?: string[];
 }
 
@@ -52,7 +51,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'thinking',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'general reasoning/analysis',
+    toolDescription: 'produces analysis, reasoning, or processed results',
     maxTokensTier: 'high',
   },
   toolCall: {
@@ -63,7 +62,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'call tools',
+    toolDescription: 'produces tool execution results',
     maxTokensTier: 'low',
     builtinToolNames: ['__time'],
   },
@@ -76,7 +75,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'thinking',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'validate previous results',
+    toolDescription: 'produces a validation report on previous deliverables',
     maxTokensTier: 'low',
   },
   extractContext: {
@@ -90,7 +89,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'thinking',
     defaults: { withInputs: true, withMessages: true, withMaterials: true },
-    toolDescription: 'extract from inputs/materials',
+    toolDescription: 'produces structured extraction from inputs/materials',
     maxTokensTier: 'high',
   },
   recall: {
@@ -103,7 +102,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'retrieve information via search tools or training knowledge',
+    toolDescription: 'produces retrieved knowledge from search tools or training data',
     maxTokensTier: 'middle',
   },
   determine: {
@@ -115,7 +114,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'thinking',
     defaults: { withInputs: true, withMessages: true, withMaterials: true },
-    toolDescription: 'make a decision or judgment',
+    toolDescription: 'produces a definitive decision with supporting reasoning',
     maxTokensTier: 'middle',
   },
 };
@@ -142,13 +141,6 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
             return task?.instruction ?? '';
           },
         ],
-      },
-    ],
-
-    preparationNote: [
-      (ctx: AgenticWorkflowContext) => {
-        if (!ctx.executionLog?.length) return null;
-        return buildPreviousResultsNote(ctx.executionLog);
       },
     ],
 
@@ -183,7 +175,7 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
   return module;
 }
 
-const DEFAULT_BUILTIN_TOOLS = ['__insert_tasks', '__update_state', '__time'];
+const DEFAULT_BUILTIN_TOOLS = ['__insert_tasks', '__time'];
 
 function buildConfig(def: ExecutionTaskDef): TaskTypeConfig {
   return {

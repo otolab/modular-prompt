@@ -2,7 +2,6 @@
  * Agentic workflow 組み込みツール定義 (v2)
  *
  * - __insert_tasks: タスク登録（全タスクから利用可能）
- * - __update_state: ワークフロー状態の更新
  * - __time: 現在時刻取得
  */
 
@@ -27,8 +26,11 @@ export function isBuiltinTool(name: string): boolean {
  * 単一タスク定義の型
  */
 interface TaskEntry {
+  name?: string;
   instruction: string;
   taskType?: string;
+  reason?: string;
+  dep?: string[];
   driverRole?: string;
   withInputs?: boolean;
   withMessages?: boolean;
@@ -39,14 +41,24 @@ interface TaskEntry {
 const TASK_ENTRY_SCHEMA = {
   type: 'object',
   properties: {
-    instruction: { type: 'string', description: 'Specific instruction for the task executor.' },
+    name: { type: 'string', description: 'Short identifier for this task (e.g. "search", "analyze"). Used in dep references and display.' },
+    instruction: { type: 'string', description: 'Description of the deliverable this task produces.' },
     taskType: {
       type: 'string',
       enum: [...Object.keys(EXECUTION_TASK_DEFS), 'output'],
       description: Object.entries(EXECUTION_TASK_DEFS)
         .map(([name, def]) => `${name}: ${def.toolDescription}`)
-        .concat(['output: generate final output (must be the last task)'])
+        .concat(['output: produces the final user-facing response (must be the last task)'])
         .join('. ') + '. Default: think',
+    },
+    reason: {
+      type: 'string',
+      description: 'Why this task is necessary — what gap it fills in the deliverable chain.',
+    },
+    dep: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Names of prior tasks whose deliverables this task depends on. Omit if the task has no dependencies.',
     },
     driverRole: {
       type: 'string',
@@ -70,7 +82,7 @@ const TASK_ENTRY_SCHEMA = {
       description: 'Position in the task list to insert at. If omitted, the task is scheduled as the next task. Values before the current task are ignored.',
     },
   },
-  required: ['instruction', 'taskType'],
+  required: ['name', 'instruction', 'taskType', 'reason'],
 } as const;
 
 /**
@@ -80,6 +92,7 @@ const TASK_ENTRY_SCHEMA = {
 function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: number): void {
   const taskType = (entry.taskType as TaskType) || 'think';
   const task: AgenticTask = {
+    name: entry.name,
     instruction: entry.instruction,
     taskType,
     driverRole: entry.driverRole as ModelRole | undefined,
@@ -104,7 +117,7 @@ export function createPlanningTools(taskList: AgenticTask[], currentIndex: numbe
   return [{
     definition: {
       name: '__insert_tasks',
-      description: 'Register tasks in the workflow. Each task is executed by a separate AI instance. Write specific, self-contained instructions. Refer to the current task list in Workflow Status to understand the existing plan before inserting.',
+      description: 'Register tasks in the workflow. Each task produces a specific deliverable and is executed by a separate AI instance. Describe what each task produces, why it is needed, and what it depends on.',
       parameters: {
         type: 'object',
         properties: {
@@ -129,34 +142,10 @@ export function createPlanningTools(taskList: AgenticTask[], currentIndex: numbe
 
       // Return full updated task list so the model can see the current plan
       return 'Updated task list:\n' + taskList
-        .map((t, i) => `${i + 1}. (${t.taskType}): ${t.instruction}`)
+        .map((t, i) => `${i + 1}. ${t.name ? `[${t.name}] ` : ''}(${t.taskType}): ${t.instruction}`)
         .join('\n');
     },
   }];
-}
-
-/**
- * ワークフロー状態を更新する組み込みツール
- */
-export function createUpdateStateTool(context: { state?: string }): ToolSpec {
-  return {
-    definition: {
-      name: '__update_state',
-      description: 'Update the workflow state. The state is a free-form string that persists across tasks and is visible to all subsequent tasks in the "Current State" section.',
-      parameters: {
-        type: 'object',
-        properties: {
-          state: { type: 'string', description: 'The new state content. This replaces the current state entirely.' },
-        },
-        required: ['state'],
-      },
-    },
-    handler: async (args) => {
-      const newState = args.state as string;
-      context.state = newState;
-      return `State updated.`;
-    },
-  };
 }
 
 /**
@@ -194,11 +183,6 @@ const timeTool: ToolSpec = {
 export function getBuiltinToolDefinitions(): ToolDefinition[] {
   return [
     timeTool.definition,
-    {
-      name: '__update_state',
-      description: 'Update the workflow state. The state is a free-form string that persists across tasks and is visible to all subsequent tasks.',
-      parameters: { type: 'object', properties: { state: { type: 'string' } }, required: ['state'] },
-    },
   ];
 }
 

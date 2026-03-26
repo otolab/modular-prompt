@@ -30,7 +30,6 @@ import { getTaskTypeConfig, taskCommon, MAX_TOKENS_VALUES } from './task-types/i
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
-  createUpdateStateTool,
   getBuiltinToolDefinitions,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
@@ -95,10 +94,6 @@ function getBuiltinToolsForTask(
     allTools.push(...createPlanningTools(taskList, currentIndex));
   }
 
-  if (toolNames.has('__update_state')) {
-    allTools.push(createUpdateStateTool(context));
-  }
-
   if (toolNames.has('__time')) {
     // createExecutionBuiltinTools returns [__insert_tasks, __time]
     // We only want __time if __insert_tasks is not already added
@@ -134,7 +129,6 @@ async function executeTask(
     : {
         objective: userModule.objective,
         terms: userModule.terms,
-        state: userModule.state,
       };
 
   // Merge and resolve: planning has its own terms/methodology, others use taskCommon
@@ -167,6 +161,7 @@ async function executeTask(
     taskLogger.info('[end]');
 
     return {
+      taskName: task.name,
       taskType: task.taskType,
       instruction: task.instruction,
       result: stripThinkBlocks(result.content),
@@ -213,7 +208,6 @@ export async function agenticProcess<T>(
     taskList: resumeState?.taskList ?? bootstrap(userModule, enablePlanning),
     executionLog: resumeState?.executionLog ? [...resumeState.executionLog] : [],
     currentTaskIndex: 0,
-    state: resumeState?.state,
     // planningがタスク設計時にツールの存在を把握し、適切なtoolCallタスクを計画できるようにする
     availableTools: [
       ...getBuiltinToolDefinitions(),
@@ -299,7 +293,6 @@ export async function agenticProcess<T>(
     context: {
       taskList,
       executionLog,
-      state: internalContext.state,
     },
     metadata: {
       planTasks: taskList.length,
