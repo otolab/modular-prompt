@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import type { MessageCreateParamsStreaming } from '@anthropic-ai/sdk/resources/messages';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition, ChatMessage } from '../types.js';
@@ -14,7 +15,7 @@ export interface AnthropicVertexConfig {
   project: string;
   /** GCPリージョン（デフォルト: 'us-east5'） */
   location?: string;
-  /** GCPアクセストークン。未指定時は ANTHROPIC_AUTH_TOKEN 環境変数を使用 */
+  /** GCPアクセストークン。未指定時はADC（Application Default Credentials）から自動取得 */
   accessToken?: string;
 }
 
@@ -77,7 +78,7 @@ function convertToolChoice(toolChoice: ToolChoice): MessageCreateParamsStreaming
 }
 
 export class AnthropicDriver implements AIDriver {
-  private client: Anthropic;
+  private client: Anthropic | AnthropicVertex;
   private defaultModel: string;
   private _defaultOptions: Partial<AnthropicQueryOptions>;
 
@@ -91,13 +92,10 @@ export class AnthropicDriver implements AIDriver {
 
   constructor(config: AnthropicDriverConfig = {}) {
     if (config.vertex) {
-      const location = config.vertex.location || 'us-east5';
-      const project = config.vertex.project;
-      const baseURL = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`;
-      this.client = new Anthropic({
-        baseURL,
-        apiKey: null,
-        authToken: config.vertex.accessToken || process.env.ANTHROPIC_AUTH_TOKEN,
+      this.client = new AnthropicVertex({
+        projectId: config.vertex.project,
+        region: config.vertex.location || 'us-east5',
+        accessToken: config.vertex.accessToken || null,
       });
     } else {
       this.client = new Anthropic({
