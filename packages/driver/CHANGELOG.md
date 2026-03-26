@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.10.3
+
+### Patch Changes
+
+- c7cf2dc: AnthropicDriver の VertexAI 対応を@anthropic-ai/vertex-sdk に切り替え、ADC によるトークン自動取得をサポート
+
 ## 0.10.2
 
 ### Patch Changes
