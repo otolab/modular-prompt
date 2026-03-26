@@ -59,6 +59,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.61.0
         version: 0.61.0
+      '@anthropic-ai/vertex-sdk':
+        specifier: ^0.14.4
+        version: 0.14.4
       '@google-cloud/vertexai':
         specifier: ^1.10.0
         version: 1.10.0
@@ -292,6 +295,9 @@ packages:
   '@anthropic-ai/sdk@0.61.0':
     resolution: {integrity: sha512-GnlOXrPxow0uoaVB3DGNh9EJBU1MyagCBCLpU+bwDVlj/oOPYIwoiasMWlykkfYcQOrDP2x/zHnRD0xN7PeZPw==}
     hasBin: true
+
+  '@anthropic-ai/vertex-sdk@0.14.4':
+    resolution: {integrity: sha512-BZUPRWghZxfSFtAxU563wH+jfWBPoedAwsVxG35FhmNsjeV8tyfN+lFriWhCpcZApxA4NdT6Soov+PzfnxxD5g==}
 
   '@babel/runtime@7.28.4':
     resolution: {integrity: sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==}
@@ -1845,6 +1851,14 @@ packages:
 snapshots:
 
   '@anthropic-ai/sdk@0.61.0': {}
+
+  '@anthropic-ai/vertex-sdk@0.14.4':
+    dependencies:
+      '@anthropic-ai/sdk': 0.61.0
+      google-auth-library: 9.15.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
 
   '@babel/runtime@7.28.4': {}
 
