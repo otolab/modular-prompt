@@ -7,12 +7,26 @@ import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
 
 /**
+ * VertexAI経由でのClaude利用設定
+ */
+export interface AnthropicVertexConfig {
+  /** GCPプロジェクトID */
+  project: string;
+  /** GCPリージョン（デフォルト: 'us-east5'） */
+  location?: string;
+  /** GCPアクセストークン。未指定時は ANTHROPIC_AUTH_TOKEN 環境変数を使用 */
+  accessToken?: string;
+}
+
+/**
  * Anthropic driver configuration
  */
 export interface AnthropicDriverConfig {
   apiKey?: string;
   model?: string;
   defaultOptions?: Partial<AnthropicQueryOptions>;
+  /** VertexAI経由で接続する場合の設定。指定時は apiKey は不要 */
+  vertex?: AnthropicVertexConfig;
 }
 
 /**
@@ -76,9 +90,20 @@ export class AnthropicDriver implements AIDriver {
   }
 
   constructor(config: AnthropicDriverConfig = {}) {
-    this.client = new Anthropic({
-      apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY
-    });
+    if (config.vertex) {
+      const location = config.vertex.location || 'us-east5';
+      const project = config.vertex.project;
+      const baseURL = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`;
+      this.client = new Anthropic({
+        baseURL,
+        apiKey: null,
+        authToken: config.vertex.accessToken || process.env.ANTHROPIC_AUTH_TOKEN,
+      });
+    } else {
+      this.client = new Anthropic({
+        apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY
+      });
+    }
 
     this.defaultModel = config.model || 'claude-3-5-sonnet-20241022';
     this._defaultOptions = config.defaultOptions || {};

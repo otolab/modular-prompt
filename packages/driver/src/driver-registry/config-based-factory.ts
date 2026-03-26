@@ -37,6 +37,12 @@ export interface ApplicationConfig {
     anthropic?: {
       apiKey?: string;
       baseURL?: string;
+      /** VertexAI経由で接続する場合の設定 */
+      vertex?: {
+        project: string;
+        location?: string;
+        accessToken?: string;
+      };
     };
     /** VertexAI設定 */
     vertexai?: {
@@ -112,7 +118,8 @@ export function registerFactories(
     return new AnthropicDriver({
       apiKey: anthropicConfig?.apiKey || process.env.ANTHROPIC_API_KEY,
       model: spec.model,
-      defaultOptions: config.defaultOptions
+      defaultOptions: config.defaultOptions,
+      vertex: anthropicConfig?.vertex,
     });
   });
 

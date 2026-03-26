@@ -58,6 +58,7 @@ export {
 export {
   AnthropicDriver,
   type AnthropicDriverConfig,
+  type AnthropicVertexConfig,
   type AnthropicQueryOptions
 } from './anthropic/anthropic-driver.js';
 
