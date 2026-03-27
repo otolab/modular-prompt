@@ -83,11 +83,11 @@ describe('integration tests', () => {
     // Planning → Think×2 → OutputMessage の4タスクシーケンス
     const driver = new TestDriver({
       responses: [
-        // Planning: __insert_tasks で2タスク登録（stopAfterToolCallで1回で終了）
+        // Planning: __register_tasks で2タスク登録（stopAfterToolCallで1回で終了）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__insert_tasks', arguments: {
+            { id: 'tc-1', name: '__register_tasks', arguments: {
               tasks: [
                 { instruction: '入力データを分析する' },
                 { instruction: '分析結果をまとめる' },
@@ -150,7 +150,7 @@ describe('integration tests', () => {
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__insert_tasks', arguments: {
+            { id: 'tc-1', name: '__register_tasks', arguments: {
               tasks: [
                 { instruction: 'データを取得する' },
                 { instruction: 'データを処理する' },

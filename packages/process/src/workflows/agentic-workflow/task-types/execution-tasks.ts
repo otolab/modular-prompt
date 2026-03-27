@@ -15,7 +15,6 @@ import type { PromptModule, DynamicElement } from '@modular-prompt/core';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
 import type { TaskTypeConfig, MaxTokensTier } from './index.js';
-import { buildPreviousResultsNote } from './index.js';
 
 // ---------------------------------------------------------------------------
 // Task definition schema
@@ -30,11 +29,11 @@ interface ExecutionTaskDef {
   driverRole: ModelRole;
   /** Default data options */
   defaults: { withInputs: boolean; withMessages: boolean; withMaterials: boolean };
-  /** Description for __insert_tasks tool enum */
+  /** Description for __register_tasks tool enum */
   toolDescription: string;
   /** maxTokens tier (default: 'middle') */
   maxTokensTier: MaxTokensTier;
-  /** Builtin tool names (default: ['__insert_tasks', '__update_state', '__time']) */
+  /** Builtin tool names (default: ['__replan', '__time']) */
   builtinToolNames?: string[];
 }
 
@@ -48,35 +47,35 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     instructions: [
       '- You will perform reasoning, analysis, or processing as instructed.',
       '- You may call tools if needed to gather information or perform actions.',
-      '- If additional tasks are needed to complete the objective, use `__insert_tasks` to register them.',
+      '- If additional tasks are needed to complete the objective, use `__replan` to request re-planning.',
     ],
     driverRole: 'thinking',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'general reasoning/analysis',
+    toolDescription: 'produces analysis, reasoning, or processed results',
     maxTokensTier: 'high',
   },
-  toolCall: {
-    objective: '- Call the tools needed according to your Focus.',
+  act: {
+    objective: '- Perform the required action using tools according to your Focus.',
     instructions: [
-      '- Call the appropriate tools to accomplish your Focus.',
+      '- Use tools to perform the action described in your Focus.',
       '- Tool results are automatically passed to subsequent Tasks.',
     ],
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'call tools',
+    toolDescription: 'performs an external action using tools and reports its outcome',
     maxTokensTier: 'low',
-    builtinToolNames: ['__time'],
+    builtinToolNames: ['__replan', '__time'],
   },
   verify: {
     objective: '- Verify or validate results from previous Tasks according to your Focus.',
     instructions: [
       '- You will verify or validate results from previous Tasks as instructed.',
       '- Report any issues, inconsistencies, or confirmations clearly.',
-      '- If verification fails or results are insufficient, use `__insert_tasks` to register corrective tasks as needed.',
+      '- If verification fails or results are insufficient, use `__replan` to request re-planning for corrective tasks.',
     ],
     driverRole: 'thinking',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'validate previous results',
+    toolDescription: 'produces a validation report on previous deliverables',
     maxTokensTier: 'low',
   },
   extractContext: {
@@ -90,7 +89,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'thinking',
     defaults: { withInputs: true, withMessages: true, withMaterials: true },
-    toolDescription: 'extract from inputs/materials',
+    toolDescription: 'produces structured extraction from inputs/materials',
     maxTokensTier: 'high',
   },
   recall: {
@@ -103,7 +102,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'retrieve information via search tools or training knowledge',
+    toolDescription: 'produces retrieved knowledge from search tools or training data',
     maxTokensTier: 'middle',
   },
   determine: {
@@ -115,7 +114,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     ],
     driverRole: 'thinking',
     defaults: { withInputs: true, withMessages: true, withMaterials: true },
-    toolDescription: 'make a decision or judgment',
+    toolDescription: 'produces a definitive decision with supporting reasoning',
     maxTokensTier: 'middle',
   },
 };
@@ -142,13 +141,6 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
             return task?.instruction ?? '';
           },
         ],
-      },
-    ],
-
-    preparationNote: [
-      (ctx: AgenticWorkflowContext) => {
-        if (!ctx.executionLog?.length) return null;
-        return buildPreviousResultsNote(ctx.executionLog);
       },
     ],
 
@@ -183,7 +175,7 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
   return module;
 }
 
-const DEFAULT_BUILTIN_TOOLS = ['__insert_tasks', '__update_state', '__time'];
+const DEFAULT_BUILTIN_TOOLS = ['__replan', '__time'];
 
 function buildConfig(def: ExecutionTaskDef): TaskTypeConfig {
   return {

@@ -52,15 +52,16 @@ export function getTaskTypeConfig(taskType: TaskType): TaskTypeConfig {
 }
 
 /**
- * Convert execution log to a TextElement for preparationNote.
- * Each task result is formatted as a labeled block.
+ * Convert execution log to a TextElement for the state section.
+ * Each task result (deliverable) is formatted as a labeled block.
  */
-export function buildPreviousResultsNote(
+export function buildDeliverables(
   executionLog: AgenticTaskExecutionLog[]
 ): TextElement {
   const content = executionLog
     .map((log, index) => {
-      let text = `[Task ${index + 1}: ${log.taskType}] ${log.instruction}\n${log.result}`;
+      const taskName = log.taskName ? `${log.taskName}` : `Task ${index + 1}`;
+      let text = `[${taskName}: ${log.taskType}] ${log.instruction}\n${log.result}`;
       if (log.toolCallLog?.length) {
         const toolResults = log.toolCallLog
           .map(tc => `  [tool: ${tc.name}] ${typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result)}`)
@@ -96,24 +97,64 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
       status = '[pending]';
     }
 
-    lines.push(`${i + 1}. (${task.taskType}): ${task.instruction} ${status}`);
+    const label = task.name ? `[${task.name}] ` : '';
+    lines.push(`${i + 1}. ${label}(${task.taskType}): ${task.instruction} ${status}`);
   }
 
   return lines.join('\n');
 }
 
 /**
+ * Build task list with execution results for re-planning context.
+ * Each completed task is rendered as a markdown heading with its full result.
+ * Pending/current tasks are shown as single lines.
+ */
+export function buildTaskListWithResults(ctx: AgenticWorkflowContext): string {
+  if (!ctx.taskList || ctx.taskList.length === 0) {
+    return 'No tasks registered yet.';
+  }
+
+  const blocks: string[] = [];
+  const currentIndex = ctx.currentTaskIndex ?? -1;
+  const executionLog = ctx.executionLog ?? [];
+
+  for (let i = 0; i < ctx.taskList.length; i++) {
+    const task = ctx.taskList[i];
+    const label = task.name ? `[${task.name}] ` : '';
+
+    if (i < currentIndex && i < executionLog.length) {
+      const log = executionLog[i];
+      const parts: string[] = [];
+      parts.push(`#### ${i + 1}. ${label}(${task.taskType}): ${task.instruction} [completed]`);
+      parts.push(log.result);
+      if (log.toolCallLog?.length) {
+        for (const tc of log.toolCallLog) {
+          const resultStr = typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result);
+          parts.push(`[tool: ${tc.name}] ${resultStr}`);
+        }
+      }
+      blocks.push(parts.join('\n\n'));
+    } else if (i === currentIndex) {
+      blocks.push(`#### ${i + 1}. ${label}(${task.taskType}): ${task.instruction} **[current]**`);
+    } else {
+      blocks.push(`#### ${i + 1}. ${label}(${task.taskType}): ${task.instruction} [pending]`);
+    }
+  }
+
+  return blocks.join('\n\n');
+}
+
+/**
  * Common module shared by all task types.
- * Provides workflow terms, methodology, and state information.
+ * Provides workflow terms, methodology, and deliverable state.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
   terms: [
-    '- **Workflow**: The entire process that achieves the Objective by executing a sequence of Tasks.',
-    '- **Task**: A unit of work in the Workflow. Each Task is executed by a separate AI instance.',
-    '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
-    '- **Focus**: The specific directive for the current Task — what to concentrate on and accomplish.',
-    '- **State**: Persistent information shared across Tasks. Updated via `__update_state` and visible to all subsequent Tasks in the "Current State" section.',
-    '- **Response Preparation Note**: Results from all previously completed Tasks. Use this as your primary reference for what has already been done.',
+    '- **Workflow**: A chain of deliverables that achieves the Objective.',
+    '- **Task**: A unit of work that produces a specific deliverable. Each Task is executed by a separate AI instance.',
+    '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
+    '- **Task Type**: Defines the role of a Task (e.g. think, act, verify). The prompt is pre-configured for each type.',
+    '- **Focus**: The specific directive for the current Task — what deliverable to produce.',
   ],
   methodology: [
     `- We accomplish the Workflow's Objective by executing Tasks sequentially.`,
@@ -127,14 +168,14 @@ export const taskCommon: PromptModule<AgenticWorkflowContext> = {
   ],
   instructions: [
     '- Do not perform work outside the scope of the current Task\'s Focus.',
-    '- If "Response Preparation Note" is present, refer to it as the basis for your work.',
+    '- Refer to the deliverables from previous Tasks (shown in "Current State") as the basis for your work.',
     '- If the instructions are contradictory, there is insufficient information, or you lack the required knowledge — report the issue instead of producing a speculative result.',
     '- If the work is unnecessary given the current context, skip it and explain why. This is a valid and sufficient response.',
   ],
   state: [
     (ctx: AgenticWorkflowContext) => {
-      if (!ctx.state) return null;
-      return ctx.state;
+      if (!ctx.executionLog?.length) return null;
+      return buildDeliverables(ctx.executionLog);
     },
   ],
 };

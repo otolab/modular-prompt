@@ -46,6 +46,14 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
   - メッセージ prefix 規則
   - ログレベルの使い分け
 
+### マルチエージェント設計思想
+
+- **[マルチエージェントプランニングパターン](./MULTI_AGENT_PLANNING_PATTERNS.md)** - タスク分解とアーキテクチャ設計のベストプラクティス
+  - Plan-and-Execute、Hierarchical、Sequential/SOP駆動、Debate/Adversarialの4パターン
+  - AutoGen、MetaGPT、CrewAIのプラン自動生成機能の内部構造
+  - ACONICフレームワークによる科学的タスク分解アプローチ
+  - プロンプト設計とクオリティゲートの実装指針
+
 ## ユーティリティ
 
 ### 共通機能
@@ -87,6 +95,7 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 
 - プロセスモジュール: [プロセスモジュールガイド](./PROCESS_MODULE_GUIDE.md)
 - 仕様を理解: [プロンプトモジュール仕様](./PROMPT_MODULE_SPEC.md)
+- マルチエージェント設計: [マルチエージェントプランニングパターン](./MULTI_AGENT_PLANNING_PATTERNS.md)
 
 ### ドライバー実装者
 
@@ -98,5 +107,6 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 ### アーキテクト
 
 - [アーキテクチャ](./ARCHITECTURE.md) - システム全体の設計
+- [マルチエージェントプランニングパターン](./MULTI_AGENT_PLANNING_PATTERNS.md) - マルチエージェントシステムの設計指針
 - [AIService 完全ガイド](./AI_SERVICE_GUIDE.md) - 動的ドライバー選択の仕組み
 - [テスト戦略と指針](./TESTING_STRATEGY.md) - 品質保証の方針
