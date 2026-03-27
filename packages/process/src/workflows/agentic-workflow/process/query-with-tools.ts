@@ -1,8 +1,12 @@
 /**
  * Tool calling loop implementation
+ *
+ * Handles builtin tool execution with error-based retry.
+ * When a tool call fails (builtin error or invalid tool name),
+ * the error result is fed back to the model for correction.
  */
 
-import type { ToolCall, ToolResultMessageElement, ResolvedModule } from '@modular-prompt/core';
+import type { ToolCall, ToolResultMessageElement, StandardMessageElement, ResolvedModule, CompiledPrompt } from '@modular-prompt/core';
 import { distribute } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
@@ -55,6 +59,8 @@ export interface QueryWithToolsOptions {
   toolChoice?: ToolChoice;
   /** Maximum output tokens per query */
   maxTokens?: number;
+  /** Maximum retries on tool errors (default: 2) */
+  maxRetries?: number;
   logger?: Logger;
 }
 
@@ -68,12 +74,14 @@ export interface QueryWithToolsResult {
 }
 
 /**
- * Run a single query and handle tool calls.
+ * Query the model and handle tool calls with error retry.
  *
- * Each task queries the model exactly once.
- * Builtin tools (__ prefix) are executed and their results recorded.
- * External tool calls are returned as pending for the caller to handle.
- * Tool results are passed to subsequent tasks via preparationNote.
+ * Builtin tools (__ prefix) are executed internally.
+ * External tool calls are returned as pending for the caller.
+ *
+ * On tool errors (builtin execution failure or invalid tool name),
+ * the error is fed back to the model and the query is retried
+ * up to maxRetries times.
  */
 export async function queryWithTools(
   driver: AIDriver,
@@ -81,62 +89,111 @@ export async function queryWithTools(
   builtinTools: ToolSpec[],
   options: QueryWithToolsOptions = {}
 ): Promise<QueryWithToolsResult> {
-  const { externalToolDefs = [], logger: qLogger = logger } = options;
+  const { externalToolDefs = [], maxRetries = 2, logger: qLogger = logger } = options;
   const allToolDefs = [
     ...builtinTools.map(t => t.definition),
     ...externalToolDefs,
   ];
+  const validExternalNames = new Set(externalToolDefs.map(d => d.name));
 
   const toolCallLog: ToolCallLog[] = [];
-
-  // Single query
   const prompt = distribute(resolved);
-  const queryResult = await driver.query(prompt, {
+  const queryOptions = {
     tools: allToolDefs.length > 0 ? allToolDefs : undefined,
-    toolChoice: options.toolChoice ?? 'auto',
+    toolChoice: options.toolChoice ?? 'auto' as ToolChoice,
     ...(options.maxTokens ? { maxTokens: options.maxTokens } : {}),
-  });
+  };
 
-  qLogger.verbose('[output]', queryResult.content);
+  let retryCount = 0;
 
-  const content = queryResult.content || '';
+  while (true) {
+    const queryResult = await driver.query(prompt, queryOptions);
+    qLogger.verbose('[output]', queryResult.content);
 
-  // No tool calls → return immediately
-  if (!queryResult.toolCalls || queryResult.toolCalls.length === 0) {
-    return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
-  }
+    const content = queryResult.content || '';
 
-  // Partition tool calls into builtin and external
-  const builtinCalls = queryResult.toolCalls.filter(tc => isBuiltinTool(tc.name));
-  const externalCalls = queryResult.toolCalls.filter(tc => !isBuiltinTool(tc.name));
+    // No tool calls → return
+    if (!queryResult.toolCalls || queryResult.toolCalls.length === 0) {
+      return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+    }
 
-  // Log tool calls
-  for (const tc of queryResult.toolCalls) {
-    qLogger.info('[tool:call]', tc.name, JSON.stringify(tc.arguments));
-  }
+    // Log tool calls
+    for (const tc of queryResult.toolCalls) {
+      qLogger.info('[tool:call]', tc.name, JSON.stringify(tc.arguments));
+    }
 
-  // Execute builtin tools and record results
-  if (builtinCalls.length > 0) {
-    const toolResults = await executeBuiltinToolCalls(builtinCalls, builtinTools, qLogger);
+    // Partition: builtin / valid external / invalid
+    const builtinCalls = queryResult.toolCalls.filter(tc => isBuiltinTool(tc.name));
+    const externalCalls = queryResult.toolCalls.filter(tc => !isBuiltinTool(tc.name));
+    const validExternalCalls = externalCalls.filter(tc => validExternalNames.has(tc.name));
+    const invalidCalls = externalCalls.filter(tc => !validExternalNames.has(tc.name));
+
+    // Execute builtin tools
+    const builtinResults: ToolResultMessageElement[] = builtinCalls.length > 0
+      ? await executeBuiltinToolCalls(builtinCalls, builtinTools, qLogger)
+      : [];
+
+    // Record successful builtin results
     for (let j = 0; j < builtinCalls.length; j++) {
       toolCallLog.push({
         name: builtinCalls[j].name,
         arguments: builtinCalls[j].arguments,
-        result: toolResults[j].value,
+        result: builtinResults[j].value,
       });
     }
-  }
 
-  // External tool calls → return as pending
-  if (externalCalls.length > 0) {
-    return {
-      content, toolCallLog,
-      pendingToolCalls: externalCalls,
-      usage: queryResult.usage, finishReason: queryResult.finishReason,
+    // Generate error results for invalid tool names
+    const invalidResults: ToolResultMessageElement[] = invalidCalls.map(tc => ({
+      type: 'message' as const, role: 'tool' as const, toolCallId: tc.id, name: tc.name,
+      kind: 'error' as const,
+      value: `Unknown tool: "${tc.name}". Available tools: ${allToolDefs.map(d => d.name).join(', ')}`,
+    }));
+
+    // Check for errors
+    const hasBuiltinErrors = builtinResults.some(r => r.kind === 'error');
+    const hasInvalidCalls = invalidCalls.length > 0;
+    const hasErrors = hasBuiltinErrors || hasInvalidCalls;
+
+    // No errors: return normally
+    if (!hasErrors) {
+      if (validExternalCalls.length > 0) {
+        return {
+          content, toolCallLog,
+          pendingToolCalls: validExternalCalls,
+          usage: queryResult.usage, finishReason: queryResult.finishReason,
+        };
+      }
+      return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+    }
+
+    // Errors exist but no retries left → return what we have
+    if (retryCount >= maxRetries) {
+      qLogger.info('[retry:exhausted]', `gave up after ${maxRetries} retries`);
+      if (validExternalCalls.length > 0) {
+        return {
+          content, toolCallLog,
+          pendingToolCalls: validExternalCalls,
+          usage: queryResult.usage, finishReason: queryResult.finishReason,
+        };
+      }
+      return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+    }
+
+    // Retry: append assistant message + tool results to prompt.output
+    retryCount++;
+    qLogger.info('[retry]', `attempt ${retryCount}/${maxRetries} due to tool errors`);
+
+    const assistantMessage: StandardMessageElement = {
+      type: 'message', role: 'assistant', content: content,
+      toolCalls: queryResult.toolCalls,
     };
-  }
+    const allToolResults = [...builtinResults, ...invalidResults];
 
-  return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+    prompt.output.push(assistantMessage, ...allToolResults);
+
+    // After first query, switch toolChoice to auto for retries
+    queryOptions.toolChoice = 'auto';
+  }
 }
 
 export function rethrowAsWorkflowError(

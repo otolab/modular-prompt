@@ -10,7 +10,10 @@ models:
     model: "mlx-community/gemma-3-27b-it-qat-4bit"
     provider: "mlx"
   qwen3.5-9b:
-    model: mlx-community/Qwen3.5-9B-MLX-4bit
+    model: mlx-community/Qwen3.5-9B-OptiQ-4bit
+    provider: "mlx"
+  qwen3.5-4b:
+    model: mlx-community/Qwen3.5-4B-OptiQ-4bit
     provider: "mlx"
   quen3.5-2b-optiq:
     model: mlx-community/Qwen3.5-2B-OptiQ-4bit
@@ -34,7 +37,8 @@ drivers:
 _shared:
   models: &models
     # - quen3.5-2b-optiq
-    - qwen3.5-9b
+    # - qwen3.5-9b
+    - qwen3.5-4b
 
 modules:
   - name: agentic-time-check
@@ -49,6 +53,65 @@ modules:
           role: user
           content: 現在の日時を確認して。
 
+  - name: ts-type-inference-easy
+    description: "TS型推定（簡単）: ジェネリクスの追跡"
+    module:
+      objective:
+        - TypeScriptの型推論エキスパートとして、与えられたコードの型を正確に推定する。
+      instructions:
+        - コードを読み、型の流れを追跡して最終的な変数の型を特定する
+        - 推論の過程を明確に示す
+        - 日本語で応答する
+      messages:
+        - type: message
+          role: user
+          content: |
+            以下のTypeScriptコードで、`result` の型は何になりますか？推論過程を示して答えてください。
+
+            ```typescript
+            function wrap<T>(value: T): { wrapped: T } {
+              return { wrapped: value };
+            }
+
+            function unwrap<T>(obj: { wrapped: T }): T {
+              return obj.wrapped;
+            }
+
+            const result = unwrap(wrap(42));
+            ```
+
+  - name: ts-type-inference-hard
+    description: "TS型推定（難しい）: 条件型 + Mapped Type"
+    module:
+      objective:
+        - TypeScriptの型推論エキスパートとして、与えられたコードの型を正確に推定する。
+      instructions:
+        - コードを読み、型の流れを追跡して最終的な変数の型を特定する
+        - 推論の過程を明確に示す
+        - 日本語で応答する
+      messages:
+        - type: message
+          role: user
+          content: |
+            以下のTypeScriptコードで、`result` の型は何になりますか？推論過程を示して答えてください。
+
+            ```typescript
+            type EventMap = {
+              click: { x: number; y: number };
+              focus: { target: string };
+              change: { value: string; previous: string };
+            };
+
+            type HandlerReturn<T> = T extends { value: infer V } ? V : boolean;
+
+            type Handlers = {
+              [K in keyof EventMap]: (event: EventMap[K]) => HandlerReturn<EventMap[K]>
+            };
+
+            declare const handlers: Handlers;
+            const result = handlers.change({ value: "new", previous: "old" });
+            ```
+
 testCases:
   - name: "agenticProcess: 時刻確認"
     description: "__timeビルトインツールを使って現在時刻を聞き出す"
@@ -58,6 +121,26 @@ testCases:
     process: agenticProcess
     processOptions:
       maxTasks: 5
+
+  - name: "agenticProcess: TS型推定（簡単）"
+    description: "ジェネリクスの追跡 - think/verifyパターンの生成を観察"
+    modules: [ts-type-inference-easy]
+    models: *models
+    input: {}
+    process: agenticProcess
+    processOptions:
+      maxTasks: 5
+      includeThinking: true
+
+  - name: "agenticProcess: TS型推定（難しい）"
+    description: "条件型+Mapped Type - 複数段階の型変換追跡でのタスク分解を観察"
+    modules: [ts-type-inference-hard]
+    models: *models
+    input: {}
+    process: agenticProcess
+    processOptions:
+      maxTasks: 8
+      includeThinking: true
 
 evaluators:
   - name: structured-output-presence

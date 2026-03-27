@@ -103,16 +103,19 @@ function getBuiltinToolsForTask(
 
   const allTools: ToolSpec[] = [];
 
-  if (toolNames.has('__insert_tasks')) {
+  if (toolNames.has('__register_tasks')) {
     allTools.push(...createPlanningTools(taskList, currentIndex));
   }
 
-  if (toolNames.has('__time')) {
-    // createExecutionBuiltinTools returns [__insert_tasks, __time]
-    // We only want __time if __insert_tasks is not already added
+  if (toolNames.has('__replan') || toolNames.has('__time')) {
+    // createExecutionBuiltinTools returns [__replan, __time]
     const execTools = createExecutionBuiltinTools(taskList, currentIndex);
-    const timeOnly = execTools.filter(t => t.definition.name === '__time');
-    allTools.push(...timeOnly);
+    if (toolNames.has('__replan')) {
+      allTools.push(...execTools.filter(t => t.definition.name === '__replan'));
+    }
+    if (toolNames.has('__time')) {
+      allTools.push(...execTools.filter(t => t.definition.name === '__time'));
+    }
   }
 
   return allTools;
@@ -147,7 +150,9 @@ async function executeTask(
   // Merge and resolve: planning has its own terms/methodology, others use taskCommon
   let resolved: ResolvedModule;
   if (task.taskType === 'planning') {
-    const planningMerged = hasTrailingToolResult(userModule)
+    // Use replanningModule if there are existing deliverables (executionLog or trailing tool result)
+    const hasExistingDeliverables = (context.executionLog && context.executionLog.length > 0) || hasTrailingToolResult(userModule);
+    const planningMerged = hasExistingDeliverables
       ? merge(workflowBase, taskConfig.module, replanningModule)
       : merge(workflowBase, taskConfig.module);
     resolved = resolve(planningMerged, context);
@@ -254,9 +259,32 @@ export async function agenticProcess<T>(
     );
     executionLog.push(logEntry);
 
+    // Check if __replan was called
+    const hasReplanCall = logEntry.toolCallLog?.some(
+      call => call.name === '__replan'
+    );
+
+    if (hasReplanCall) {
+      logger.info('[replan] Re-planning requested, clearing remaining tasks and inserting planning task');
+      // Clear remaining tasks (keep current and all previous)
+      taskList.splice(i + 1);
+      // Insert new planning task
+      taskList.push({
+        instruction: 'Re-analyze the prompt and register tasks based on current progress',
+        taskType: 'planning',
+      });
+      // Continue to execute the planning task
+      continue;
+    }
+
     // Stop workflow if external tool calls are pending
     if (logEntry.pendingToolCalls && logEntry.pendingToolCalls.length > 0) {
       logger.info('[suspended] External tool call requested');
+      break;
+    }
+
+    // Stop after output task completes
+    if (task.taskType === 'output') {
       break;
     }
   }

@@ -1,7 +1,8 @@
 /**
  * Agentic workflow 組み込みツール定義 (v2)
  *
- * - __insert_tasks: タスク登録（全タスクから利用可能）
+ * - __register_tasks: タスク登録（planning タスクから利用可能）
+ * - __replan: 再プランニング要求（execution タスクから利用可能）
  * - __time: 現在時刻取得
  */
 
@@ -67,15 +68,15 @@ const TASK_ENTRY_SCHEMA = {
     },
     withInputs: {
       type: 'boolean',
-      description: 'Include user inputs in data. Defaults per task type.',
+      description: 'Pass the original user input data to this Task. Default: false for most types.',
     },
     withMessages: {
       type: 'boolean',
-      description: 'Include user messages in data. Defaults per task type.',
+      description: 'Pass the original user messages (the conversation/request) to this Task. Default: false for most types. Set to true when the Task needs to read the raw user request.',
     },
     withMaterials: {
       type: 'boolean',
-      description: 'Include user materials in data. Defaults per task type.',
+      description: 'Pass the original user materials to this Task. Default: false for most types.',
     },
     insertAt: {
       type: 'number',
@@ -110,14 +111,14 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: n
 /**
  * Planning フェーズ用の組み込みツールを生成
  *
- * __insert_tasks ツールは tasks 配列で複数タスクを一括登録する。
+ * __register_tasks ツールは tasks 配列で複数タスクを一括登録する。
  * 単体の instruction 指定も後方互換として受け付ける。
  */
 export function createPlanningTools(taskList: AgenticTask[], currentIndex: number): ToolSpec[] {
   return [{
     definition: {
-      name: '__insert_tasks',
-      description: 'Register tasks in the workflow. Each task produces a specific deliverable and is executed by a separate AI instance. Describe what each task produces, why it is needed, and what it depends on.',
+      name: '__register_tasks',
+      description: 'Register tasks into the existing workflow. Tasks are appended after the current position. Do not re-register tasks that already exist. Each task produces a specific deliverable and is executed by a separate AI instance.',
       parameters: {
         type: 'object',
         properties: {
@@ -132,7 +133,7 @@ export function createPlanningTools(taskList: AgenticTask[], currentIndex: numbe
     },
     handler: async (args) => {
       if (!Array.isArray(args.tasks) || args.tasks.length === 0) {
-        return 'Error: Provide a non-empty "tasks" array.';
+        throw new Error('Provide a non-empty "tasks" array.');
       }
       let insertOffset = 0;
       for (const entry of args.tasks as TaskEntry[]) {
@@ -174,6 +175,33 @@ const timeTool: ToolSpec = {
 };
 
 /**
+ * 再プランニング要求ツール
+ * ワークフロー側で検出され、実際の再プランニングが実行される
+ */
+const replanTool: ToolSpec = {
+  definition: {
+    name: '__replan',
+    description: 'Request re-planning of the workflow. Triggers a new planning phase that considers completed deliverables and remaining tasks.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Why re-planning is needed.',
+        },
+      },
+    },
+  },
+  handler: async (args) => {
+    // Return marker object. Actual re-planning is handled by the workflow.
+    return {
+      replan: true,
+      reason: args.reason,
+    };
+  },
+};
+
+/**
  * ビルトインツールの定義一覧（planning向け情報提供用）
  *
  * planningタスクが適切なタスク設計を行うには、各タスクで利用可能な
@@ -194,7 +222,7 @@ export function createExecutionBuiltinTools(
   currentIndex: number
 ): ToolSpec[] {
   return [
-    createPlanningTools(taskList, currentIndex)[0], // __insert_tasks
+    replanTool,
     timeTool,
   ];
 }

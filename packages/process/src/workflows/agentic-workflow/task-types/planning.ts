@@ -9,9 +9,9 @@
  * - userModule compiled as "Prompt to analyze" material (includes inputs)
  *
  * Output side:
- * - cue: user message instructing to call __insert_tasks tool
+ * - cue: user message instructing to call __register_tasks tool
  *
- * Tools: __insert_tasks
+ * Tools: __register_tasks
  */
 
 import type { PromptModule } from '@modular-prompt/core';
@@ -19,6 +19,7 @@ import { distribute } from '@modular-prompt/core';
 import { formatCompletionPrompt } from '@modular-prompt/driver';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
+import { buildTaskListWithResults } from './index.js';
 
 const planningModule: PromptModule<AgenticWorkflowContext> = {
   objective: [
@@ -58,6 +59,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
         '- Work backward from the final deliverable: identify what intermediate deliverables are needed.',
         '- Assign a Task for each deliverable. Choose the Task Type by what it produces.',
         '- For each Task, clarify why it is necessary (reason) and which prior deliverables it depends on (dep).',
+        '- For each Task, determine what context it needs to do its work. If it needs to read the original user request, enable withMessages. See "What Each Task Can See" for details.',
         '- If a deliverable requires an external action via tools, use an act Task.',
       ],
     },
@@ -65,12 +67,13 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
       type: 'subsection' as const,
       title: 'Register',
       items: [
-        '- Call `__insert_tasks` to register the designed Tasks.',
+        '- Call `__register_tasks` to register the designed Tasks.',
         '- If the work is simple enough (e.g. a single tool call), you may call the tool directly.',
       ],
     },
   ],
   guidelines: [
+    '- Focus on designing the flow of deliverables, not on solving the problem itself. Each Task executor will handle the specifics — never dictate how a Task should be solved.',
     '- Only register a Task when it produces a distinct deliverable that no other Task covers.',
     '- Write each Task instruction as a description of the deliverable to produce. A longer paragraph is fine, but step-by-step procedural instructions are unnecessary.',
     {
@@ -78,12 +81,24 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
       title: 'Task Type Guide',
       items: [
         '- **think**: Produces analysis, reasoning, or processed results.',
-        '- **act**: Performs an external action using tools and reports its outcome.',
+        '- **act**: Performs an external action using tools listed in "Available Tools" and reports its outcome. Only tools shown there can be used.',
         '- **extractContext**: Produces structured extraction from inputs, messages, or materials.',
         '- **recall**: Produces retrieved knowledge from search tools or training data.',
         '- **verify**: Produces a validation report on previous deliverables.',
         '- **determine**: Produces a definitive decision with supporting reasoning.',
         '- **output**: Produces the final user-facing response from previous deliverables. Must be the last Task.',
+      ],
+    },
+    {
+      type: 'subsection' as const,
+      title: 'What Each Task Can See',
+      items: [
+        '- By default, each Task sees ONLY the Objective, Terms, and deliverables from previous Tasks. The original user messages, inputs, and materials are NOT visible unless explicitly enabled.',
+        '- When the source data is large, use an **extractContext** Task first to extract relevant information as a deliverable, rather than passing the full data to every Task.',
+        '- Task options to enable visibility:',
+        '  - **withMessages**: Pass the original user messages (the conversation/request) to the Task.',
+        '  - **withInputs**: Pass the user-provided input data to the Task.',
+        '  - **withMaterials**: Pass the user-provided materials to the Task.',
       ],
     },
     {
@@ -121,30 +136,38 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     {
       type: 'message' as const,
       role: 'user' as const,
-      content: 'Analyze the prompt and register tasks by calling `__insert_tasks`.',
+      content: 'Analyze the prompt and register tasks by calling `__register_tasks`.',
     },
   ],
 };
 
 /**
- * Additional module for re-planning after tool result.
+ * Additional module for re-planning.
  *
- * When the user module's messages end with a tool result
- * (user message → tool call → tool result), merge this module
- * with the planning module to provide the planner with context
- * about the existing deliverable.
+ * Merged with planningModule when existing deliverables are present
+ * (either from executionLog after __replan, or from trailing tool results).
+ * Provides the planner with visibility into completed work and current task list.
  */
-export const replanningModule: PromptModule = {
+export const replanningModule: PromptModule<AgenticWorkflowContext> = {
   methodology: [
-    '- When the messages in "Prompt to analyze" contain tool results, they represent deliverables that have already been produced. Factor them into the deliverable chain without re-requesting them.',
+    '- This is a re-planning phase. Previous tasks and their results are shown below.',
+    '- Factor existing deliverables into the new plan without re-requesting them.',
+    {
+      type: 'subsection' as const,
+      title: 'Previous Execution',
+      items: [
+        (ctx: AgenticWorkflowContext) => buildTaskListWithResults(ctx),
+      ],
+    },
   ],
   instructions: [
-    '- The messages in "Prompt to analyze" follow a user message → tool call → tool result sequence. Understand this flow as the planning context: the user made a request, a tool action was taken, and the result is now available as an existing deliverable.',
+    '- Review the completed deliverables and design a new set of tasks to achieve the remaining objective.',
+    '- If the messages in "Prompt to analyze" contain tool results, understand the user message → tool call → tool result sequence as planning context.',
   ],
 };
 
 export const config: TaskTypeConfig = {
   module: planningModule,
-  builtinToolNames: ['__insert_tasks', '__time'],
+  builtinToolNames: ['__register_tasks', '__time'],
   maxTokensTier: 'high',
 };

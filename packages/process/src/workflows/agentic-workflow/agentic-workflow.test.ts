@@ -8,11 +8,11 @@ describe('agenticProcess v2', () => {
   it('should execute basic workflow with planning and tasks', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning: __insert_tasks（1回で完了）
+        // Planning: __register_tasks（1回で完了）
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__insert_tasks', arguments: {
+            { id: 'tc-1', name: '__register_tasks', arguments: {
               tasks: [
                 { instruction: 'Analyze input data' },
                 { instruction: 'Process results' },
@@ -70,7 +70,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: {
+          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
             tasks: [{ instruction: 'Get external data' }]
           }}]
         },
@@ -105,7 +105,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: {
+          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
             tasks: [{ instruction: 'Simple task' }]
           }}]
         },
@@ -130,7 +130,7 @@ describe('agenticProcess v2', () => {
         // Planning: 5タスク登録
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: {
+          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
             tasks: [
               { instruction: 'Task 1' },
               { instruction: 'Task 2' },
@@ -188,7 +188,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: {
+          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
             tasks: [{ instruction: 'Check time' }]
           }}]
         },
@@ -218,7 +218,7 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__insert_tasks', arguments: {
+          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
             tasks: [{ instruction: 'Analyze' }]
           }}]
         },

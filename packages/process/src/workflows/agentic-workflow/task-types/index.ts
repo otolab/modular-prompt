@@ -105,6 +105,46 @@ export function buildTaskListDisplay(ctx: AgenticWorkflowContext): string {
 }
 
 /**
+ * Build task list with execution results for re-planning context.
+ * Each completed task is rendered as a markdown heading with its full result.
+ * Pending/current tasks are shown as single lines.
+ */
+export function buildTaskListWithResults(ctx: AgenticWorkflowContext): string {
+  if (!ctx.taskList || ctx.taskList.length === 0) {
+    return 'No tasks registered yet.';
+  }
+
+  const blocks: string[] = [];
+  const currentIndex = ctx.currentTaskIndex ?? -1;
+  const executionLog = ctx.executionLog ?? [];
+
+  for (let i = 0; i < ctx.taskList.length; i++) {
+    const task = ctx.taskList[i];
+    const label = task.name ? `[${task.name}] ` : '';
+
+    if (i < currentIndex && i < executionLog.length) {
+      const log = executionLog[i];
+      const parts: string[] = [];
+      parts.push(`#### ${i + 1}. ${label}(${task.taskType}): ${task.instruction} [completed]`);
+      parts.push(log.result);
+      if (log.toolCallLog?.length) {
+        for (const tc of log.toolCallLog) {
+          const resultStr = typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result);
+          parts.push(`[tool: ${tc.name}] ${resultStr}`);
+        }
+      }
+      blocks.push(parts.join('\n\n'));
+    } else if (i === currentIndex) {
+      blocks.push(`#### ${i + 1}. ${label}(${task.taskType}): ${task.instruction} **[current]**`);
+    } else {
+      blocks.push(`#### ${i + 1}. ${label}(${task.taskType}): ${task.instruction} [pending]`);
+    }
+  }
+
+  return blocks.join('\n\n');
+}
+
+/**
  * Common module shared by all task types.
  * Provides workflow terms, methodology, and deliverable state.
  */
