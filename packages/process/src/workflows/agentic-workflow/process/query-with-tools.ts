@@ -6,7 +6,7 @@
  * the error result is fed back to the model for correction.
  */
 
-import type { ToolCall, ToolResultMessageElement, StandardMessageElement, ResolvedModule, CompiledPrompt } from '@modular-prompt/core';
+import type { ToolCall, ToolResultMessageElement, StandardMessageElement, ResolvedModule } from '@modular-prompt/core';
 import { distribute } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';

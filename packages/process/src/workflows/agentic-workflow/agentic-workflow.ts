@@ -96,7 +96,7 @@ function getBuiltinToolsForTask(
   taskType: TaskType,
   taskList: AgenticTask[],
   currentIndex: number,
-  context: AgenticWorkflowContext
+  _context: AgenticWorkflowContext
 ): ToolSpec[] {
   const config = getTaskTypeConfig(taskType);
   const toolNames = new Set(config.builtinToolNames);

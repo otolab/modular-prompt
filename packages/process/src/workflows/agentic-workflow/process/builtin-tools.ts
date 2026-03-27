@@ -218,8 +218,8 @@ export function getBuiltinToolDefinitions(): ToolDefinition[] {
  * Execution フェーズ用の組み込みツールを生成
  */
 export function createExecutionBuiltinTools(
-  taskList: AgenticTask[],
-  currentIndex: number
+  _taskList: AgenticTask[],
+  _currentIndex: number
 ): ToolSpec[] {
   return [
     replanTool,
