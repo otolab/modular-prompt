@@ -37,7 +37,7 @@ export interface ToolCallLog {
  */
 export type TaskType =
   | 'planning'
-  | 'toolCall'
+  | 'act'
   | 'think'
   | 'verify'
   | 'extractContext'
@@ -51,7 +51,7 @@ export type TaskType =
  */
 export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
   planning: 'plan',
-  toolCall: 'instruct',
+  act: 'instruct',
   think: 'instruct',
   verify: 'instruct',
   extractContext: 'thinking',
@@ -65,7 +65,7 @@ export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
  */
 export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withMessages: boolean; withMaterials: boolean }> = {
   planning: { withInputs: true, withMessages: false, withMaterials: true },
-  toolCall: { withInputs: false, withMessages: false, withMaterials: false },
+  act: { withInputs: false, withMessages: false, withMaterials: false },
   think: { withInputs: false, withMessages: false, withMaterials: false },
   verify: { withInputs: false, withMessages: false, withMaterials: false },
   extractContext: { withInputs: true, withMessages: true, withMaterials: true },

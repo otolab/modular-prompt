@@ -34,7 +34,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '- **Task**: A unit of work that produces a specific deliverable. Each Task is executed by a separate AI instance.',
     '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
     '- **Task Type**: Defines the role and prompt structure of a Task.',
-    '- **Tool**: A function a Task can call to perform actions or retrieve information.',
+    '- **Tool**: A function available to Tasks for performing external actions or retrieving information. Used primarily in act and recall Tasks.',
   ],
   methodology: [
     '- Define Tasks in terms of what they produce (deliverables), not just what they do.',
@@ -58,7 +58,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
         '- Work backward from the final deliverable: identify what intermediate deliverables are needed.',
         '- Assign a Task for each deliverable. Choose the Task Type by what it produces.',
         '- For each Task, clarify why it is necessary (reason) and which prior deliverables it depends on (dep).',
-        '- If a deliverable requires tool execution, use a toolCall Task.',
+        '- If a deliverable requires an external action via tools, use an act Task.',
       ],
     },
     {
@@ -78,7 +78,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
       title: 'Task Type Guide',
       items: [
         '- **think**: Produces analysis, reasoning, or processed results.',
-        '- **toolCall**: Produces tool execution results.',
+        '- **act**: Performs an external action using tools and reports its outcome.',
         '- **extractContext**: Produces structured extraction from inputs, messages, or materials.',
         '- **recall**: Produces retrieved knowledge from search tools or training data.',
         '- **verify**: Produces a validation report on previous deliverables.',

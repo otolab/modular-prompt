@@ -178,7 +178,7 @@ const timeTool: ToolSpec = {
  *
  * planningタスクが適切なタスク設計を行うには、各タスクで利用可能な
  * ツールの全体像が必要。「できないことリスト」ではなく「ツールが
- * 存在するから使う」形で、必要なtoolCallタスクを計画させる。
+ * 存在するから使う」形で、必要なactタスクを計画させる。
  */
 export function getBuiltinToolDefinitions(): ToolDefinition[] {
   return [

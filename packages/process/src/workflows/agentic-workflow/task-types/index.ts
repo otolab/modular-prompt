@@ -113,7 +113,7 @@ export const taskCommon: PromptModule<AgenticWorkflowContext> = {
     '- **Workflow**: A chain of deliverables that achieves the Objective.',
     '- **Task**: A unit of work that produces a specific deliverable. Each Task is executed by a separate AI instance.',
     '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
-    '- **Task Type**: Defines the role of a Task (e.g. think, toolCall, verify). The prompt is pre-configured for each type.',
+    '- **Task Type**: Defines the role of a Task (e.g. think, act, verify). The prompt is pre-configured for each type.',
     '- **Focus**: The specific directive for the current Task — what deliverable to produce.',
   ],
   methodology: [

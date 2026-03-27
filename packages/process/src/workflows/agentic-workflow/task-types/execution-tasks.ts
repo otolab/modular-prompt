@@ -54,15 +54,15 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     toolDescription: 'produces analysis, reasoning, or processed results',
     maxTokensTier: 'high',
   },
-  toolCall: {
-    objective: '- Call the tools needed according to your Focus.',
+  act: {
+    objective: '- Perform the required action using tools according to your Focus.',
     instructions: [
-      '- Call the appropriate tools to accomplish your Focus.',
+      '- Use tools to perform the action described in your Focus.',
       '- Tool results are automatically passed to subsequent Tasks.',
     ],
     driverRole: 'instruct',
     defaults: { withInputs: false, withMessages: false, withMaterials: false },
-    toolDescription: 'produces tool execution results',
+    toolDescription: 'performs an external action using tools and reports its outcome',
     maxTokensTier: 'low',
     builtinToolNames: ['__time'],
   },

@@ -208,7 +208,7 @@ export async function agenticProcess<T>(
     taskList: resumeState?.taskList ?? bootstrap(userModule, enablePlanning),
     executionLog: resumeState?.executionLog ? [...resumeState.executionLog] : [],
     currentTaskIndex: 0,
-    // planningがタスク設計時にツールの存在を把握し、適切なtoolCallタスクを計画できるようにする
+    // planningがタスク設計時にツールの存在を把握し、適切なactタスクを計画できるようにする
     availableTools: [
       ...getBuiltinToolDefinitions(),
       ...tools.map(t => t.definition),
