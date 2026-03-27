@@ -1,5 +1,12 @@
 # @modular-prompt/experiment
 
+## 0.4.6
+
+### Patch Changes
+
+- Updated dependencies [3440874]
+  - @modular-prompt/process@0.3.3
+
 ## 0.4.5
 
 ### Patch Changes
