@@ -126,6 +126,23 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
   ],
 };
 
+/**
+ * Additional module for re-planning after tool result.
+ *
+ * When the user module's messages end with a tool result
+ * (user message → tool call → tool result), merge this module
+ * with the planning module to provide the planner with context
+ * about the existing deliverable.
+ */
+export const replanningModule: PromptModule = {
+  methodology: [
+    '- When the messages in "Prompt to analyze" contain tool results, they represent deliverables that have already been produced. Factor them into the deliverable chain without re-requesting them.',
+  ],
+  instructions: [
+    '- The messages in "Prompt to analyze" follow a user message → tool call → tool result sequence. Understand this flow as the planning context: the user made a request, a tool action was taken, and the result is now available as an existing deliverable.',
+  ],
+};
+
 export const config: TaskTypeConfig = {
   module: planningModule,
   builtinToolNames: ['__insert_tasks', '__time'],
