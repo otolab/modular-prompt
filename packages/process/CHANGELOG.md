@@ -1,5 +1,11 @@
 # @modular-prompt/process
 
+## 0.3.3
+
+### Patch Changes
+
+- 3440874: agentic workflow の成果物ベース計画設計への移行と replanning 統合
+
 ## 0.3.2
 
 ### Patch Changes
