@@ -11,7 +11,7 @@
  */
 
 import { merge, resolve } from '@modular-prompt/core';
-import type { PromptModule, ResolvedModule } from '@modular-prompt/core';
+import type { PromptModule, ResolvedModule, ResolvedSectionContent } from '@modular-prompt/core';
 import type { FinishReason } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
 import type { WorkflowResult } from '../types.js';
@@ -27,6 +27,7 @@ import type {
 import { DEFAULT_DRIVER_ROLE } from './types.js';
 import { type DriverInput, resolveDriver } from '../driver-input.js';
 import { getTaskTypeConfig, taskCommon, MAX_TOKENS_VALUES } from './task-types/index.js';
+import { replanningModule } from './task-types/planning.js';
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
@@ -42,6 +43,18 @@ const logger = new Logger({ prefix: 'process', context: 'agentic' });
  */
 function stripThinkBlocks(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>\s*/g, '').replace(/^[\s\S]*?<\/think>\s*/g, '').trim();
+}
+
+/**
+ * Check if the resolved user module's messages end with a tool result.
+ * This indicates a re-planning scenario where a previous workflow broke
+ * on an external tool call and the result is now available.
+ */
+function hasTrailingToolResult(userModule: ResolvedModule): boolean {
+  const messages = userModule.messages as ResolvedSectionContent | undefined;
+  if (!messages || messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  return typeof last === 'object' && last !== null && 'role' in last && last.role === 'tool';
 }
 
 // ---------------------------------------------------------------------------
@@ -132,9 +145,15 @@ async function executeTask(
       };
 
   // Merge and resolve: planning has its own terms/methodology, others use taskCommon
-  const resolved = task.taskType === 'planning'
-    ? resolve(merge(workflowBase, taskConfig.module), context)
-    : resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
+  let resolved: ResolvedModule;
+  if (task.taskType === 'planning') {
+    const planningMerged = hasTrailingToolResult(userModule)
+      ? merge(workflowBase, taskConfig.module, replanningModule)
+      : merge(workflowBase, taskConfig.module);
+    resolved = resolve(planningMerged, context);
+  } else {
+    resolved = resolve(merge(workflowBase, taskCommon, taskConfig.module), context);
+  }
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList, taskIndex, context);
   const externalToolDefs = externalTools.map(t => t.definition);
