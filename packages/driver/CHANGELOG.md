@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.10.4
+
+### Patch Changes
+
+- d6742ee: VertexAI ドライバーで未サポートの JSON Schema フィールド（propertyNames 等）をサニタイズして除去するように修正
+
 ## 0.10.3
 
 ### Patch Changes
