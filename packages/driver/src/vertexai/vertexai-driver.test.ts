@@ -467,6 +467,93 @@ describe('VertexAIDriver', () => {
     expect(result.content).toBe('Mocked Vertex AI response');
   });
 
+  describe('convertJsonSchema sanitization', () => {
+    it('should remove unsupported JSON Schema fields with warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Test' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: []
+      };
+
+      const toolsWithPropertyNames: ToolDefinition[] = [{
+        name: 'update_metadata',
+        description: 'Update metadata',
+        parameters: {
+          type: 'object',
+          properties: {
+            metadata: {
+              type: 'object',
+              propertyNames: { type: 'string', maxLength: 64 },
+              additionalProperties: { type: 'string' },
+            }
+          },
+          required: ['metadata'],
+          propertyNames: { type: 'string' },
+        }
+      }];
+
+      await driver.query(prompt, { tools: toolsWithPropertyNames });
+
+      // propertyNames と additionalProperties が警告されること
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"propertyNames"')
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"additionalProperties"')
+      );
+
+      // API に渡されたパラメータに propertyNames が含まれないこと
+      const calledRequest = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      const params = calledRequest.tools[0].functionDeclarations[0].parameters;
+      expect(params).not.toHaveProperty('propertyNames');
+      expect(params.properties.metadata).not.toHaveProperty('propertyNames');
+      expect(params.properties.metadata).not.toHaveProperty('additionalProperties');
+
+      warnSpy.mockRestore();
+    });
+
+    it('should preserve supported fields', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Test' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: []
+      };
+
+      const tools: ToolDefinition[] = [{
+        name: 'create_item',
+        description: 'Create item',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Item name' },
+            tags: { type: 'array', items: { type: 'string', enum: ['a', 'b'] } },
+          },
+          required: ['name'],
+        }
+      }];
+
+      await driver.query(prompt, { tools });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      const calledRequest = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      const params = calledRequest.tools[0].functionDeclarations[0].parameters;
+      expect(params.type).toBe('OBJECT');
+      expect(params.properties.name.type).toBe('STRING');
+      expect(params.properties.name.description).toBe('Item name');
+      expect(params.properties.tags.type).toBe('ARRAY');
+      expect(params.properties.tags.items.type).toBe('STRING');
+      expect(params.properties.tags.items.enum).toEqual(['a', 'b']);
+      expect(params.required).toEqual(['name']);
+
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('tool message elements', () => {
     it('should convert tool call and tool result messages to VertexAI API format', async () => {
       const prompt: CompiledPrompt = {

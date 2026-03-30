@@ -17,7 +17,7 @@ describe('MLX Special Tokens Formatting', () => {
             content: '{"api_key": "secret", "timeout": 30}'
           })
         ],
-        output: []
+        cue: []
       });
 
       const result = await formatCompletionPrompt(prompt);
@@ -39,7 +39,7 @@ describe('MLX Special Tokens Formatting', () => {
             content: 'function hello() {\n  console.log("Hello");\n}'
           })
         ],
-        output: []
+        cue: []
       });
 
       const result = await formatCompletionPrompt(prompt);

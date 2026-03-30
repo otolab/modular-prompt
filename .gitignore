@@ -91,6 +91,10 @@ venv/
 packages/*/GUIDE.md
 packages/*/skills/
 
+# Integration test driver configs (contain API keys)
+**/test-drivers.yaml
+!**/test-drivers.yaml.example
+
 # search-docs generated files
 .search-docs/
 .search-docs.json

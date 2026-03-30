@@ -1,0 +1,28 @@
+# Integration Test Driver Configuration
+# 統合テスト用ドライバー設定
+#
+# このファイルをコピーして test-drivers.yaml を作成してください:
+#   cp test-drivers.yaml.example test-drivers.yaml
+#
+# test-drivers.yaml は .gitignore で除外されます。
+# APIキー等の認証情報を記入して使用してください。
+
+anthropic:
+  # apiKey: sk-ant-...
+  model: claude-sonnet-4-20250514
+  # vertex:
+  #   project: your-gcp-project
+  #   location: us-east5
+
+# openai:
+#   apiKey: sk-...
+#   model: gpt-4o-mini
+
+# google-genai:
+#   apiKey: ...
+#   model: gemini-2.0-flash
+
+# vertexai:
+#   project: your-gcp-project
+#   location: us-central1
+#   model: gemini-2.0-flash

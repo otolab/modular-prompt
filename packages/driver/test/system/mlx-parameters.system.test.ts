@@ -10,11 +10,22 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
-import type { ChatMessage, CompiledPrompt } from '@modular-prompt/core';
+import type { CompiledPrompt } from '@modular-prompt/core';
 import { platform } from 'os';
 
 // MLXはApple Silicon専用なので、他のプラットフォームではスキップ
 const isMacOS = platform() === 'darwin';
+
+/**
+ * ユーザーメッセージを含むCompiledPromptを生成するヘルパー
+ */
+function chatPrompt(content: string): CompiledPrompt {
+  return {
+    instructions: [],
+    data: [{ type: 'message', role: 'user', content }],
+    output: [],
+  };
+}
 
 describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
   let driver: MlxDriver;
@@ -29,10 +40,7 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
 
     // 初回のクエリでモデルをロード（ウォームアップ）
     try {
-      await driver.queryWithMessages(
-        [{ role: 'user', content: 'test' }],
-        { maxTokens: 1 }
-      );
+      await driver.query(chatPrompt('test'), { maxTokens: 1 });
       console.log('✅ Model loaded successfully\n');
     } catch (error) {
       console.error('❌ Failed to load model:', error);
@@ -49,13 +57,11 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
 
   describe('Temperature Parameter Processing', () => {
     it('should accept temperature=0 (deterministic mode) without error', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: '1+1=' }
-      ];
+      const prompt = chatPrompt('1+1=');
 
       // temperature=0で決定的な出力を要求
       // エラーが発生しないことを確認
-      const result = await driver.queryWithMessages(messages, {
+      const result = await driver.query(prompt, {
         maxTokens: 5,
         temperature: 0
       });
@@ -65,7 +71,7 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
       expect(typeof result.content).toBe('string');
 
       // 決定的モードなので、複数回実行しても同じ結果になるはず
-      const result2 = await driver.queryWithMessages(messages, {
+      const result2 = await driver.query(prompt, {
         maxTokens: 5,
         temperature: 0
       });
@@ -75,12 +81,8 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
     }, 30000);
 
     it('should accept temperature=0.5 (moderate randomness) without error', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'Hello' }
-      ];
-
       // temperature=0.5で適度なランダム性
-      const result = await driver.queryWithMessages(messages, {
+      const result = await driver.query(chatPrompt('Hello'), {
         maxTokens: 10,
         temperature: 0.5
       });
@@ -92,12 +94,8 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
     }, 30000);
 
     it('should accept temperature=1.0 (high randomness) without error', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'Write a word:' }
-      ];
-
       // temperature=1.0で高いランダム性
-      const result = await driver.queryWithMessages(messages, {
+      const result = await driver.query(chatPrompt('Write a word:'), {
         maxTokens: 5,
         temperature: 1.0
       });
@@ -108,16 +106,11 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
     }, 30000);
 
     it('should handle temperature parameter with other parameters', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'Count to three:' }
-      ];
-
       // 複数のパラメータを同時に指定
-      const result = await driver.queryWithMessages(messages, {
+      const result = await driver.query(chatPrompt('Count to three:'), {
         maxTokens: 20,
         temperature: 0.3,
         topP: 0.9,
-        topK: 40
       });
 
       expect(result).toBeDefined();
@@ -128,12 +121,8 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
 
   describe('Parameter Validation and Mapping', () => {
     it('should handle out-of-range temperature values', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'test' }
-      ];
-
       // 範囲外の値は自動的にクランプされるはず
-      const result = await driver.queryWithMessages(messages, {
+      const result = await driver.query(chatPrompt('test'), {
         maxTokens: 1,
         temperature: -1 // 0にクランプされるはず
       });
@@ -144,17 +133,11 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
     }, 30000);
 
     it('should process camelCase parameters correctly', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'test' }
-      ];
-
       // すべてのパラメータをcamelCaseで指定
-      const result = await driver.queryWithMessages(messages, {
-        maxTokens: 5,      // camelCase
-        temperature: 0.5,   // camelCase
-        topP: 0.9,         // camelCase
-        topK: 50,          // camelCase
-        repetitionPenalty: 1.1  // camelCase
+      const result = await driver.query(chatPrompt('test'), {
+        maxTokens: 5,
+        temperature: 0.5,
+        topP: 0.9,
       });
 
       expect(result).toBeDefined();
@@ -168,8 +151,8 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
       // シンプルなテキストプロンプトを使用（MessageElementなし）
       // これによりcompletion APIが自動選択される
       const compiledPrompt: CompiledPrompt = {
-        instructions: ['Complete this sentence:'],
-        data: ['The sky is'],
+        instructions: [{ type: 'text', content: 'Complete this sentence:' }],
+        data: [{ type: 'text', content: 'The sky is' }],
         output: []
       };
 
@@ -186,15 +169,11 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
 
   describe('Error Handling', () => {
     it('should not throw "unexpected keyword argument temp" error', async () => {
-      const messages: ChatMessage[] = [
-        { role: 'user', content: 'test' }
-      ];
-
       // この呼び出しで "unexpected keyword argument 'temp'" エラーが
       // 発生しないことを確認（修正前はこのエラーが発生していた）
       let error: Error | null = null;
       try {
-        await driver.queryWithMessages(messages, {
+        await driver.query(chatPrompt('test'), {
           maxTokens: 1,
           temperature: 0.5
         });
