@@ -88,6 +88,16 @@ npm run setup-mlx
 
 前提条件: Python 3.11以上、Apple Silicon Mac、uv。
 
+#### 特殊トークンの確認
+
+モデルがサポートする特殊トークンを確認できます:
+
+```bash
+npx tsx scripts/check-special-tokens.ts <model-name>
+# 例:
+npx tsx scripts/check-special-tokens.ts mlx-community/gemma-3-270m-it-qat-8bit
+```
+
 ### vLLM（CUDA GPU）
 
 vLLMドライバーは独立したPythonエンジンプロセスとして起動します。

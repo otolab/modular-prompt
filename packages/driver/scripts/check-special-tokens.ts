@@ -1,24 +1,29 @@
 #!/usr/bin/env npx tsx
 /**
  * MLXモデルの特殊トークンサポート状況を確認するスクリプト
+ *
+ * Usage:
+ *   npx tsx scripts/check-special-tokens.ts <model-name>
+ *   npx tsx scripts/check-special-tokens.ts mlx-community/gemma-3-270m-it-qat-8bit
  */
 
-import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
+import { MlxDriver } from '../src/mlx-ml/mlx-driver.js';
 
-const models = [
-  'mlx-community/gemma-3-270m-it-qat-8bit',
-  // 'mlx-community/Qwen2.5-VL-32B-Instruct-4bit', // VLモデルは未サポート
-  // 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit',
-  // 'mlx-community/gemma-3-27b-it-qat-4bit',
-  // 'mlx-community/qwq-bakeneko-32b-4bit'
-];
+const modelName = process.argv[2];
+
+if (!modelName) {
+  console.error('Usage: npx tsx scripts/check-special-tokens.ts <model-name>');
+  console.error('Example: npx tsx scripts/check-special-tokens.ts mlx-community/gemma-3-270m-it-qat-8bit');
+  process.exit(1);
+}
 
 async function checkSpecialTokens(modelName: string) {
   console.log(`\n========== ${modelName} ==========`);
 
   try {
     const driver = new MlxDriver({ model: modelName });
-    const tokens = await driver.getSpecialTokens();
+    const capabilities = await driver.getCapabilities();
+    const tokens = capabilities.specialTokens;
 
     if (!tokens) {
       console.log('❌ 特殊トークンを取得できませんでした');
@@ -55,7 +60,7 @@ async function checkSpecialTokens(modelName: string) {
     });
 
     if (relevantTokens.length > 0) {
-      for (const name of relevantTokens.slice(0, 10)) { // 最初の10個まで
+      for (const name of relevantTokens.slice(0, 10)) {
         const token = tokens[name];
         if (typeof token === 'object' && 'start' in token && 'end' in token) {
           console.log(`  - ${name}: ${token.start.text} ... ${token.end.text}`);
@@ -76,17 +81,4 @@ async function checkSpecialTokens(modelName: string) {
   }
 }
 
-async function main() {
-  console.log('MLXモデルの特殊トークンサポート状況を確認します...\n');
-
-  for (const model of models) {
-    await checkSpecialTokens(model);
-    // 各モデル間で少し待機
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-
-  console.log('\n✅ 確認完了');
-  process.exit(0);
-}
-
-main().catch(console.error);
+await checkSpecialTokens(modelName);

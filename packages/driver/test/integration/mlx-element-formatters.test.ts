@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { MlxCapabilities } from '../../src/mlx-ml/process/types.js';
+import type { MlxRuntimeInfo } from '../../src/mlx-ml/process/types.js';
 import {
   MaterialElementFormatter,
   JSONElementFormatter,
@@ -8,7 +8,7 @@ import {
 
 describe('MLX Element Formatters', () => {
   // Gemma-3風の特殊トークンモック
-  const gemmaSpecialTokens: MlxCapabilities['special_tokens'] = {
+  const gemmaSpecialTokens: MlxRuntimeInfo['special_tokens'] = {
     'code_block_start': { text: '```', id: 1001 },
     'code_block_end': { text: '```', id: 1002 },
     'user': {
@@ -38,7 +38,7 @@ describe('MLX Element Formatters', () => {
 
     it('should use quote tokens when available', async () => {
       const formatter = new MaterialElementFormatter();
-      const tokensWithQuote: MlxCapabilities['special_tokens'] = {
+      const tokensWithQuote: MlxRuntimeInfo['special_tokens'] = {
         'quote': {
           start: { text: '<quote>', id: 3001 },
           end: { text: '</quote>', id: 3002 }

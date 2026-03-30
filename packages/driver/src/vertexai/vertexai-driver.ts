@@ -313,12 +313,21 @@ export class VertexAIDriver implements AIDriver {
     };
   }
   
+  /** Fields supported by VertexAI Schema (from @google-cloud/vertexai Schema interface) */
+  private static readonly SUPPORTED_SCHEMA_FIELDS = new Set([
+    'type', 'format', 'description', 'nullable',
+    'items', 'enum', 'properties', 'required', 'example',
+  ]);
+
   /**
    * Convert JSON Schema to VertexAI ResponseSchema
+   *
+   * VertexAI の Schema は JSON Schema のサブセットのみサポートする。
+   * サポート外のフィールド（propertyNames 等）は除去し warning を出力する。
    */
   private convertJsonSchema(schema: unknown): ResponseSchema | undefined {
     if (!schema) return undefined;
-    
+
     const typeMap: Record<string, SchemaType> = {
       string: SchemaType.STRING,
       number: SchemaType.NUMBER,
@@ -327,28 +336,36 @@ export class VertexAIDriver implements AIDriver {
       array: SchemaType.ARRAY,
       object: SchemaType.OBJECT
     };
-    
+
     const convertSchema = (s: Record<string, unknown>): ResponseSchema => {
-      const result: Record<string, unknown> = { ...s };
-      
+      const result: Record<string, unknown> = {};
+
+      for (const key of Object.keys(s)) {
+        if (!VertexAIDriver.SUPPORTED_SCHEMA_FIELDS.has(key)) {
+          console.warn(`[VertexAIDriver] Unsupported JSON Schema field "${key}" removed from schema`);
+          continue;
+        }
+        result[key] = s[key];
+      }
+
       if (s.type && typeof s.type === 'string') {
         result.type = typeMap[s.type] || SchemaType.STRING;
       }
-      
+
       if (s.properties) {
         result.properties = Object.fromEntries(
-          Object.entries(s.properties)
+          Object.entries(s.properties as Record<string, unknown>)
             .map(([k, v]) => [k, convertSchema(v as Record<string, unknown>)])
         );
       }
-      
+
       if (s.items) {
         result.items = convertSchema(s.items as Record<string, unknown>);
       }
-      
+
       return result as ResponseSchema;
     };
-    
+
     return convertSchema(schema as Record<string, unknown>);
   }
   
