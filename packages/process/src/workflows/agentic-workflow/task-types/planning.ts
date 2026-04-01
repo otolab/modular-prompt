@@ -111,9 +111,9 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
       items: [
         '- Each Task always sees: the original Terms, and deliverables from all previous Tasks.',
         '- Each Task also sees Original Data (messages, inputs, materials) by default. Use exclusion options to remove them:',
-        '  - **withoutMessages**: Exclude messages.',
-        '  - **withoutInputs**: Exclude inputs.',
-        '  - **withoutMaterials**: Exclude materials.',
+        '  - **withoutMessages**: Exclude messages. Use when the Task instruction captures the intent sufficiently.',
+        '  - **withoutInputs**: Exclude inputs. Use when `extractContext` has already extracted what is needed, or when inputs are not relevant to the Task.',
+        '  - **withoutMaterials**: Exclude materials. Use when the Task requires focused reasoning on deliverables alone.',
       ],
     },
     {
