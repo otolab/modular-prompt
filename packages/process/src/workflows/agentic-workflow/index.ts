@@ -13,7 +13,7 @@ export type {
   ToolCallLog,
 } from './types.js';
 
-export { DEFAULT_DRIVER_ROLE, DEFAULT_DATA_OPTIONS } from './types.js';
+export { DEFAULT_DRIVER_ROLE } from './types.js';
 
 // Builtin tools
 export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './process/builtin-tools.js';

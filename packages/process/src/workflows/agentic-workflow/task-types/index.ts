@@ -149,18 +149,24 @@ export function buildTaskListWithResults(ctx: AgenticWorkflowContext): string {
  * Provides workflow terms, methodology, and deliverable state.
  */
 export const taskCommon: PromptModule<AgenticWorkflowContext> = {
+  objective: [
+    '- You are one of the workers in a background process.',
+    '- Understand the methodology and instructions thoroughly before performing your work.',
+  ],
   terms: [
     '- **Workflow**: A chain of deliverables that achieves the Objective.',
     '- **Task**: A unit of work that produces a specific deliverable. Each Task is executed by a separate AI instance.',
-    '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
     '- **Task Type**: Defines the role of a Task (e.g. think, act, verify). The prompt is pre-configured for each type.',
+    '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
     '- **Focus**: The specific directive for the current Task — what deliverable to produce.',
   ],
   methodology: [
     `- We accomplish the Workflow's Objective by executing Tasks sequentially.`,
+    '- Refer to the deliverables from previous Tasks (shown in "Current State") as the basis for your work.',
+    '- あなたの出力を直接ユーザがみることはありません。Deliverableとして適切な出力を自由に作成してください',
     {
       type: 'subsection' as const,
-      title: 'Workflow Status / Current Task List',
+      title: 'Workflow Status / Task List',
       items: [
         (ctx: AgenticWorkflowContext) => buildTaskListDisplay(ctx),
       ],
@@ -168,14 +174,19 @@ export const taskCommon: PromptModule<AgenticWorkflowContext> = {
   ],
   instructions: [
     '- Do not perform work outside the scope of the current Task\'s Focus.',
-    '- Refer to the deliverables from previous Tasks (shown in "Current State") as the basis for your work.',
     '- If the instructions are contradictory, there is insufficient information, or you lack the required knowledge — report the issue instead of producing a speculative result.',
     '- If the work is unnecessary given the current context, skip it and explain why. This is a valid and sufficient response.',
   ],
   state: [
     (ctx: AgenticWorkflowContext) => {
       if (!ctx.executionLog?.length) return null;
-      return buildDeliverables(ctx.executionLog);
+      return [
+        {
+          type: 'text',
+          content: 'Previous Task Results',
+        },
+        buildDeliverables(ctx.executionLog)
+      ]
     },
   ],
 };
