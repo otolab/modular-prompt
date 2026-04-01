@@ -1,5 +1,12 @@
 # @modular-prompt/experiment
 
+## 0.4.8
+
+### Patch Changes
+
+- Updated dependencies [bce7391]
+  - @modular-prompt/process@0.3.5
+
 ## 0.4.7
 
 ### Patch Changes
