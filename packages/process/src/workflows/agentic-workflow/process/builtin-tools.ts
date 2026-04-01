@@ -33,9 +33,9 @@ interface TaskEntry {
   reason?: string;
   dep?: string[];
   driverRole?: string;
-  withInputs?: boolean;
-  withMessages?: boolean;
-  withMaterials?: boolean;
+  withoutInputs?: boolean;
+  withoutMessages?: boolean;
+  withoutMaterials?: boolean;
   insertAt?: number;
 }
 
@@ -66,17 +66,17 @@ const TASK_ENTRY_SCHEMA = {
       enum: ['default', 'thinking', 'instruct', 'chat', 'plan'],
       description: 'Driver role override. Defaults per task type.',
     },
-    withInputs: {
+    withoutInputs: {
       type: 'boolean',
-      description: 'Pass the original user input data to this Task. Default: false for most types.',
+      description: 'Exclude the original user input data from this Task. Default: false (inputs are included).',
     },
-    withMessages: {
+    withoutMessages: {
       type: 'boolean',
-      description: 'Pass the original user messages (the conversation/request) to this Task. Default: false for most types. Set to true when the Task needs to read the raw user request.',
+      description: 'Exclude the original user messages from this Task. Default: false (messages are included).',
     },
-    withMaterials: {
+    withoutMaterials: {
       type: 'boolean',
-      description: 'Pass the original user materials to this Task. Default: false for most types.',
+      description: 'Exclude the original user materials from this Task. Default: false (materials are included).',
     },
     insertAt: {
       type: 'number',
@@ -97,9 +97,9 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: n
     instruction: entry.instruction,
     taskType,
     driverRole: entry.driverRole as ModelRole | undefined,
-    withInputs: entry.withInputs,
-    withMessages: entry.withMessages,
-    withMaterials: entry.withMaterials,
+    withoutInputs: entry.withoutInputs,
+    withoutMessages: entry.withoutMessages,
+    withoutMaterials: entry.withoutMaterials,
   };
 
   const minInsertAt = currentIndex + 1;

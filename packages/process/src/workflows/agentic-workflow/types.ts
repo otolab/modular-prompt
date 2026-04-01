@@ -60,19 +60,6 @@ export const DEFAULT_DRIVER_ROLE: Record<TaskType, ModelRole> = {
   output: 'chat',
 };
 
-/**
- * Default withXxx options for each task type
- */
-export const DEFAULT_DATA_OPTIONS: Record<TaskType, { withInputs: boolean; withMessages: boolean; withMaterials: boolean }> = {
-  planning: { withInputs: true, withMessages: false, withMaterials: true },
-  act: { withInputs: false, withMessages: false, withMaterials: false },
-  think: { withInputs: false, withMessages: false, withMaterials: false },
-  verify: { withInputs: false, withMessages: false, withMaterials: false },
-  extractContext: { withInputs: true, withMessages: true, withMaterials: true },
-  recall: { withInputs: false, withMessages: false, withMaterials: false },
-  determine: { withInputs: true, withMessages: true, withMaterials: true },
-  output: { withInputs: false, withMessages: false, withMaterials: false },
-};
 
 // ---------------------------------------------------------------------------
 // Task definition
@@ -90,12 +77,12 @@ export interface AgenticTask {
   taskType: TaskType;
   /** Driver role override (defaults per task type) */
   driverRole?: ModelRole;
-  /** Include user inputs in data */
-  withInputs?: boolean;
-  /** Include user messages in data */
-  withMessages?: boolean;
-  /** Include user materials in data */
-  withMaterials?: boolean;
+  /** Exclude user inputs from data (default: false = inputs are included) */
+  withoutInputs?: boolean;
+  /** Exclude user messages from data (default: false = messages are included) */
+  withoutMessages?: boolean;
+  /** Exclude user materials from data (default: false = materials are included) */
+  withoutMaterials?: boolean;
 }
 
 // ---------------------------------------------------------------------------

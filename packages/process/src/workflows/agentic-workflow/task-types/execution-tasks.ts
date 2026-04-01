@@ -27,8 +27,8 @@ interface ExecutionTaskDef {
   instructions: string[];
   /** Default driver role */
   driverRole: ModelRole;
-  /** Default data options */
-  defaults: { withInputs: boolean; withMessages: boolean; withMaterials: boolean };
+  /** Default data exclusion options (false = included, true = excluded) */
+  defaults: { withoutInputs: boolean; withoutMessages: boolean; withoutMaterials: boolean };
   /** Description for __register_tasks tool enum */
   toolDescription: string;
   /** maxTokens tier (default: 'middle') */
@@ -50,7 +50,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- If additional tasks are needed to complete the objective, use `__replan` to request re-planning.',
     ],
     driverRole: 'thinking',
-    defaults: { withInputs: false, withMessages: false, withMaterials: false },
+    defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
     toolDescription: 'produces analysis, reasoning, or processed results',
     maxTokensTier: 'high',
   },
@@ -61,7 +61,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- Tool results are automatically passed to subsequent Tasks.',
     ],
     driverRole: 'instruct',
-    defaults: { withInputs: false, withMessages: false, withMaterials: false },
+    defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
     toolDescription: 'performs an external action using tools and reports its outcome',
     maxTokensTier: 'low',
     builtinToolNames: ['__replan', '__time'],
@@ -74,7 +74,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- If verification fails or results are insufficient, use `__replan` to request re-planning for corrective tasks.',
     ],
     driverRole: 'thinking',
-    defaults: { withInputs: false, withMessages: false, withMaterials: false },
+    defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
     toolDescription: 'produces a validation report on previous deliverables',
     maxTokensTier: 'low',
   },
@@ -88,7 +88,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- Structure the extracted information clearly so that subsequent Tasks can use it directly.',
     ],
     driverRole: 'thinking',
-    defaults: { withInputs: true, withMessages: true, withMaterials: true },
+    defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
     toolDescription: 'produces structured extraction from inputs/materials',
     maxTokensTier: 'high',
   },
@@ -101,7 +101,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- Do not fabricate information. If uncertain, state what you know and what is unverified.',
     ],
     driverRole: 'instruct',
-    defaults: { withInputs: false, withMessages: false, withMaterials: false },
+    defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
     toolDescription: 'produces retrieved knowledge from search tools or training data',
     maxTokensTier: 'middle',
   },
@@ -113,7 +113,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- State your conclusion clearly with supporting reasoning.',
     ],
     driverRole: 'thinking',
-    defaults: { withInputs: true, withMessages: true, withMaterials: true },
+    defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
     toolDescription: 'produces a definitive decision with supporting reasoning',
     maxTokensTier: 'middle',
   },
@@ -147,8 +147,8 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
     materials: [
       (ctx: AgenticWorkflowContext) => {
         const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-        const withMaterials = task?.withMaterials ?? def.defaults.withMaterials;
-        if (!withMaterials || !ctx.userModule?.materials?.length) return null;
+        const excluded = task?.withoutMaterials ?? def.defaults.withoutMaterials;
+        if (excluded || !ctx.userModule?.materials?.length) return null;
         return ctx.userModule.materials as DynamicElement[];
       },
     ],
@@ -156,8 +156,8 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
     inputs: [
       (ctx: AgenticWorkflowContext) => {
         const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-        const withInputs = task?.withInputs ?? def.defaults.withInputs;
-        if (!withInputs || !ctx.userModule?.inputs?.length) return null;
+        const excluded = task?.withoutInputs ?? def.defaults.withoutInputs;
+        if (excluded || !ctx.userModule?.inputs?.length) return null;
         return ctx.userModule.inputs as DynamicElement[];
       },
     ],
@@ -165,8 +165,8 @@ function buildModule(def: ExecutionTaskDef): PromptModule<AgenticWorkflowContext
     messages: [
       (ctx: AgenticWorkflowContext) => {
         const task = ctx.taskList?.[ctx.currentTaskIndex ?? 0];
-        const withMessages = task?.withMessages ?? def.defaults.withMessages;
-        if (!withMessages || !ctx.userModule?.messages?.length) return null;
+        const excluded = task?.withoutMessages ?? def.defaults.withoutMessages;
+        if (excluded || !ctx.userModule?.messages?.length) return null;
         return ctx.userModule.messages as DynamicElement[];
       },
     ],

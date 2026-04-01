@@ -34,7 +34,7 @@ export type {
 // Agentic workflow
 export { agenticProcess } from './agentic-workflow/index.js';
 export { BUILTIN_TOOL_PREFIX, isBuiltinTool } from './agentic-workflow/index.js';
-export { DEFAULT_DRIVER_ROLE, DEFAULT_DATA_OPTIONS } from './agentic-workflow/index.js';
+export { DEFAULT_DRIVER_ROLE } from './agentic-workflow/index.js';
 export { getTaskTypeConfig, taskCommon } from './agentic-workflow/index.js';
 export type {
   AgenticWorkflowContext,
