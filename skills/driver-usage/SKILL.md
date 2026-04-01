@@ -131,7 +131,7 @@ import { VertexAIDriver } from '@modular-prompt/driver';
 const driver = new VertexAIDriver({
   project: 'my-gcp-project',     // 環境変数 GOOGLE_CLOUD_PROJECT で代替可
   location: 'us-central1',       // デフォルト: 'us-central1'
-  model: 'gemini-2.0-flash-001', // デフォルト
+  model: 'gemini-2.0-flash-001', // デフォルト（Googleモデル）
   temperature: 0.05,
   defaultOptions: {
     maxTokens: 1000,
@@ -142,6 +142,27 @@ const driver = new VertexAIDriver({
 ```
 
 Google Cloud認証（ADCまたはサービスアカウント）が必要。
+
+#### サポートモデル
+
+- **Googleモデル（Gemini）**: 標準の `generateContent` API経由
+  - 例: `gemini-2.0-flash-001`, `gemini-2.5-flash-lite`
+  - モデル名はシンプルな名前またはフルリソースパス形式で指定可能
+
+- **非Googleモデル（Model Garden）**: OpenAI互換エンドポイント経由
+  - 例: Qwen, Llama, DeepSeek等
+  - フルリソースパス形式で指定: `projects/{project}/locations/{location}/publishers/{publisher}/models/{model}`
+  - 対応パブリッシャー: `qwen`, `meta`, その他（`google`, `anthropic`を除く）
+
+- **Anthropicモデル（Claude）**: AnthropicDriverを使用
+  - VertexAI経由でClaudeを使う場合は `AnthropicDriver` の `vertex` オプションを使用してください
+
+#### JSONスキーマサポート
+
+VertexAIはJSON Schemaのサブセットのみサポートします。以下のフィールドのみ許可されます:
+
+- サポート: `type`, `format`, `description`, `nullable`, `items`, `enum`, `properties`, `required`, `example`
+- 未サポートフィールド（`propertyNames`等）は自動的に除去され、warningログが出力されます
 
 ### GoogleGenAIDriver
 

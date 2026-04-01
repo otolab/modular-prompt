@@ -10,10 +10,12 @@ import {
   FunctionCallingMode
 } from '@google-cloud/vertexai';
 import type { Part } from '@google-cloud/vertexai';
+import { GoogleAuth } from 'google-auth-library';
 import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
+import { OpenAIDriver } from '../openai/openai-driver.js';
 
 /**
  * VertexAI driver configuration
@@ -63,6 +65,11 @@ export class VertexAIDriver implements AIDriver {
   private defaultModel: string;
   private defaultTemperature: number;
   private _defaultOptions: Partial<VertexAIQueryOptions>;
+  private project: string;
+  private location: string;
+  private googleAuth: GoogleAuth;
+  private openaiDriver?: OpenAIDriver;
+  private lastToken?: string;
 
   get defaultOptions(): Partial<VertexAIQueryOptions> {
     return this._defaultOptions;
@@ -80,6 +87,9 @@ export class VertexAIDriver implements AIDriver {
       throw new Error('VertexAI project ID is required. Set it in config or GOOGLE_CLOUD_PROJECT environment variable.');
     }
 
+    this.project = project;
+    this.location = location;
+    this.googleAuth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
     this.vertexAI = new VertexAI({ project, location });
     this.defaultModel = config.model || 'gemini-2.0-flash-001';
     this.defaultTemperature = config.temperature ?? 0.05;
@@ -449,16 +459,72 @@ export class VertexAIDriver implements AIDriver {
   }
   
   /**
+   * Parse full resource path to extract publisher and model name.
+   * Format: projects/{project}/locations/{location}/publishers/{publisher}/models/{model}
+   */
+  private parseModelPublisher(model: string): { publisher: string; modelName: string } | null {
+    const match = model.match(/^projects\/[^/]+\/locations\/[^/]+\/publishers\/([^/]+)\/models\/(.+)$/);
+    return match ? { publisher: match[1], modelName: match[2] } : null;
+  }
+
+  /**
+   * Get or create an OpenAIDriver for the OpenAI-compatible chat completions endpoint.
+   * Refreshes the access token on each call.
+   */
+  private async getOpenAIDriver(): Promise<OpenAIDriver> {
+    const token = await this.googleAuth.getAccessToken();
+    if (!token) {
+      throw new Error('[VertexAIDriver] Failed to obtain Google Cloud access token');
+    }
+    if (token !== this.lastToken || !this.openaiDriver) {
+      this.lastToken = token;
+      const baseURL = `https://${this.location}-aiplatform.googleapis.com/v1/projects/${this.project}/locations/${this.location}/endpoints/openapi`;
+      this.openaiDriver = new OpenAIDriver({
+        apiKey: token,
+        baseURL,
+      });
+    }
+    return this.openaiDriver;
+  }
+
+  /**
+   * Route model to the appropriate API path.
+   * Returns the OpenAIDriver for non-Google publishers, or null for the native generateContent path.
+   * Throws for Anthropic publisher (use AnthropicDriver instead).
+   */
+  private async routeModel(model: string): Promise<{ driver: OpenAIDriver; modelName: string } | null> {
+    const parsed = this.parseModelPublisher(model);
+    if (!parsed || parsed.publisher === 'google') {
+      return null; // Use native generateContent
+    }
+    if (parsed.publisher === 'anthropic') {
+      throw new Error(
+        '[VertexAIDriver] Anthropic models are not supported via VertexAIDriver. ' +
+        'Use AnthropicDriver with vertex config instead.'
+      );
+    }
+    const driver = await this.getOpenAIDriver();
+    return { driver, modelName: parsed.modelName };
+  }
+
+  /**
    * Query implementation
    */
   async query(
     prompt: CompiledPrompt,
     options: VertexAIQueryOptions = {}
   ): Promise<QueryResult> {
-    try {
-      // Merge options with defaults
-      const mergedOptions = { ...this.defaultOptions, ...options };
+    // Merge options with defaults
+    const mergedOptions = { ...this.defaultOptions, ...options };
 
+    // Route to OpenAI-compatible endpoint for non-Google publishers
+    const model = mergedOptions.model || this.defaultModel;
+    const route = await this.routeModel(model);
+    if (route) {
+      return route.driver.query(prompt, { ...mergedOptions, model: route.modelName });
+    }
+
+    try {
       // Convert prompt to VertexAI format
       const request = this.compiledPromptToVertexAI(prompt);
 
@@ -488,7 +554,6 @@ export class VertexAIDriver implements AIDriver {
       }
 
       // Create client and generate
-      const model = mergedOptions.model || this.defaultModel;
       const client = this.createClient(model, generationConfig);
       const result = await client.generateContent(request);
       
@@ -560,6 +625,13 @@ export class VertexAIDriver implements AIDriver {
   ): Promise<StreamResult> {
     const mergedOptions = { ...this.defaultOptions, ...options };
 
+    // Route to OpenAI-compatible endpoint for non-Google publishers
+    const model = mergedOptions.model || this.defaultModel;
+    const route = await this.routeModel(model);
+    if (route) {
+      return route.driver.streamQuery(prompt, { ...mergedOptions, model: route.modelName });
+    }
+
     // Convert prompt to VertexAI format
     const request = this.compiledPromptToVertexAI(prompt);
 
@@ -587,7 +659,6 @@ export class VertexAIDriver implements AIDriver {
     }
 
     // Create client and generate stream
-    const model = mergedOptions.model || this.defaultModel;
     const client = this.createClient(model, generationConfig);
     const streamingResult = await client.generateContentStream(request);
 
@@ -660,6 +731,10 @@ export class VertexAIDriver implements AIDriver {
    * Close the client
    */
   async close(): Promise<void> {
-    // VertexAI client doesn't need explicit closing
+    if (this.openaiDriver) {
+      await this.openaiDriver.close();
+      this.openaiDriver = undefined;
+      this.lastToken = undefined;
+    }
   }
 }

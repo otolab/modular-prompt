@@ -4,9 +4,28 @@ import type { CompiledPrompt } from '@modular-prompt/core';
 import type { ToolDefinition } from '../types.js';
 
 // Shared mock functions (hoisted for vi.mock factory)
-const { mockGenerateContent, mockGenerateContentStream } = vi.hoisted(() => ({
+const { mockGenerateContent, mockGenerateContentStream, mockOpenAIQuery, mockOpenAIStreamQuery, mockOpenAIClose } = vi.hoisted(() => ({
   mockGenerateContent: vi.fn(),
-  mockGenerateContentStream: vi.fn()
+  mockGenerateContentStream: vi.fn(),
+  mockOpenAIQuery: vi.fn(),
+  mockOpenAIStreamQuery: vi.fn(),
+  mockOpenAIClose: vi.fn(),
+}));
+
+// Mock google-auth-library
+vi.mock('google-auth-library', () => ({
+  GoogleAuth: vi.fn().mockImplementation(() => ({
+    getAccessToken: vi.fn().mockResolvedValue('mock-access-token'),
+  })),
+}));
+
+// Mock OpenAIDriver
+vi.mock('../openai/openai-driver.js', () => ({
+  OpenAIDriver: vi.fn().mockImplementation(() => ({
+    query: mockOpenAIQuery,
+    streamQuery: mockOpenAIStreamQuery,
+    close: mockOpenAIClose,
+  })),
 }));
 
 // Mock @google-cloud/vertexai module
@@ -659,6 +678,75 @@ describe('VertexAIDriver', () => {
           response: { error: 'Connection timeout' }
         })
       });
+    });
+  });
+
+  describe('model publisher routing', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'Test' }],
+      data: [{ type: 'text', content: 'Data' }],
+      output: []
+    };
+
+    beforeEach(() => {
+      mockOpenAIQuery.mockReset();
+      mockOpenAIStreamQuery.mockReset();
+      mockOpenAIQuery.mockResolvedValue({
+        content: 'OpenAI response',
+        finishReason: 'stop' as const,
+      });
+      mockOpenAIStreamQuery.mockResolvedValue({
+        stream: (async function* () { yield 'chunk'; })(),
+        result: Promise.resolve({ content: 'streamed', finishReason: 'stop' as const }),
+      });
+    });
+
+    it('should use generateContent for simple model names', async () => {
+      await driver.query(prompt, { model: 'gemini-2.0-flash' });
+      expect(mockGenerateContent).toHaveBeenCalled();
+      expect(mockOpenAIQuery).not.toHaveBeenCalled();
+    });
+
+    it('should use generateContent for google publisher full path', async () => {
+      await driver.query(prompt, {
+        model: 'projects/my-project/locations/us-central1/publishers/google/models/gemini-2.0-flash'
+      });
+      expect(mockGenerateContent).toHaveBeenCalled();
+      expect(mockOpenAIQuery).not.toHaveBeenCalled();
+    });
+
+    it('should route to OpenAI driver for non-google publisher', async () => {
+      const result = await driver.query(prompt, {
+        model: 'projects/my-project/locations/us-central1/publishers/qwen/models/qwen3-235b'
+      });
+      expect(mockOpenAIQuery).toHaveBeenCalledWith(
+        prompt,
+        expect.objectContaining({ model: 'qwen3-235b' })
+      );
+      expect(result.content).toBe('OpenAI response');
+    });
+
+    it('should route streamQuery to OpenAI driver for non-google publisher', async () => {
+      const result = await driver.streamQuery(prompt, {
+        model: 'projects/my-project/locations/us-central1/publishers/meta/models/llama-3-405b'
+      });
+      expect(mockOpenAIStreamQuery).toHaveBeenCalledWith(
+        prompt,
+        expect.objectContaining({ model: 'llama-3-405b' })
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('should throw error for anthropic publisher', async () => {
+      await expect(driver.query(prompt, {
+        model: 'projects/my-project/locations/us-east5/publishers/anthropic/models/claude-sonnet-4-6'
+      })).rejects.toThrow('Anthropic models are not supported via VertexAIDriver');
+    });
+
+    it('should throw error for anthropic publisher in streamQuery', async () => {
+      await expect(driver.streamQuery(prompt, {
+        model: 'projects/my-project/locations/us-east5/publishers/anthropic/models/claude-sonnet-4-6'
+      })).rejects.toThrow('Anthropic models are not supported via VertexAIDriver');
     });
   });
 
