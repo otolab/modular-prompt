@@ -25,7 +25,7 @@ function collectText(elements: any[] = []): string {
   return lines.join('\n');
 }
 
-describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
+describe('Agentic Workflow v2 Prompt Inspection', () => {
   const userModule: PromptModule<any> = {
     objective: ['文書を分析し、重要な洞察を抽出する'],
     instructions: [
@@ -36,16 +36,16 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     cue: ['分析結果を日本語で報告してください'],
   };
 
-  const taskList = [
+  const taskList: AgenticTask[] = [
     { instruction: 'Decompose objective into tasks', taskType: 'planning' },
     { instruction: '文書のテーマを分析する', taskType: 'think' },
-    { instruction: 'メッセージからコンテキストを抽出する', taskType: 'extractContext', withMessages: true },
+    { instruction: 'メッセージからコンテキストを抽出する', taskType: 'extractContext' },
     { instruction: '最終出力を生成する', taskType: 'output' },
   ];
 
   it('planning: instructions/guidelines をデータ側に配置する', () => {
     const context: AgenticWorkflowContext = {
-      userModule,
+      userModule: resolve(userModule, {}),
       taskList,
       currentTaskIndex: 0,
       executionLog: [],
@@ -69,9 +69,9 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     expect(instructionText).toContain('Task');       // taskCommon.terms
     expect(instructionText).toContain('テーマ');     // userModule.terms
 
-    // ユーザーの instructions はデータ側 (materials) にある
+    // ユーザーの instructions は "Original Request" material としてデータ側にある
     const dataText = collectText(prompt.data);
-    expect(dataText).toContain('Instructions to decompose');
+    expect(dataText).toContain('Original Request');
     expect(dataText).toContain('文書の主要なテーマを特定する');
 
     // タスクリストが methodology に表示される
@@ -81,7 +81,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
 
   it('think: description が指示に、前タスク結果がデータに入る', () => {
     const context: AgenticWorkflowContext = {
-      userModule,
+      userModule: resolve(userModule, {}),
       taskList,
       currentTaskIndex: 1,
       executionLog: [
@@ -103,11 +103,12 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     expect(instructionText).toContain('Objective');
     expect(instructionText).toContain('テーマ');
 
-    // objective フレーミングが含まれる
-    expect(instructionText).toContain('You will execute the Task described in');
+    // think タスクの指示が含まれる
+    expect(instructionText).toContain('Perform reasoning, analysis, or processing');
 
-    // 前タスク結果が preparationNote (instructions内) に入る
-    expect(instructionText).toContain('Tasks registered.');
+    // 前タスク結果が state (data側) に入る
+    const dataText = collectText(prompt.data);
+    expect(dataText).toContain('Tasks registered.');
   });
 
   it('extractContext: messages/materials がデフォルトでデータに含まれる', () => {
@@ -145,7 +146,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
 
   it('output: cue が指示に、全タスク結果がデータに入る', () => {
     const context: AgenticWorkflowContext = {
-      userModule,
+      userModule: resolve(userModule, {}),
       taskList,
       currentTaskIndex: 3,
       executionLog: [
@@ -167,11 +168,11 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     const outputText = collectText(prompt.output);
     expect(outputText).toContain('分析結果を日本語で報告してください');
 
-    // 全タスク結果が preparationNote (instructions内) に入る
-    const instructionText = collectText(prompt.instructions);
-    expect(instructionText).toContain('Tasks registered.');
-    expect(instructionText).toContain('テーマを特定しました');
-    expect(instructionText).toContain('コンテキストを抽出しました');
+    // 全タスク結果が state (data側) に入る
+    const dataText = collectText(prompt.data);
+    expect(dataText).toContain('Tasks registered.');
+    expect(dataText).toContain('テーマを特定しました');
+    expect(dataText).toContain('コンテキストを抽出しました');
   });
 
   it('output with schema: schema が output に入る', () => {
@@ -193,7 +194,7 @@ describe.skip('Agentic Workflow v2 Prompt Inspection', () => {
     ];
 
     const context: AgenticWorkflowContext = {
-      userModule: moduleWithSchema,
+      userModule: resolve(moduleWithSchema, {}),
       taskList: structuredTaskList,
       currentTaskIndex: 3,
       executionLog: [
