@@ -35,8 +35,8 @@ await driver.close();
 | ドライバー | プロバイダー | 備考 |
 |-----------|------------|------|
 | `OpenAIDriver` | OpenAI | OpenAI互換API対応 |
-| `AnthropicDriver` | Anthropic | Claude |
-| `VertexAIDriver` | Google Cloud | Vertex AI経由Gemini |
+| `AnthropicDriver` | Anthropic | Claude（Vertex経由も可） |
+| `VertexAIDriver` | Google Cloud | Gemini + Model Garden（Qwen, Llama等） |
 | `GoogleGenAIDriver` | Google | APIキーのみで利用可能 |
 | `OllamaDriver` | Ollama | ローカルLLM |
 | `MlxDriver` | MLX | Apple Silicon専用 |
