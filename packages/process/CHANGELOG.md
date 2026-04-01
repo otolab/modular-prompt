@@ -1,5 +1,11 @@
 # @modular-prompt/process
 
+## 0.3.5
+
+### Patch Changes
+
+- 7a67c44: agentic workflow のデータ可視性を opt-out 方式に変更（withoutXxx）、planning プロンプトを改善
+
 ## 0.3.4
 
 ### Patch Changes
