@@ -16,6 +16,7 @@ import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolD
 import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
 import { OpenAIDriver } from '../openai/openai-driver.js';
+import type { OpenAIQueryOptions } from '../openai/openai-driver.js';
 
 /**
  * VertexAI driver configuration
@@ -521,7 +522,7 @@ export class VertexAIDriver implements AIDriver {
     const model = mergedOptions.model || this.defaultModel;
     const route = await this.routeModel(model);
     if (route) {
-      return route.driver.query(prompt, { ...mergedOptions, model: route.modelName });
+      return route.driver.query(prompt, { ...mergedOptions, model: route.modelName } as OpenAIQueryOptions);
     }
 
     try {
@@ -629,7 +630,7 @@ export class VertexAIDriver implements AIDriver {
     const model = mergedOptions.model || this.defaultModel;
     const route = await this.routeModel(model);
     if (route) {
-      return route.driver.streamQuery(prompt, { ...mergedOptions, model: route.modelName });
+      return route.driver.streamQuery(prompt, { ...mergedOptions, model: route.modelName } as OpenAIQueryOptions);
     }
 
     // Convert prompt to VertexAI format
