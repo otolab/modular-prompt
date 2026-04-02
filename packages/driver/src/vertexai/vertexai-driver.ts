@@ -17,6 +17,7 @@ import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
 import { OpenAIDriver } from '../openai/openai-driver.js';
 import type { OpenAIQueryOptions } from '../openai/openai-driver.js';
+import { QueryLogger } from '../query-logger.js';
 
 /**
  * VertexAI driver configuration
@@ -71,6 +72,7 @@ export class VertexAIDriver implements AIDriver {
   private googleAuth: GoogleAuth;
   private openaiDriver?: OpenAIDriver;
   private lastToken?: string;
+  private queryLogger = new QueryLogger('VertexAI');
 
   get defaultOptions(): Partial<VertexAIQueryOptions> {
     return this._defaultOptions;
@@ -353,7 +355,7 @@ export class VertexAIDriver implements AIDriver {
 
       for (const key of Object.keys(s)) {
         if (!VertexAIDriver.SUPPORTED_SCHEMA_FIELDS.has(key)) {
-          console.warn(`[VertexAIDriver] Unsupported JSON Schema field "${key}" removed from schema`);
+          this.queryLogger.log.warn(`Unsupported JSON Schema field "${key}" removed from schema`);
           continue;
         }
         result[key] = s[key];
@@ -532,6 +534,7 @@ export class VertexAIDriver implements AIDriver {
       return route.driver.query(prompt, { ...mergedOptions, model: route.modelName } as OpenAIQueryOptions);
     }
 
+    this.queryLogger.mark();
     try {
       // Convert prompt to VertexAI format
       const request = this.compiledPromptToVertexAI(prompt);
@@ -568,11 +571,13 @@ export class VertexAIDriver implements AIDriver {
       // Extract response
       const response = result.response;
       const candidate = response.candidates?.[0];
-      
+
       if (!candidate || !candidate.content) {
+        this.queryLogger.log.error('Empty response: no candidate or content');
         return {
           content: '',
-          finishReason: 'error'
+          finishReason: 'error',
+          ...this.queryLogger.collect()
         };
       }
       
@@ -609,17 +614,15 @@ export class VertexAIDriver implements AIDriver {
           promptTokens: response.usageMetadata.promptTokenCount || 0,
           completionTokens: response.usageMetadata.candidatesTokenCount || 0,
           totalTokens: response.usageMetadata.totalTokenCount || 0
-        } : undefined
+        } : undefined,
+        ...this.queryLogger.collect()
       };
     } catch (error) {
-      console.error('[VertexAIDriver] Query error:', error);
-      if (error instanceof Error) {
-        console.error('[VertexAIDriver] Error message:', error.message);
-        console.error('[VertexAIDriver] Error stack:', error.stack);
-      }
+      this.queryLogger.log.error('Query error:', error instanceof Error ? error.message : String(error));
       return {
         content: '',
-        finishReason: 'error'
+        finishReason: 'error',
+        ...this.queryLogger.collect()
       };
     }
   }
@@ -639,6 +642,8 @@ export class VertexAIDriver implements AIDriver {
     if (route) {
       return route.driver.streamQuery(prompt, { ...mergedOptions, model: route.modelName } as OpenAIQueryOptions);
     }
+
+    this.queryLogger.mark();
 
     // Convert prompt to VertexAI format
     const request = this.compiledPromptToVertexAI(prompt);
@@ -686,9 +691,11 @@ export class VertexAIDriver implements AIDriver {
       const candidate = response.candidates?.[0];
 
       if (!candidate || !candidate.content) {
+        this.queryLogger.log.error('Empty response: no candidate or content');
         return {
           content: '',
-          finishReason: 'error'
+          finishReason: 'error',
+          ...this.queryLogger.collect()
         };
       }
 
@@ -725,7 +732,8 @@ export class VertexAIDriver implements AIDriver {
           promptTokens: response.usageMetadata.promptTokenCount || 0,
           completionTokens: response.usageMetadata.candidatesTokenCount || 0,
           totalTokens: response.usageMetadata.totalTokenCount || 0
-        } : undefined
+        } : undefined,
+        ...this.queryLogger.collect()
       };
     })();
 

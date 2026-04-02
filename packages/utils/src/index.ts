@@ -5,7 +5,8 @@ export {
 } from './logger/index.js';
 
 export type {
-  LogLevel
+  LogLevel,
+  LogEntry
 } from './logger/index.js';
 
 // JSON Extractor exports

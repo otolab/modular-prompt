@@ -18,12 +18,11 @@ import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, Finis
 import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
-import { extractJSON, Logger } from '@modular-prompt/utils';
+import { extractJSON } from '@modular-prompt/utils';
 import { contentToString } from '../content-utils.js';
 import { VllmProcess, type VllmCapabilities } from './vllm-process.js';
 import { Readable } from 'stream';
-
-const logger = new Logger({ prefix: 'vLLM', context: 'driver' });
+import { QueryLogger } from '../query-logger.js';
 
 /**
  * vLLM driver configuration
@@ -113,6 +112,7 @@ export class VllmDriver implements AIDriver {
   private defaultOptions: VllmDriverConfig['defaultOptions'];
   private capabilities: VllmCapabilities | null = null;
   private formatterOptions: FormatterOptions;
+  private queryLogger = new QueryLogger('vLLM');
 
   constructor(config: VllmDriverConfig) {
     this.defaultOptions = config.defaultOptions || {};
@@ -124,9 +124,9 @@ export class VllmDriver implements AIDriver {
     if (!this.capabilities) {
       try {
         this.capabilities = await this.process.getCapabilities();
-        logger.info('Model capabilities:', this.capabilities);
+        this.queryLogger.log.info('Model capabilities:', this.capabilities);
       } catch (error) {
-        logger.error('Failed to get capabilities:', error);
+        this.queryLogger.log.error('Failed to get capabilities:', error instanceof Error ? error.message : String(error));
       }
     }
   }
@@ -171,6 +171,7 @@ export class VllmDriver implements AIDriver {
   }
 
   async streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult> {
+    this.queryLogger.mark();
     await this.ensureInitialized();
 
     const opts = mapOptions(this.defaultOptions, options);
@@ -179,7 +180,10 @@ export class VllmDriver implements AIDriver {
     const { iterable, completion } = createStreamIterable(stream);
 
     const resultPromise = completion.then(({ content, error }) => {
-      if (error) throw error;
+      if (error) {
+        this.queryLogger.log.error('Stream error:', error.message);
+        throw error;
+      }
 
       let structuredOutput: unknown | undefined;
       if (prompt.metadata?.outputSchema && content) {
@@ -189,7 +193,7 @@ export class VllmDriver implements AIDriver {
         }
       }
 
-      return { content, finishReason: 'stop' as FinishReason, structuredOutput };
+      return { content, finishReason: 'stop' as FinishReason, structuredOutput, ...this.queryLogger.collect() };
     });
 
     return { stream: iterable, result: resultPromise };

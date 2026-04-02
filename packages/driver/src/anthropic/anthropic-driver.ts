@@ -6,6 +6,7 @@ import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolC
 import { extractJSON } from '@modular-prompt/utils';
 import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
+import { QueryLogger } from '../query-logger.js';
 
 /**
  * VertexAI経由でのClaude利用設定
@@ -81,6 +82,7 @@ export class AnthropicDriver implements AIDriver {
   private client: Anthropic | AnthropicVertex;
   private defaultModel: string;
   private _defaultOptions: Partial<AnthropicQueryOptions>;
+  private queryLogger = new QueryLogger('Anthropic');
 
   get defaultOptions(): Partial<AnthropicQueryOptions> {
     return this._defaultOptions;
@@ -304,6 +306,8 @@ export class AnthropicDriver implements AIDriver {
    * Stream query implementation
    */
   async streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult> {
+    this.queryLogger.mark();
+    try {
     const anthropicOptions = options as AnthropicQueryOptions || {};
     const mergedOptions = { ...this.defaultOptions, ...anthropicOptions };
 
@@ -353,6 +357,7 @@ export class AnthropicDriver implements AIDriver {
 
     // Process the stream
     const processStream = async () => {
+      try {
       for await (const chunk of anthropicStream) {
         if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
           const content = chunk.delta.text;
@@ -392,6 +397,10 @@ export class AnthropicDriver implements AIDriver {
             }
           }
         }
+      }
+      } catch (error) {
+        this.queryLogger.log.error('Stream error:', error instanceof Error ? error.message : String(error));
+        finishReason = 'error';
       }
       streamConsumed = true;
     };
@@ -453,7 +462,8 @@ export class AnthropicDriver implements AIDriver {
         structuredOutput,
         usage,
         toolCalls,
-        finishReason
+        finishReason,
+        ...this.queryLogger.collect()
       };
     });
 
@@ -461,6 +471,17 @@ export class AnthropicDriver implements AIDriver {
       stream: streamGenerator(),
       result: resultPromise
     };
+    } catch (error) {
+      this.queryLogger.log.error('Query error:', error instanceof Error ? error.message : String(error));
+      return {
+        stream: (async function* () {})(),
+        result: Promise.resolve({
+          content: '',
+          finishReason: 'error' as const,
+          ...this.queryLogger.collect()
+        })
+      };
+    }
   }
 
   /**
