@@ -570,7 +570,17 @@ export function formatToolDefinitionsAsText(
   specialTokens?: Record<string, SpecialToken | SpecialTokenPair>,
   toolCallFormat?: { call_start?: string; call_end?: string; tool_parser_type?: string }
 ): string {
+  // ツール定義一覧
   const lines: string[] = ['## Available Tools', ''];
+  lines.push('Instead of generating a text response, you can respond with tool call data.');
+  lines.push('The result of the tool execution will be provided as context in your next generation.');
+  lines.push('Choose a tool from the available list below, determine the appropriate arguments, and output a JSON string in the specified format.');
+  lines.push('If a required tool is not in the available list, report this to the user.');
+  lines.push('');
+
+  // 具体例を生成するための最初のツール情報を記録
+  let exampleToolName: string | undefined;
+  let exampleArgs: string | undefined;
 
   for (const tool of tools) {
     lines.push(`### ${tool.name}`);
@@ -585,6 +595,17 @@ export function formatToolDefinitionsAsText(
       if (params.properties) {
         lines.push('Parameters:');
         formatProperties(lines, params.properties, params.required, 1);
+
+        // 最初のツールで具体例を生成
+        if (!exampleToolName) {
+          exampleToolName = tool.name;
+          const argEntries: string[] = [];
+          for (const [name, schema] of Object.entries(params.properties)) {
+            const val = schema.type === 'number' ? '0' : schema.type === 'boolean' ? 'true' : `"..."`;
+            argEntries.push(`"${name}": ${val}`);
+          }
+          exampleArgs = `{${argEntries.join(', ')}}`;
+        }
       } else {
         lines.push(`Parameters: ${JSON.stringify(tool.parameters)}`);
       }
@@ -593,24 +614,27 @@ export function formatToolDefinitionsAsText(
   }
 
   // tool call出力フォーマットの指示
-  const example = '{"name": "tool_name", "arguments": {"key": "value", "list": [...], "obj": {...}}}';
+  const concreteExample = exampleToolName
+    ? `{"name": "${exampleToolName}", "arguments": ${exampleArgs}}`
+    : '{"name": "tool_name", "arguments": {"key": "value"}}';
+
   if (toolCallFormat?.call_start && toolCallFormat?.call_end) {
-    lines.push('To call a tool, respond with:');
+    lines.push('To call a tool, respond ONLY with:');
     lines.push(toolCallFormat.call_start);
-    lines.push(example);
+    lines.push(concreteExample);
     lines.push(toolCallFormat.call_end);
   } else {
     const toolCallToken = specialTokens?.tool_call;
     if (toolCallToken && 'start' in toolCallToken && 'end' in toolCallToken) {
       const pair = toolCallToken as SpecialTokenPair;
-      lines.push('To call a tool, respond with:');
+      lines.push('To call a tool, respond ONLY with:');
       lines.push(`${pair.start.text}`);
-      lines.push(example);
+      lines.push(concreteExample);
       lines.push(`${pair.end.text}`);
     } else {
-      lines.push('To call a tool, respond with:');
+      lines.push('To call a tool, respond ONLY with the following format. Do not include any other text before or after the tool call block:');
       lines.push('```json:toolCall');
-      lines.push(example);
+      lines.push(concreteExample);
       lines.push('```');
     }
   }

@@ -13,6 +13,9 @@ import { EXECUTION_TASK_DEFS } from '../task-types/execution-tasks.js';
 
 export const BUILTIN_TOOL_PREFIX = '__';
 
+/** 有効な実行タスクタイプ（planning は除外 — モデルが指定する対象外） */
+const VALID_TASK_TYPES = new Set<string>([...Object.keys(EXECUTION_TASK_DEFS), 'output']);
+
 /**
  * 組み込みツールかどうかを判定
  */
@@ -91,7 +94,12 @@ const TASK_ENTRY_SCHEMA = {
  * @param currentIndex 現在実行中のタスクのインデックス。insertAt がこれ以下の場合はクランプされる。
  */
 function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: number): void {
-  const taskType = (entry.taskType as TaskType) || 'think';
+  const rawType = entry.taskType || 'think';
+  if (!VALID_TASK_TYPES.has(rawType)) {
+    const valid = [...VALID_TASK_TYPES].join(', ');
+    throw new Error(`Invalid taskType "${rawType}". Valid types: ${valid}`);
+  }
+  const taskType = rawType as TaskType;
   const task: AgenticTask = {
     name: entry.name,
     instruction: entry.instruction,

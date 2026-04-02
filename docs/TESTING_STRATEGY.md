@@ -9,13 +9,14 @@ Moduler Promptプロジェクトにおけるテストの分類、実装指針、
 
 ### 1. ユニットテスト (Unit Tests)
 
-**定義**: 単一のモジュール、クラス、関数の振る舞いを検証
+**定義**: 単一のモジュール、クラス、関数の振る舞いを検証。外部依存はすべてモック。
 
 **対象例**:
 - パラメータバリデーション関数
 - 型変換ユーティリティ
 - プロンプトフォーマッター
 - キュー管理ロジック
+- ドライバーのAPIレスポンス変換（モック使用）
 
 **配置**:
 ```
@@ -29,55 +30,32 @@ npm test                    # 全パッケージのユニットテスト
 npm test -w @modular-prompt/driver  # 特定パッケージのみ
 ```
 
-### 2. インターフェーステスト (Interface Tests)
+### 2. 統合テスト (Integration Tests)
 
-**定義**: モジュールの公開APIとインターフェース仕様を検証
-
-**対象例**:
-- ドライバーの公開メソッド（query, streamQuery, close）
-- プロセスモジュールのAPI
-- パッケージのexports
-
-**配置**:
-```
-packages/*/test/interface/**/*.test.ts
-```
-
-### 3. 統合テスト (Integration Tests)
-
-**定義**: 複数モジュール間の相互作用を検証
+**定義**: 複数モジュール間の相互作用、および外部システム（API、モデルプロセス等）との接続を検証
 
 **対象例**:
 - ドライバーとプロセス間の通信
 - パラメータマッピングとバリデーションの連携
 - プロンプトモジュールの組み合わせ
+- OpenAI/Anthropic/VertexAI APIとの実通信
+- MLXモデルの実際のロードと推論
+- ドライバーの公開APIの動作検証（query, streamQuery, close）
 
 **配置**:
 ```
 packages/*/test/integration/**/*.test.ts
-```
-
-### 4. システムテスト (System Tests)
-
-**定義**: 実際の外部システムと接続して動作を検証
-
-**対象例**:
-- MLXモデルの実際のロードと推論
-- OpenAI/Anthropic APIとの実通信
-- 子プロセスの起動と制御
-
-**配置**:
-```
-packages/*/test/system/**/*.test.ts
+packages/*/src/**/*.integration.test.ts
 ```
 
 **実行コマンド**:
 ```bash
-npm run test:system         # システムテスト実行
-npm run test:system:mlx     # MLX関連のシステムテスト
+npm run test:integration    # 統合テスト実行
 ```
 
-### 5. E2Eテスト (End-to-End Tests)
+**備考**: 外部API・モデルに依存するテストは設定ファイル（`test-drivers.yaml`等）がない場合にスキップされる。
+
+### 3. E2Eテスト (End-to-End Tests)
 
 **定義**: ユーザー視点でシステム全体の動作を検証
 
@@ -88,6 +66,7 @@ npm run test:system:mlx     # MLX関連のシステムテスト
 
 **配置**:
 ```
+packages/*/src/**/*.e2e.test.ts
 test/e2e/**/*.test.ts
 ```
 
@@ -217,13 +196,7 @@ describe('Parameter Mapping Integration', () => {
   it('should map and validate parameters end-to-end', () => {
     // バリデーション → マッピング → 送信形式の確認
   });
-});
-```
 
-#### システムレベル
-```typescript
-// mlx-parameters.system.test.ts
-describe('MLX Parameters System Test', () => {
   it('should accept temperature parameter in actual MLX process', async () => {
     // 実際のMLXプロセスを起動
     // temperatureがsamplerとして解釈されることを確認
@@ -245,7 +218,7 @@ describe('MLX Parameters System Test', () => {
 
 **新機能追加時**:
 - [ ] 機能仕様をドキュメントに記載
-- [ ] インターフェーステストで仕様を定義
+- [ ] 統合テストで仕様を定義
 - [ ] 実装コードを作成
 - [ ] ユニットテストで内部動作を保証
 - [ ] READMEの使用例を更新
@@ -260,11 +233,11 @@ describe('MLX Parameters System Test', () => {
 - [ ] パラメータ仕様をドキュメントに追加
 - [ ] バリデーションテストを追加
 - [ ] マッピングテストを追加
-- [ ] システムテストで実動作を確認
+- [ ] 統合テストで実動作を確認
 
 ## テストのセットアップパターン
 
-### システムテスト用グローバルセットアップ
+### 統合テスト用グローバルセットアップ
 
 ```typescript
 // test/setup/mlx-test-setup.ts
@@ -311,8 +284,7 @@ export async function waitForModelLoad(
 | テストレベル | MLXプロセス | モデルロード | 推論実行 |
 |------------|-----------|-----------|---------|
 | ユニット | モック | モック | モック |
-| 統合 | モック | モック | モック |
-| システム | 実プロセス | 実モデル | 実推論 |
+| 統合 | 実プロセス | 実モデル | 実推論 |
 
 ### モック使用の判断基準
 
@@ -334,16 +306,14 @@ export async function waitForModelLoad(
 | テストレベル | カバレッジ目標 | 測定対象 |
 |------------|------------|---------|
 | ユニット | 80%以上 | 関数・分岐 |
-| 統合 | 70%以上 | 主要フロー |
-| システム | 主要シナリオ100% | クリティカルパス |
+| 統合 | 主要シナリオ100% | 主要フロー・クリティカルパス |
 
 ### テスト実行時間の目標
 
 | テストレベル | 単体実行時間 | 全体実行時間 |
 |------------|------------|------------|
 | ユニット | <100ms | <10s |
-| 統合 | <1s | <30s |
-| システム | <30s | <5min |
+| 統合 | <30s | <5min |
 
 ## CI/CD統合
 
@@ -352,8 +322,7 @@ export async function waitForModelLoad(
 ```yaml
 # PR時
 - ユニットテスト: 必須
-- 統合テスト: 必須
-- システムテスト: 選択的（ラベルによる）
+- 統合テスト: 選択的（設定・ラベルによる）
 
 # main ブランチマージ時
 - 全テストスイート実行
@@ -378,10 +347,9 @@ npm test -- mlx            # MLX関連のテスト
 # レベル別実行
 npm run test:unit          # ユニットテストのみ
 npm run test:integration   # 統合テストのみ
-npm run test:system        # システムテストのみ
 
 # 包括的実行
-npm run test:ci           # CI用（ユニット+統合）
+npm run test:ci           # CI用（ユニット）
 npm run test:all          # 全テスト実行
 ```
 

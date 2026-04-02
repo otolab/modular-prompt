@@ -35,6 +35,10 @@ export interface TestDriversConfig {
     location?: string;
     model?: string;
   };
+  mlx?: {
+    nativeModel?: string;
+    fallbackModel?: string;
+  };
 }
 
 let _config: TestDriversConfig | undefined;
