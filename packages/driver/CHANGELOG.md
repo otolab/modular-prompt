@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.10.5
+
+### Patch Changes
+
+- 17f3a50: formatToolDefinitionsAsText のプロンプト改善: 非ネイティブ tool 対応モデル向けに tool call の意味を説明する文言を追加し、具体的なツール名・引数名を使った例示に変更
+
 ## 0.10.4
 
 ### Patch Changes
