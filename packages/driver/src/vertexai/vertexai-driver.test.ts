@@ -571,6 +571,26 @@ describe('VertexAIDriver', () => {
 
       warnSpy.mockRestore();
     });
+
+    it('should convert type array with null to nullable', () => {
+      const schema = (driver as unknown as { convertJsonSchema: (s: unknown) => unknown }).convertJsonSchema({
+        type: 'object',
+        properties: {
+          title: { type: ['string', 'null'] },
+          count: { type: 'integer' },
+        },
+        required: ['count'],
+      });
+
+      expect(schema).toEqual({
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING', nullable: true },
+          count: { type: 'INTEGER' },
+        },
+        required: ['count'],
+      });
+    });
   });
 
   describe('tool message elements', () => {
