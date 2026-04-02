@@ -1,5 +1,13 @@
 # @modular-prompt/utils
 
+## 0.3.2
+
+### Patch Changes
+
+- af55885: 全パッケージの依存バージョンを固定（^ を除去し == に統一）。Python 依存（mlx-driver, vllm-driver）も同様に固定。
+- Updated dependencies [af55885]
+  - @modular-prompt/core@0.2.2
+
 ## 0.3.1
 
 ### Patch Changes
