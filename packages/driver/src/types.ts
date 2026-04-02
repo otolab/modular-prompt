@@ -1,4 +1,5 @@
 import type { Attachment, ToolCall, ToolResultKind } from '@modular-prompt/core';
+import type { LogEntry } from '@modular-prompt/utils';
 
 // Re-export from core for convenience
 export type { Attachment, CompiledPrompt, ToolCall, ToolResultKind } from '@modular-prompt/core';
@@ -109,6 +110,12 @@ export interface QueryResult {
   toolCalls?: ToolCall[];
 
   finishReason?: FinishReason;
+
+  /** Log entries recorded during query execution */
+  logEntries?: LogEntry[];
+
+  /** Error-level log entries recorded during query execution */
+  errors?: LogEntry[];
 }
 
 /**

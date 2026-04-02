@@ -8,11 +8,10 @@ import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities, MlxContentPar
 import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
 import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
-import { extractJSON, Logger } from '@modular-prompt/utils';
+import { extractJSON } from '@modular-prompt/utils';
 import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
 import { contentToString, extractImagePaths } from '../content-utils.js';
-
-const logger = new Logger({ prefix: 'MLX', context: 'driver' });
+import { QueryLogger } from '../query-logger.js';
 
 // ========================================================================
 // Utility Functions (exported for testing)
@@ -137,6 +136,7 @@ export class MlxDriver implements AIDriver {
   private modelProcessor;
   private formatterOptions: FormatterOptions;
   private maxImageSize: number;
+  private queryLogger = new QueryLogger('MLX');
 
   get defaultOptions(): Partial<MlxMlModelOptions> {
     return this._defaultOptions;
@@ -178,7 +178,7 @@ export class MlxDriver implements AIDriver {
           modelKind: this.runtimeInfo.model_kind,
         });
       } catch (error) {
-        logger.error('Failed to get MLX runtime info:', error);
+        this.queryLogger.log.error('Failed to get MLX runtime info:', error instanceof Error ? error.message : String(error));
       }
     }
   }
@@ -320,6 +320,7 @@ export class MlxDriver implements AIDriver {
     prompt: CompiledPrompt,
     options?: QueryOptions
   ): Promise<StreamResult> {
+    this.queryLogger.mark();
     await this.ensureInitialized();
 
     // Merge options (only override if explicitly provided)
@@ -338,8 +339,9 @@ export class MlxDriver implements AIDriver {
 
     // Create result promise that waits for stream completion
     const resultPromise = completion.then(({ content, error }) => {
-      // If there was an error, throw it
+      // If there was an error, log and throw it
       if (error) {
+        this.queryLogger.log.error('Stream error:', error.message);
         throw error;
       }
 
@@ -368,7 +370,8 @@ export class MlxDriver implements AIDriver {
         content: finalContent,
         structuredOutput,
         toolCalls,
-        finishReason
+        finishReason,
+        ...this.queryLogger.collect()
       };
     });
 

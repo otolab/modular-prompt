@@ -3,6 +3,7 @@ import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolDefinition, ToolChoice, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
+import { QueryLogger } from '../query-logger.js';
 import type {
   ChatCompletionCreateParams,
   ChatCompletionMessageParam
@@ -48,6 +49,7 @@ export class OpenAIDriver implements AIDriver {
   private client: OpenAI;
   private defaultModel: string;
   private _defaultOptions: Partial<OpenAIQueryOptions>;
+  private queryLogger = new QueryLogger('OpenAI');
 
   get defaultOptions(): Partial<OpenAIQueryOptions> {
     return this._defaultOptions;
@@ -233,6 +235,7 @@ export class OpenAIDriver implements AIDriver {
    * Stream query implementation with both stream and result
    */
   async streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult> {
+    this.queryLogger.mark();
     try {
       const openaiOptions = options as OpenAIQueryOptions || {};
       const mergedOptions = { ...this.defaultOptions, ...openaiOptions };
@@ -355,7 +358,8 @@ export class OpenAIDriver implements AIDriver {
               };
             }
           }
-        } catch {
+        } catch (error) {
+          this.queryLogger.log.error('Stream error:', error instanceof Error ? error.message : String(error));
           finishReason = 'error';
         }
         streamConsumed = true;
@@ -414,7 +418,8 @@ export class OpenAIDriver implements AIDriver {
           structuredOutput,
           usage,
           toolCalls,
-          finishReason
+          finishReason,
+          ...this.queryLogger.collect()
         };
       });
 
@@ -422,15 +427,16 @@ export class OpenAIDriver implements AIDriver {
         stream: streamGenerator(),
         result: resultPromise
       };
-    } catch {
-      // Return error state
+    } catch (error) {
+      this.queryLogger.log.error('Query error:', error instanceof Error ? error.message : String(error));
       return {
         stream: (async function* () {
           // Empty stream
         })(),
         result: Promise.resolve({
           content: '',
-          finishReason: 'error' as const
+          finishReason: 'error' as const,
+          ...this.queryLogger.collect()
         })
       };
     }

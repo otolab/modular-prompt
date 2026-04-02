@@ -18,6 +18,9 @@ export type {
 
 export { hasToolCalls, isToolResult } from './types.js';
 
+// Query Logger
+export { QueryLogger } from './query-logger.js';
+
 // Test driver
 export {
   TestDriver,

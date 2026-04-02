@@ -113,12 +113,14 @@ interface QueryOptions {
 interface QueryResult {
   content: string;                     // テキストレスポンス
   structuredOutput?: unknown;          // 構造化出力（スキーマ指定時）
-  finishReason?: 'stop' | 'length' | 'error';
+  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
+  logEntries?: LogEntry[];             // クエリ実行中のログエントリ
+  errors?: LogEntry[];                 // エラーレベルのログエントリ
 }
 ```
 
@@ -195,16 +197,53 @@ type DriverProvider =
 const result = await driver.query(prompt);
 
 if (result.finishReason === 'error') {
-  // エラー発生
-  console.error('Query failed');
+  // エラー発生 — errors フィールドで詳細を確認
+  if (result.errors) {
+    for (const entry of result.errors) {
+      console.error(`[${entry.prefix}] ${entry.message}`);
+    }
+  }
 } else if (result.finishReason === 'length') {
   // トークン数制限により切り詰め
   console.warn('Response was truncated');
 } else if (result.finishReason === 'stop') {
   // 正常終了
-  console.log('Success');
+}
+
+// logEntries で全レベルのログを確認可能
+if (result.logEntries) {
+  console.log(`Query produced ${result.logEntries.length} log entries`);
 }
 ```
+
+### ドライバー実装者向けログ規約
+
+ドライバー実装では `QueryLogger` を使用してクエリスコープのログを記録する。`console.error` / `console.warn` の直接使用は禁止。
+
+```typescript
+import { QueryLogger } from '../query-logger.js';
+
+class MyDriver implements AIDriver {
+  private queryLogger = new QueryLogger('MyDriver');
+
+  async streamQuery(prompt, options) {
+    this.queryLogger.mark();  // 各クエリの先頭で呼ぶ
+    try {
+      // ... API呼び出し
+      const result = { content, finishReason, usage };
+      return { stream, result: Promise.resolve({ ...result, ...this.queryLogger.collect() }) };
+    } catch (error) {
+      this.queryLogger.log.error('Query error:', error instanceof Error ? error.message : String(error));
+      return {
+        stream: (async function* () {})(),
+        result: Promise.resolve({ content: '', finishReason: 'error', ...this.queryLogger.collect() })
+      };
+    }
+  }
+}
+```
+
+**prefix 命名規則**: ドライバー名を使用（`OpenAI`, `Anthropic`, `VertexAI`, `GoogleGenAI`, `MLX`, `vLLM`）。詳細は [UTILITIES.md](./UTILITIES.md) の Logger セクションを参照。
 
 ## 関連ドキュメント
 

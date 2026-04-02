@@ -4,6 +4,7 @@ import type { CompiledPrompt, Element } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
+import { QueryLogger } from '../query-logger.js';
 
 /**
  * GoogleGenAI driver configuration
@@ -56,6 +57,7 @@ export class GoogleGenAIDriver implements AIDriver {
   private defaultModel: string;
   private defaultTemperature: number;
   private _defaultOptions: Partial<GoogleGenAIQueryOptions>;
+  private queryLogger = new QueryLogger('GoogleGenAI');
 
   get defaultOptions(): Partial<GoogleGenAIQueryOptions> {
     return this._defaultOptions;
@@ -315,6 +317,7 @@ export class GoogleGenAIDriver implements AIDriver {
     prompt: CompiledPrompt,
     options: GoogleGenAIQueryOptions = {}
   ): Promise<QueryResult> {
+    this.queryLogger.mark();
     try {
       // Merge options with defaults
       const mergedOptions = { ...this.defaultOptions, ...options };
@@ -416,17 +419,15 @@ export class GoogleGenAIDriver implements AIDriver {
           promptTokens: response.usageMetadata.promptTokenCount || 0,
           completionTokens: response.usageMetadata.candidatesTokenCount || 0,
           totalTokens: response.usageMetadata.totalTokenCount || 0
-        } : undefined
+        } : undefined,
+        ...this.queryLogger.collect()
       };
     } catch (error) {
-      console.error('[GoogleGenAIDriver] Query error:', error);
-      if (error instanceof Error) {
-        console.error('[GoogleGenAIDriver] Error message:', error.message);
-        console.error('[GoogleGenAIDriver] Error stack:', error.stack);
-      }
+      this.queryLogger.log.error('Query error:', error instanceof Error ? error.message : String(error));
       return {
         content: '',
-        finishReason: 'error'
+        finishReason: 'error',
+        ...this.queryLogger.collect()
       };
     }
   }
@@ -438,6 +439,7 @@ export class GoogleGenAIDriver implements AIDriver {
     prompt: CompiledPrompt,
     options?: GoogleGenAIQueryOptions
   ): Promise<StreamResult> {
+    this.queryLogger.mark();
     const mergedOptions = { ...this.defaultOptions, ...options };
 
     // Convert prompt to GoogleGenAI format
@@ -546,7 +548,8 @@ export class GoogleGenAIDriver implements AIDriver {
             };
           }
         }
-      } catch {
+      } catch (error) {
+        this.queryLogger.log.error('Stream error:', error instanceof Error ? error.message : String(error));
         finishReason = 'error';
       }
 
@@ -593,7 +596,8 @@ export class GoogleGenAIDriver implements AIDriver {
         structuredOutput,
         toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined,
         usage,
-        finishReason
+        finishReason,
+        ...this.queryLogger.collect()
       };
     })();
 
