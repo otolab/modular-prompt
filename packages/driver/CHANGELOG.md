@@ -1,5 +1,15 @@
 # @modular-prompt/driver
 
+## 0.10.6
+
+### Patch Changes
+
+- af55885: 全パッケージの依存バージョンを固定（^ を除去し == に統一）。Python 依存（mlx-driver, vllm-driver）も同様に固定。
+- f003192: VertexAI ドライバーで JSON Schema の `type: ['string', 'null']` 形式（nullable 表現）を `nullable: true` に変換するよう修正。
+- Updated dependencies [af55885]
+  - @modular-prompt/core@0.2.2
+  - @modular-prompt/utils@0.3.2
+
 ## 0.10.5
 
 ### Patch Changes
