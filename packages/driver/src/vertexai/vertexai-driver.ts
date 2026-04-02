@@ -359,7 +359,14 @@ export class VertexAIDriver implements AIDriver {
         result[key] = s[key];
       }
 
-      if (s.type && typeof s.type === 'string') {
+      // JSON Schema の type: ['string', 'null'] → type: STRING, nullable: true に変換
+      if (Array.isArray(s.type)) {
+        const types = (s.type as string[]).filter(t => t !== 'null');
+        if (types.length === 1) {
+          result.type = typeMap[types[0]] || SchemaType.STRING;
+          result.nullable = true;
+        }
+      } else if (s.type && typeof s.type === 'string') {
         result.type = typeMap[s.type] || SchemaType.STRING;
       }
 
