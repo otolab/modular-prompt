@@ -26,3 +26,7 @@ anthropic:
 #   project: your-gcp-project
 #   location: us-central1
 #   model: gemini-2.0-flash
+
+# mlx:
+#   nativeModel: mlx-community/Qwen3.5-2B-OptiQ-4bit  # tool call native対応モデル
+#   fallbackModel: mlx-community/gemma-3-270m-it-qat-8bit  # テキスト注入方式で検証
