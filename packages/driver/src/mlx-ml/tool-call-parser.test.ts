@@ -552,10 +552,13 @@ describe('formatToolDefinitionsAsText', () => {
     const result = formatToolDefinitionsAsText(tools);
 
     expect(result).toContain('## Available Tools');
+    expect(result).toContain('respond with tool call data');
+    expect(result).toContain('tool call data');
     expect(result).toContain('### get_weather');
     expect(result).toContain('Get the weather for a location');
     expect(result).toContain('```json:toolCall');
-    expect(result).toContain('"name": "tool_name"');
+    expect(result).toContain('"name": "get_weather"');
+    expect(result).toContain('"location"');
   });
 
   it('should use special tokens when tool_call tokens are available', () => {
