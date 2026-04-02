@@ -1,5 +1,13 @@
 # @modular-prompt/process
 
+## 0.3.6
+
+### Patch Changes
+
+- 17f3a50: \_\_register_tasks で不正な taskType をツールエラーとして返し、モデルにリトライの機会を与えるバリデーションを追加
+- Updated dependencies [17f3a50]
+  - @modular-prompt/driver@0.10.5
+
 ## 0.3.5
 
 ### Patch Changes
