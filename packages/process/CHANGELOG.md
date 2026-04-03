@@ -1,5 +1,15 @@
 # @modular-prompt/process
 
+## 0.4.0
+
+### Minor Changes
+
+- 9c48e56: toolAgentProcess ワークフローを追加。外部からツール（定義+ハンドラー）を渡してエージェントループを実行するシンプルなワークフロー。ToolSpec/ToolCallLog 型を共有型に移動。
+
+### Patch Changes
+
+- c954f60: toolAgentProcess: 毎ターン re-compile + handler に context を渡す拡張。ToolAgentContext 型を追加し、ToolSpec の handler シグネチャに context 引数を追加。
+
 ## 0.3.9
 
 ### Patch Changes
