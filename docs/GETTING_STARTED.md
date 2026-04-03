@@ -392,6 +392,25 @@ async function extractInfo(text: string) {
 }
 ```
 
+## エラーハンドリング
+
+クエリ結果の `finishReason` と `errors` でエラーを検出・詳細確認できます：
+
+```typescript
+const result = await driver.query(compiled);
+
+if (result.finishReason === 'error') {
+  // エラーの詳細を確認
+  for (const err of result.errors ?? []) {
+    console.error(err.message);
+  }
+} else {
+  console.log(result.content);
+}
+```
+
+より詳細なエラー情報については [Driver API](./DRIVER_API.md) の QueryResult セクションを参照してください。
+
 ## ローカルモデルの使用
 
 ```typescript

@@ -593,6 +593,35 @@ if (process.env.NODE_ENV === 'test') {
 }
 ```
 
+### 7. QueryLogger（ドライバー実装用）
+
+`QueryLogger` は Logger の accumulate 機能を活用し、クエリ実行中のログをスコープして `QueryResult` に付与するヘルパーです。
+
+```typescript
+import { QueryLogger } from '@modular-prompt/driver';
+
+class MyDriver implements AIDriver {
+  private queryLogger = new QueryLogger('MyDriver');
+
+  async query(prompt, options) {
+    this.queryLogger.mark();  // クエリ開始を記録
+    try {
+      const result = await callApi(prompt);
+      return { ...result, ...this.queryLogger.collect() };
+    } catch (error) {
+      this.queryLogger.log.error('Query error:', error.message);
+      return { content: '', finishReason: 'error', ...this.queryLogger.collect() };
+    }
+  }
+}
+```
+
+- `mark()`: ログ収集の開始時刻をリセット
+- `log`: 内部の Logger インスタンスへのアクセス（`error()`, `warn()`, `info()` 等）
+- `collect()`: `mark()` 以降のログエントリを `{ logEntries?, errors? }` として返却
+
+詳細は [Driver APIリファレンス](./DRIVER_API.md) のドライバー実装者向けログ規約を参照してください。
+
 ## 設定とベストプラクティス
 
 ### 1. 環境別ログレベル設定
