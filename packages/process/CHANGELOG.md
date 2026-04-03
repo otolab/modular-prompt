@@ -1,5 +1,13 @@
 # @modular-prompt/process
 
+## 0.4.1
+
+### Patch Changes
+
+- 507daea: fix: queryWithTools で外部ツール混在時の function call/response 数不一致を修正
+- Updated dependencies [507daea]
+  - @modular-prompt/driver@0.11.1
+
 ## 0.4.0
 
 ### Minor Changes

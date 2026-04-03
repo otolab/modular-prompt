@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.11.1
+
+### Patch Changes
+
+- 507daea: fix: VertexAI ドライバで candidate.content.parts が undefined の場合のクラッシュを修正
+
 ## 0.11.0
 
 ### Minor Changes
