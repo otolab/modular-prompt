@@ -286,8 +286,12 @@ export async function processWorkflow(
   return {
     output: result.content,
     context: updatedContext,
+    consumedUsage: result.usage,        // 全クエリの合計（単一クエリの場合は同値）
+    responseUsage: result.usage,        // 最終応答のusage
+    logEntries: result.logEntries,      // クエリ実行中のログエントリ
+    errors: result.errors,              // エラーレベルのログエントリ
     metadata: {
-      usage: result.usage
+      // 追加のメタデータがあればここに配置
     }
   };
 }
@@ -302,7 +306,59 @@ export async function processWorkflow(
 
 役割に応じたドライバーを解決するには、`resolveDriver(input, role)` ヘルパーを使用します。未指定の役割は自動的に `default` にフォールバックします。
 
-### ステップ4: 使用例
+### ステップ4: WorkflowResultの構造
+
+ワークフロー関数は以下の構造を持つ `WorkflowResult<TContext>` を返します：
+
+```typescript
+interface WorkflowResult<TContext> {
+  output: string;              // 最終的な出力テキスト
+  context: TContext;           // 更新されたContext（継続可能な状態）
+  
+  // Usage情報（v0.13.0以降）
+  consumedUsage?: {            // 全query()呼び出しの合計（リトライ含む）= 実コスト
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  responseUsage?: {            // 最終応答のusage = メッセージサイズの目安
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  
+  // ログ情報（v0.13.0以降）
+  logEntries?: LogEntry[];     // ワークフロー実行中の全ログエントリ
+  errors?: LogEntry[];         // エラーレベルのログエントリ
+  
+  // その他のメタデータ
+  metadata?: {
+    iterations?: number;       // イテレーション数（streamProcessなど）
+    [key: string]: any;        // ワークフロー固有のメタデータ
+  };
+}
+```
+
+**usageの2分類**:
+- `consumedUsage`: 全query()呼び出しの合計（リトライ含む）。実際のコスト把握に使用。
+- `responseUsage`: 最終応答のusage。メッセージサイズの目安として使用。
+
+**ログ情報**:
+- `logEntries`: クエリ実行中に記録されたすべてのログエントリ（info, warn, error等）
+- `errors`: エラーレベルのログエントリのみ抽出したもの
+
+各ワークフローでのusageの扱い:
+
+| ワークフロー | consumedUsage | responseUsage |
+|---|---|---|
+| defaultProcess | 単一クエリ（responseUsageと同値） | 単一クエリのusage |
+| streamProcess | 全イテレーション合計 | 最終イテレーションのusage |
+| concatProcess | 全チャンク合計 | 最終チャンクのusage |
+| dialogueProcess | two-pass合計 / single | 最終パスのusage |
+| summarizeProcess | analysis+summary合計 | 最終バッチのusage |
+| agenticProcess | 全タスク合計（リトライ含む） | 最終タスクのusage |
+
+### ステップ5: 使用例
 
 ```typescript
 import { merge, createContext } from '@modular-prompt/core';

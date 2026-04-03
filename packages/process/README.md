@@ -67,6 +67,8 @@ const result = await defaultProcess(
 );
 
 console.log(result.output);  // AIの応答
+console.log(result.consumedUsage);  // 実際に消費したトークン数（コスト把握用）
+console.log(result.responseUsage);  // 最終応答のトークン数（メッセージサイズ目安）
 ```
 
 ### チャンク処理
@@ -138,7 +140,9 @@ const result = await agenticProcess(driver, userModule, context, {
 });
 
 console.log(result.output);  // 最終的な献立提案
-console.log(result.metadata); // { planTasks, executedTasks, toolCallsUsed, finishReason }
+console.log(result.metadata); // { planTasks, executedTasks, toolCallsUsed, finishReason, iterations }
+console.log(result.consumedUsage); // 全タスク実行の合計usage（リトライ含む）
+console.log(result.responseUsage); // 最終タスクのusage
 ```
 
 ### 外部ツールの使用
@@ -180,6 +184,41 @@ if (result.metadata.finishReason === 'tool_calls') {
   console.log(result.context.executionLog);
 }
 ```
+
+## WorkflowResult型
+
+すべてのワークフロー関数は以下の型を返します：
+
+```typescript
+interface WorkflowResult<TContext> {
+  output: string;              // 最終的な出力テキスト
+  context: TContext;           // 更新されたContext（継続可能な状態）
+  
+  // Usage情報
+  consumedUsage?: {            // 全query()呼び出しの合計（リトライ含む）= 実コスト
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  responseUsage?: {            // 最終応答のusage = メッセージサイズの目安
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  
+  // ログ情報
+  logEntries?: LogEntry[];     // ワークフロー実行中の全ログエントリ
+  errors?: LogEntry[];         // エラーレベルのログエントリ
+  
+  // その他のメタデータ
+  metadata?: {
+    iterations?: number;       // イテレーション数（streamProcessなど）
+    [key: string]: any;        // ワークフロー固有のメタデータ
+  };
+}
+```
+
+詳細は [プロセスモジュールガイド](../docs/PROCESS_MODULE_GUIDE.md) を参照してください。
 
 ## 開発者向けドキュメント
 
