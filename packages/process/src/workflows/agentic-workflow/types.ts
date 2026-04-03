@@ -1,5 +1,6 @@
 import type { ToolDefinition, QueryResult, ToolCall } from '@modular-prompt/driver';
 import type { ResolvedModule } from '@modular-prompt/core';
+import type { LogEntry } from '@modular-prompt/utils';
 import type { ModelRole } from '../driver-input.js';
 
 // ---------------------------------------------------------------------------
@@ -101,7 +102,14 @@ export interface AgenticTaskExecutionLog {
   toolCallLog?: ToolCallLog[];
   pendingToolCalls?: ToolCall[];
   metadata?: {
-    usage?: QueryResult['usage'];
+    /** 全 query() 呼び出しの合計 usage（リトライ含む） */
+    consumedUsage?: QueryResult['usage'];
+    /** 最終クエリの usage */
+    responseUsage?: QueryResult['usage'];
+    /** 全クエリの logEntries */
+    logEntries?: LogEntry[];
+    /** エラーレベルのログエントリ */
+    errors?: LogEntry[];
   };
 }
 

@@ -1,8 +1,11 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { Logger } from '@modular-prompt/utils';
+import type { LogEntry } from '@modular-prompt/utils';
+import type { QueryResult } from '@modular-prompt/driver';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+import { aggregateUsage, aggregateLogEntries } from './usage-utils.js';
 
 const logger = new Logger({ prefix: 'process', context: 'concat' });
 
@@ -83,6 +86,10 @@ export async function concatProcess(
   // Use existing results or start fresh
   const results: string[] = context.results ? [...context.results] : [];
   let processedCount = context.processedCount || 0;
+  const allUsages: (QueryResult['usage'] | undefined)[] = [];
+  const allLogEntries: (LogEntry[] | undefined)[] = [];
+  const allErrors: (LogEntry[] | undefined)[] = [];
+  let lastUsage: QueryResult['usage'] | undefined;
 
   // Calculate starting point based on processed count
   const startIndex = processedCount;
@@ -102,7 +109,7 @@ export async function concatProcess(
       try {
         const result = await resolveDriver(driver, 'default').query(prompt);
         logger.verbose('[output]', result.content);
-        
+
         // Check finish reason for dynamic failures
         if (result.finishReason && result.finishReason !== 'stop') {
           throw new WorkflowExecutionError(
@@ -119,8 +126,8 @@ export async function concatProcess(
             }
           );
         }
-        
-        return result.content;
+
+        return result;
       } catch (error) {
         // If it's already a WorkflowExecutionError, re-throw
         if (error instanceof WorkflowExecutionError) {
@@ -137,8 +144,14 @@ export async function concatProcess(
       }
     });
 
-    const parallelResults = await Promise.all(promises);
-    results.push(...parallelResults);
+    const parallelQueryResults = await Promise.all(promises);
+    for (const qr of parallelQueryResults) {
+      results.push(qr.content);
+      allUsages.push(qr.usage);
+      allLogEntries.push(qr.logEntries);
+      allErrors.push(qr.errors);
+      lastUsage = qr.usage;
+    }
     processedCount = context.chunks.length;
   } else {
     // Process chunks sequentially, possibly in batches
@@ -176,6 +189,10 @@ export async function concatProcess(
         }
         
         results.push(queryResult.content);
+        allUsages.push(queryResult.usage);
+        allLogEntries.push(queryResult.logEntries);
+        allErrors.push(queryResult.errors);
+        lastUsage = queryResult.usage;
         processedCount = startIndex + i + batch.length;
       } catch (error) {
         // If it's already a WorkflowExecutionError, re-throw
@@ -208,6 +225,10 @@ export async function concatProcess(
   return {
     output,
     context: finalContext,
+    consumedUsage: aggregateUsage(allUsages),
+    responseUsage: lastUsage,
+    logEntries: aggregateLogEntries(allLogEntries),
+    errors: aggregateLogEntries(allErrors),
     metadata: {
       chunksProcessed: processedCount,
       resultsCount: results.length,

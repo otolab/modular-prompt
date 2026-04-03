@@ -1,6 +1,7 @@
 // Re-export types from driver package
 export type { AIDriver, QueryResult, FinishReason } from '@modular-prompt/driver';
 import type { FinishReason } from '@modular-prompt/driver';
+import type { LogEntry } from '@modular-prompt/utils';
 
 /**
  * Result of workflow execution
@@ -8,9 +9,16 @@ import type { FinishReason } from '@modular-prompt/driver';
 export interface WorkflowResult<TContext> {
   output: string;
   context: TContext;  // 継続可能なコンテキスト
+  /** 全 query() 呼び出しの合計 usage（リトライ含む）= 実コスト */
+  consumedUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  /** 最終応答の usage = メッセージサイズの目安 */
+  responseUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  /** ワークフロー実行中の全ログエントリ */
+  logEntries?: LogEntry[];
+  /** エラーレベルのログエントリ */
+  errors?: LogEntry[];
   metadata?: {
     iterations?: number;
-    tokensUsed?: number;
     [key: string]: any;
   };
 }
