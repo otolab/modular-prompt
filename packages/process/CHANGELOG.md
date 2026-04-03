@@ -1,5 +1,12 @@
 # @modular-prompt/process
 
+## 0.3.9
+
+### Patch Changes
+
+- c23d67e: WorkflowResult の consumedUsage/responseUsage/logEntries/errors フィールドおよび aggregateUsage/aggregateLogEntries ユーティリティのドキュメントを追加。
+- 81f859b: WorkflowResult に consumedUsage/responseUsage/logEntries/errors フィールドを追加。全ワークフローでドライバーのログ・usage 情報を伝搬するように改善。
+
 ## 0.3.8
 
 ### Patch Changes
