@@ -204,6 +204,71 @@ const answers = await answerMultipleQuestions([
 console.log('回答:\n', answers);
 ```
 
+### ツールを使ったエージェント処理
+
+toolAgentProcessワークフローを使って、AIモデルにツールを渡し、自律的にツール呼び出し→結果取得→判断を繰り返させる：
+
+```typescript
+import { toolAgentProcess } from '@modular-prompt/process';
+import type { ToolSpec } from '@modular-prompt/process';
+
+// ツール定義（AIに渡す定義 + 実行ハンドラー）
+const tools: ToolSpec[] = [
+  {
+    definition: {
+      name: 'search',
+      description: 'ドキュメントを検索する',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '検索クエリ' },
+        },
+        required: ['query'],
+      },
+    },
+    handler: async (args) => {
+      const results = await mySearchAPI.search(args.query as string);
+      return results;
+    },
+  },
+  {
+    definition: {
+      name: 'get_document',
+      description: 'ドキュメントの全文を取得する',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'ドキュメントID' },
+        },
+        required: ['id'],
+      },
+    },
+    handler: async (args) => {
+      return await mySearchAPI.getDocument(args.id as string);
+    },
+  },
+];
+
+const agentModule = {
+  objective: ['質問に関連するドキュメントを検索し、回答を生成する'],
+  instructions: [
+    '質問を分析し、必要な情報を特定する',
+    'ツールを使って情報を収集する',
+    '収集した情報をもとに回答を生成する',
+  ],
+};
+
+const result = await toolAgentProcess(driver, agentModule, {}, {
+  tools,
+  maxTurns: 10,   // ツール呼び出しループの最大ターン数
+});
+
+console.log(result.output);
+console.log(result.metadata?.toolCallLog); // ツール呼び出し履歴
+```
+
+agenticProcessとの違い：agenticProcessはplanning→タスクシーケンス→outputの多段ワークフローだが、toolAgentProcessは単一モデル+ツールループのみのシンプルな構成。
+
 ### 資料を使った処理
 
 ```typescript

@@ -357,6 +357,7 @@ interface WorkflowResult<TContext> {
 | dialogueProcess | two-pass合計 / single | 最終パスのusage |
 | summarizeProcess | analysis+summary合計 | 最終バッチのusage |
 | agenticProcess | 全タスク合計（リトライ含む） | 最終タスクのusage |
+| toolAgentProcess | 全ターン合計（ツール実行ループ含む） | 最終ターンのusage |
 
 ### ステップ5: 使用例
 
