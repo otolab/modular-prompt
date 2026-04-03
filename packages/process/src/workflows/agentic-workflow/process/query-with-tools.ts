@@ -182,20 +182,21 @@ export async function queryWithTools(
     const hasInvalidCalls = invalidCalls.length > 0;
     const hasErrors = hasBuiltinErrors || hasInvalidCalls;
 
-    // No errors: return normally
+    // External tool calls exist → return them as pending (regardless of errors).
+    // Retrying with external calls would cause function call/response count mismatch
+    // because external results are not available yet.
+    if (validExternalCalls.length > 0) {
+      return buildResult(content, queryResult, { pendingToolCalls: validExternalCalls });
+    }
+
+    // No external calls, no errors → return normally
     if (!hasErrors) {
-      if (validExternalCalls.length > 0) {
-        return buildResult(content, queryResult, { pendingToolCalls: validExternalCalls });
-      }
       return buildResult(content, queryResult);
     }
 
     // Errors exist but no retries left → return what we have
     if (retryCount >= maxRetries) {
       qLogger.info('[retry:exhausted]', `gave up after ${maxRetries} retries`);
-      if (validExternalCalls.length > 0) {
-        return buildResult(content, queryResult, { pendingToolCalls: validExternalCalls });
-      }
       return buildResult(content, queryResult);
     }
 

@@ -580,14 +580,15 @@ export class VertexAIDriver implements AIDriver {
           ...this.queryLogger.collect()
         };
       }
-      
-      // Extract text content
-      const content = candidate.content.parts
+
+      // Extract text content (parts may be undefined)
+      const parts = candidate.content.parts || [];
+      const content = parts
         .map(part => part.text || '')
         .join('');
 
       // Extract tool calls
-      const toolCalls = this.extractToolCalls(candidate.content.parts as Part[]);
+      const toolCalls = this.extractToolCalls(parts as Part[]);
 
       // Map finish reason
       let finishReason = finishReasonMap[candidate.finishReason || 'error'];
@@ -699,13 +700,14 @@ export class VertexAIDriver implements AIDriver {
         };
       }
 
-      // Extract text content
-      const content = candidate.content.parts
+      // Extract text content (parts may be undefined)
+      const parts = candidate.content.parts || [];
+      const content = parts
         .map(part => part.text || '')
         .join('');
 
       // Extract tool calls
-      const toolCalls = this.extractToolCalls(candidate.content.parts as Part[]);
+      const toolCalls = this.extractToolCalls(parts as Part[]);
 
       // Map finish reason
       let finishReason = finishReasonMap[candidate.finishReason || 'error'];
