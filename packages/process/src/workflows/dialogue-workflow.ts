@@ -1,7 +1,6 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { Logger } from '@modular-prompt/utils';
-import type { LogEntry } from '@modular-prompt/utils';
 import type { QueryResult } from '@modular-prompt/driver';
 import {
   firstOfTwoPassResponse,
