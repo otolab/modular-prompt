@@ -15,6 +15,7 @@ import type { PromptModule, ResolvedModule, ResolvedSectionContent } from '@modu
 import type { FinishReason } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
 import type { WorkflowResult } from '../types.js';
+import { aggregateUsage, aggregateLogEntries } from '../usage-utils.js';
 import type {
   AgenticWorkflowContext,
   AgenticWorkflowOptions,
@@ -192,7 +193,10 @@ async function executeTask(
       toolCallLog: result.toolCallLog.length > 0 ? result.toolCallLog : undefined,
       pendingToolCalls: result.pendingToolCalls,
       metadata: {
-        usage: result.usage,
+        consumedUsage: result.consumedUsage,
+        responseUsage: result.responseUsage,
+        logEntries: result.logEntries,
+        errors: result.errors,
       },
     };
   } catch (error) {
@@ -341,12 +345,15 @@ export async function agenticProcess<T>(
       taskList,
       executionLog,
     },
+    consumedUsage: aggregateUsage(executionLog.map(l => l.metadata?.consumedUsage)),
+    responseUsage: lastLog?.metadata?.responseUsage,
+    logEntries: aggregateLogEntries(executionLog.map(l => l.metadata?.logEntries)),
+    errors: aggregateLogEntries(executionLog.map(l => l.metadata?.errors)),
     metadata: {
       planTasks: taskList.length,
       executedTasks: executionLog.length,
       toolCallsUsed: totalToolCalls,
       finishReason,
-      usage: lastLog?.metadata?.usage,
     },
   };
 }

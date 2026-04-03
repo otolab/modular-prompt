@@ -10,11 +10,13 @@ import type { ToolCall, ToolResultMessageElement, StandardMessageElement, Resolv
 import { distribute } from '@modular-prompt/core';
 import type { ToolChoice, FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
+import type { LogEntry } from '@modular-prompt/utils';
 import { WorkflowExecutionError } from '../../types.js';
 import type { AIDriver } from '../../types.js';
 import type { QueryResult } from '@modular-prompt/driver';
 import type { ToolSpec, ToolCallLog } from '../types.js';
 import { isBuiltinTool } from './builtin-tools.js';
+import { aggregateUsage, aggregateLogEntries } from '../../usage-utils.js';
 
 const logger = new Logger({ prefix: 'process', context: 'agentic' });
 
@@ -69,8 +71,15 @@ export interface QueryWithToolsResult {
   toolCallLog: ToolCallLog[];
   /** External tool calls that the LLM requested (not executed) */
   pendingToolCalls?: ToolCall[];
-  usage?: QueryResult['usage'];
+  /** 全 query() 呼び出しの合計 usage（リトライ含む） */
+  consumedUsage?: QueryResult['usage'];
+  /** 最終クエリの usage */
+  responseUsage?: QueryResult['usage'];
   finishReason?: FinishReason;
+  /** 全クエリの logEntries をフラット化 */
+  logEntries?: LogEntry[];
+  /** 全クエリの errors をフラット化 */
+  errors?: LogEntry[];
 }
 
 /**
@@ -105,6 +114,25 @@ export async function queryWithTools(
   };
 
   let retryCount = 0;
+  const allUsages: (QueryResult['usage'] | undefined)[] = [];
+  const allLogEntries: (LogEntry[] | undefined)[] = [];
+  const allErrors: (LogEntry[] | undefined)[] = [];
+
+  const buildResult = (content: string, lastResult: QueryResult, extra?: Partial<QueryWithToolsResult>): QueryWithToolsResult => {
+    allUsages.push(lastResult.usage);
+    allLogEntries.push(lastResult.logEntries);
+    allErrors.push(lastResult.errors);
+    return {
+      content,
+      toolCallLog,
+      consumedUsage: aggregateUsage(allUsages),
+      responseUsage: lastResult.usage,
+      finishReason: lastResult.finishReason,
+      logEntries: aggregateLogEntries(allLogEntries),
+      errors: aggregateLogEntries(allErrors),
+      ...extra,
+    };
+  };
 
   while (true) {
     const queryResult = await driver.query(prompt, queryOptions);
@@ -114,7 +142,7 @@ export async function queryWithTools(
 
     // No tool calls → return
     if (!queryResult.toolCalls || queryResult.toolCalls.length === 0) {
-      return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+      return buildResult(content, queryResult);
     }
 
     // Log tool calls
@@ -157,27 +185,24 @@ export async function queryWithTools(
     // No errors: return normally
     if (!hasErrors) {
       if (validExternalCalls.length > 0) {
-        return {
-          content, toolCallLog,
-          pendingToolCalls: validExternalCalls,
-          usage: queryResult.usage, finishReason: queryResult.finishReason,
-        };
+        return buildResult(content, queryResult, { pendingToolCalls: validExternalCalls });
       }
-      return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+      return buildResult(content, queryResult);
     }
 
     // Errors exist but no retries left → return what we have
     if (retryCount >= maxRetries) {
       qLogger.info('[retry:exhausted]', `gave up after ${maxRetries} retries`);
       if (validExternalCalls.length > 0) {
-        return {
-          content, toolCallLog,
-          pendingToolCalls: validExternalCalls,
-          usage: queryResult.usage, finishReason: queryResult.finishReason,
-        };
+        return buildResult(content, queryResult, { pendingToolCalls: validExternalCalls });
       }
-      return { content, toolCallLog, usage: queryResult.usage, finishReason: queryResult.finishReason };
+      return buildResult(content, queryResult);
     }
+
+    // Accumulate intermediate usage/logEntries before retry
+    allUsages.push(queryResult.usage);
+    allLogEntries.push(queryResult.logEntries);
+    allErrors.push(queryResult.errors);
 
     // Retry: append assistant message + tool results to prompt.output
     retryCount++;
