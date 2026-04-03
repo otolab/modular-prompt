@@ -2,17 +2,27 @@
 export type { AIDriver, QueryResult, FinishReason } from '@modular-prompt/driver';
 import type { FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import type { LogEntry } from '@modular-prompt/utils';
+import type { MessageElement } from '@modular-prompt/core';
 
 // ---------------------------------------------------------------------------
 // Tool types (shared across workflows)
 // ---------------------------------------------------------------------------
 
 /**
+ * toolAgentProcess が要求する最小限のコンテキスト形状。
+ * ユーザーは自身の Context 型でこれを extends する。
+ */
+export interface ToolAgentContext {
+  /** 会話履歴（assistant メッセージ + tool result）。toolAgentProcess が自動的に蓄積する。 */
+  messages?: MessageElement[];
+}
+
+/**
  * Tool specification: definition for AI + handler for execution
  */
-export interface ToolSpec {
+export interface ToolSpec<TContext = any> {
   definition: ToolDefinition;
-  handler: (args: Record<string, unknown>) => Promise<unknown>;
+  handler: (args: Record<string, unknown>, context: TContext) => Promise<unknown>;
 }
 
 /**
