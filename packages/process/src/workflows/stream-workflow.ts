@@ -1,10 +1,13 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { Logger } from '@modular-prompt/utils';
+import type { LogEntry } from '@modular-prompt/utils';
+import type { QueryResult } from '@modular-prompt/driver';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { streamProcessing } from '../modules/stream-processing.js';
 import type { StreamProcessingContext } from '../modules/stream-processing.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+import { aggregateUsage, aggregateLogEntries } from './usage-utils.js';
 
 const logger = new Logger({ prefix: 'process', context: 'stream' });
 
@@ -98,9 +101,14 @@ export async function streamProcess(
     usage: 0
   };
 
+  const allUsages: (QueryResult['usage'] | undefined)[] = [];
+  const allLogEntries: (LogEntry[] | undefined)[] = [];
+  const allErrors: (LogEntry[] | undefined)[] = [];
+  let lastUsage: QueryResult['usage'] | undefined;
+
   // Calculate initial range
   let range = getNextRange(context.chunks, context.range, { tokenLimit, maxChunk });
-  
+
   while (range) {
     const iterationContext: StreamProcessingContext = {
       ...context,
@@ -137,6 +145,10 @@ export async function streamProcess(
       
       nextStateContent = result.content;
       nextStateUsage = result.usage?.completionTokens || estimateTokens(result.content);
+      allUsages.push(result.usage);
+      allLogEntries.push(result.logEntries);
+      allErrors.push(result.errors);
+      lastUsage = result.usage;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -173,6 +185,10 @@ export async function streamProcess(
   return {
     output: state.content,
     context: finalContext,
+    consumedUsage: aggregateUsage(allUsages),
+    responseUsage: lastUsage,
+    logEntries: aggregateLogEntries(allLogEntries),
+    errors: aggregateLogEntries(allErrors),
     metadata: {
       finalTokens: state.usage,
       targetTokens

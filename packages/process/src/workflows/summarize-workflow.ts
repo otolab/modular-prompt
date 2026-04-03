@@ -1,10 +1,13 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { Logger } from '@modular-prompt/utils';
+import type { LogEntry } from '@modular-prompt/utils';
+import type { QueryResult } from '@modular-prompt/driver';
 import { streamProcessing } from '../modules/stream-processing.js';
 import { analyzeForSummary, contentSummarize } from '../modules/summarize.js';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+import { aggregateUsage, aggregateLogEntries } from './usage-utils.js';
 
 const logger = new Logger({ prefix: 'process', context: 'summarize' });
 
@@ -68,6 +71,10 @@ export async function summarizeProcess(
   
   let currentContext = { ...context };
   let analysisReport = currentContext.analysisReport || '';
+  const allUsages: (QueryResult['usage'] | undefined)[] = [];
+  const allLogEntries: (LogEntry[] | undefined)[] = [];
+  const allErrors: (LogEntry[] | undefined)[] = [];
+  let lastUsage: QueryResult['usage'] | undefined;
   
   // Require chunks to be provided by caller
   if (!currentContext.chunks || currentContext.chunks.length === 0) {
@@ -114,6 +121,10 @@ export async function summarizeProcess(
         }
         
         analysisState = queryResult.content;
+        allUsages.push(queryResult.usage);
+        allLogEntries.push(queryResult.logEntries);
+        allErrors.push(queryResult.errors);
+        lastUsage = queryResult.usage;
       } catch (error) {
         // If it's already a WorkflowExecutionError, re-throw
         if (error instanceof WorkflowExecutionError) {
@@ -191,6 +202,10 @@ export async function summarizeProcess(
       }
       
       summaryState = queryResult.content;
+      allUsages.push(queryResult.usage);
+      allLogEntries.push(queryResult.logEntries);
+      allErrors.push(queryResult.errors);
+      lastUsage = queryResult.usage;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -230,6 +245,10 @@ export async function summarizeProcess(
   return {
     output: summaryState,
     context: finalContext,
+    consumedUsage: aggregateUsage(allUsages),
+    responseUsage: lastUsage,
+    logEntries: aggregateLogEntries(allLogEntries),
+    errors: aggregateLogEntries(allErrors),
     metadata: {
       analysisEnabled: enableAnalysis,
       finalLength: estimateTokens(summaryState),

@@ -33,7 +33,8 @@ describe('defaultProcess', () => {
     expect(result.output).toBe('test response');
     expect(result.context).toBe(context);
     expect(result.metadata?.iterations).toBe(1);
-    expect(result.metadata?.tokensUsed).toBe(30);
+    expect(result.consumedUsage).toEqual({ promptTokens: 10, completionTokens: 20, totalTokens: 30 });
+    expect(result.responseUsage).toEqual({ promptTokens: 10, completionTokens: 20, totalTokens: 30 });
     expect(driver.query).toHaveBeenCalledTimes(1);
   });
 

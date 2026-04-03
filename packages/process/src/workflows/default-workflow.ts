@@ -41,12 +41,14 @@ export async function defaultProcess<TContext extends Record<string, any>>(
     return {
       output: result.content,
       context,
+      consumedUsage: result.usage,
+      responseUsage: result.usage,
+      logEntries: result.logEntries,
+      errors: result.errors,
       metadata: {
         iterations: 1,
-        tokensUsed: result.usage?.totalTokens,
         toolCalls: result.toolCalls,
         finishReason: result.finishReason,
-        usage: result.usage,
       },
     };
   } catch (error) {

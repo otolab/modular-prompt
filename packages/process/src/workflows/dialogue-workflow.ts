@@ -1,6 +1,7 @@
 import { compile, merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { Logger } from '@modular-prompt/utils';
+import type { QueryResult } from '@modular-prompt/driver';
 import {
   firstOfTwoPassResponse,
   secondOfTwoPassResponse,
@@ -11,6 +12,7 @@ import type { DialogueContext } from '../modules/dialogue.js';
 import type { MaterialContext } from '../modules/material.js';
 import { WorkflowExecutionError, type WorkflowResult } from './types.js';
 import { type DriverInput, resolveDriver } from './driver-input.js';
+import { aggregateUsage, aggregateLogEntries } from './usage-utils.js';
 
 const logger = new Logger({ prefix: 'process', context: 'dialogue' });
 
@@ -64,24 +66,25 @@ export async function dialogueProcess(
     logger.verbose('[prompt]', JSON.stringify(firstPassPrompt));
 
     let preparationNote: string;
+    let firstPassResult: QueryResult;
     try {
-      const queryResult = await resolveDriver(driver, 'default').query(firstPassPrompt);
-      logger.verbose('[output]', queryResult.content);
-      
+      firstPassResult = await resolveDriver(driver, 'default').query(firstPassPrompt);
+      logger.verbose('[output]', firstPassResult.content);
+
       // Check finish reason for dynamic failures
-      if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
+      if (firstPassResult.finishReason && firstPassResult.finishReason !== 'stop') {
         throw new WorkflowExecutionError(
-          `Query failed with reason: ${queryResult.finishReason}`,
+          `Query failed with reason: ${firstPassResult.finishReason}`,
           context,
           {
             phase: 'firstPass',
             partialResult: '',
-            finishReason: queryResult.finishReason
+            finishReason: firstPassResult.finishReason
           }
         );
       }
-      
-      preparationNote = queryResult.content;
+
+      preparationNote = firstPassResult.content;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -106,24 +109,25 @@ export async function dialogueProcess(
     logger.verbose('[prompt]', JSON.stringify(secondPassPrompt));
 
     let response: string;
+    let secondPassResult: QueryResult;
     try {
-      const queryResult = await resolveDriver(driver, 'default').query(secondPassPrompt);
-      logger.verbose('[output]', queryResult.content);
-      
+      secondPassResult = await resolveDriver(driver, 'default').query(secondPassPrompt);
+      logger.verbose('[output]', secondPassResult.content);
+
       // Check finish reason for dynamic failures
-      if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
+      if (secondPassResult.finishReason && secondPassResult.finishReason !== 'stop') {
         throw new WorkflowExecutionError(
-          `Query failed with reason: ${queryResult.finishReason}`,
+          `Query failed with reason: ${secondPassResult.finishReason}`,
           updatedContext,
           {
             phase: 'secondPass',
             partialResult: preparationNote,
-            finishReason: queryResult.finishReason
+            finishReason: secondPassResult.finishReason
           }
         );
       }
-      
-      response = queryResult.content;
+
+      response = secondPassResult.content;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -150,6 +154,10 @@ export async function dialogueProcess(
     return {
       output: response,
       context: finalContext,
+      consumedUsage: aggregateUsage([firstPassResult.usage, secondPassResult.usage]),
+      responseUsage: secondPassResult.usage,
+      logEntries: aggregateLogEntries([firstPassResult.logEntries, secondPassResult.logEntries]),
+      errors: aggregateLogEntries([firstPassResult.errors, secondPassResult.errors]),
       metadata: {
         twoPass: true,
         preparationNoteLength: preparationNote.length
@@ -161,24 +169,25 @@ export async function dialogueProcess(
     logger.verbose('[prompt]', JSON.stringify(prompt));
 
     let response: string;
+    let singlePassResult: QueryResult;
     try {
-      const queryResult = await resolveDriver(driver, 'default').query(prompt);
-      logger.verbose('[output]', queryResult.content);
-      
+      singlePassResult = await resolveDriver(driver, 'default').query(prompt);
+      logger.verbose('[output]', singlePassResult.content);
+
       // Check finish reason for dynamic failures
-      if (queryResult.finishReason && queryResult.finishReason !== 'stop') {
+      if (singlePassResult.finishReason && singlePassResult.finishReason !== 'stop') {
         throw new WorkflowExecutionError(
-          `Query failed with reason: ${queryResult.finishReason}`,
+          `Query failed with reason: ${singlePassResult.finishReason}`,
           context,
           {
             phase: 'singlePass',
             partialResult: '',
-            finishReason: queryResult.finishReason
+            finishReason: singlePassResult.finishReason
           }
         );
       }
-      
-      response = queryResult.content;
+
+      response = singlePassResult.content;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -205,6 +214,10 @@ export async function dialogueProcess(
     return {
       output: response,
       context: finalContext,
+      consumedUsage: singlePassResult.usage,
+      responseUsage: singlePassResult.usage,
+      logEntries: singlePassResult.logEntries,
+      errors: singlePassResult.errors,
       metadata: {
         twoPass: false
       }
