@@ -759,7 +759,67 @@ setInterval(() => logger.flush(), 5000);
   - `packages/experiment/src/run-comparison.ts` - 実験フレームワーク
   - `packages/simple-chat/src/cli.ts` - チャットCLI
 
+## Usage集計ユーティリティ
+
+`@modular-prompt/process` パッケージは、複数のクエリやタスクのusage情報を集計するためのユーティリティ関数を提供します。
+
+### aggregateUsage()
+
+複数の usage オブジェクトを合算します。リトライや複数タスクのusageを集計する際に使用します。
+
+```typescript
+import { aggregateUsage } from '@modular-prompt/process/workflows/usage-utils';
+
+const usage1 = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+const usage2 = { promptTokens: 200, completionTokens: 80, totalTokens: 280 };
+
+const total = aggregateUsage([usage1, usage2]);
+// { promptTokens: 300, completionTokens: 130, totalTokens: 430 }
+
+// undefined は無視される
+const partialTotal = aggregateUsage([usage1, undefined, usage2]);
+// { promptTokens: 300, completionTokens: 130, totalTokens: 430 }
+
+// すべて undefined の場合は undefined を返す
+const noUsage = aggregateUsage([undefined, undefined]);
+// undefined
+```
+
+### aggregateLogEntries()
+
+複数の LogEntry 配列をフラット化します。全タスク・全クエリのログを1つの配列にまとめる際に使用します。
+
+```typescript
+import { aggregateLogEntries } from '@modular-prompt/process/workflows/usage-utils';
+
+const logs1 = [
+  { level: 'info', message: 'Task 1 started', timestamp: '...' },
+  { level: 'info', message: 'Task 1 completed', timestamp: '...' }
+];
+const logs2 = [
+  { level: 'info', message: 'Task 2 started', timestamp: '...' }
+];
+
+const allLogs = aggregateLogEntries([logs1, logs2]);
+// [
+//   { level: 'info', message: 'Task 1 started', ... },
+//   { level: 'info', message: 'Task 1 completed', ... },
+//   { level: 'info', message: 'Task 2 started', ... }
+// ]
+
+// undefined は無視される
+const partialLogs = aggregateLogEntries([logs1, undefined]);
+// logs1 のコピー
+
+// すべて undefined の場合は undefined を返す
+const noLogs = aggregateLogEntries([undefined, undefined]);
+// undefined
+```
+
+**実装ファイル**: `packages/process/src/workflows/usage-utils.ts`
+
 ## 関連ドキュメント
 
 - [Architecture](./ARCHITECTURE.md) - システム全体のアーキテクチャ
 - [Driver API](./DRIVER_API.md) - ドライバAPIの詳細
+- [Process Module Guide](./PROCESS_MODULE_GUIDE.md) - WorkflowResultの詳細
