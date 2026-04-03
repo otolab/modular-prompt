@@ -14,7 +14,7 @@ import type { ToolResultMessageElement, StandardMessageElement } from '@modular-
 import type { ToolChoice, QueryResult } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
 import type { LogEntry } from '@modular-prompt/utils';
-import { WorkflowExecutionError, type WorkflowResult, type ToolSpec, type ToolCallLog } from './types.js';
+import { WorkflowExecutionError, type WorkflowResult, type ToolSpec, type ToolCallLog, type ToolAgentContext } from './types.js';
 import { type DriverInput, type ModelRole, resolveDriver } from './driver-input.js';
 import { aggregateUsage, aggregateLogEntries } from './usage-utils.js';
 
@@ -43,7 +43,7 @@ export interface ToolAgentOptions {
  * they are executed and the results are fed back. This continues until
  * the model produces output without tool calls or maxTurns is reached.
  */
-export async function toolAgentProcess<TContext extends Record<string, any>>(
+export async function toolAgentProcess<TContext extends ToolAgentContext & Record<string, any>>(
   driver: DriverInput,
   module: PromptModule<TContext>,
   context: TContext,
@@ -59,9 +59,13 @@ export async function toolAgentProcess<TContext extends Record<string, any>>(
   const toolDefs = tools.map(t => t.definition);
   const toolMap = new Map(tools.map(t => [t.definition.name, t]));
 
+  // 会話履歴を context に蓄積する（未定義なら初期化）
+  if (!context.messages) {
+    context.messages = [];
+  }
+
   try {
     logger.info('[start] tool-agent workflow');
-    const prompt = compile(module, context);
     const queryOptions = {
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       toolChoice: options.toolChoice ?? 'auto' as ToolChoice,
@@ -77,6 +81,11 @@ export async function toolAgentProcess<TContext extends Record<string, any>>(
     while (turn < maxTurns) {
       turn++;
       logger.info(`[turn ${turn}/${maxTurns}]`);
+
+      // 毎ターン re-compile: context の変化が prompt に反映される
+      const prompt = compile(module, context);
+      // context.messages を prompt.output に展開
+      prompt.output.push(...context.messages);
 
       const result = await resolvedDriver.query(prompt, queryOptions);
       const content = result.content || '';
@@ -123,7 +132,7 @@ export async function toolAgentProcess<TContext extends Record<string, any>>(
           continue;
         }
         try {
-          const toolResult = await spec.handler(tc.arguments);
+          const toolResult = await spec.handler(tc.arguments, context);
           logger.info('[tool:result]', tc.name, toolResult);
           toolResults.push({
             type: 'message', role: 'tool', toolCallId: tc.id, name: tc.name,
@@ -146,12 +155,12 @@ export async function toolAgentProcess<TContext extends Record<string, any>>(
       allLogEntries.push(result.logEntries);
       allErrors.push(result.errors);
 
-      // Append assistant + tool results for next turn
+      // 会話履歴を context に蓄積（次の compile で反映される）
       const assistantMessage: StandardMessageElement = {
         type: 'message', role: 'assistant', content,
         toolCalls: result.toolCalls,
       };
-      prompt.output.push(assistantMessage, ...toolResults);
+      context.messages.push(assistantMessage, ...toolResults);
 
       // After first turn, ensure toolChoice is auto
       queryOptions.toolChoice = 'auto';

@@ -39,7 +39,7 @@ async function executeBuiltinToolCalls(
       continue;
     }
     try {
-      const result = await spec.handler(tc.arguments);
+      const result = await spec.handler(tc.arguments, {});
       logger.info('[tool:result]', tc.name, result);
       results.push({
         type: 'message', role: 'tool', toolCallId: tc.id, name: tc.name,

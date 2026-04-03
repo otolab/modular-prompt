@@ -1,9 +1,10 @@
 // Core workflow types
-export type { 
+export type {
   AIDriver,
   WorkflowResult,
   WorkflowError,
-  WorkflowExecutionError
+  WorkflowExecutionError,
+  ToolAgentContext
 } from './types.js';
 
 // Stream workflow
