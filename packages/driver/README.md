@@ -30,6 +30,30 @@ for await (const chunk of stream) {
 await driver.close();
 ```
 
+## エラーハンドリング
+
+すべてのドライバーは `QueryResult` を通じて統一されたエラー情報を提供します。
+
+```typescript
+const result = await driver.query(prompt);
+
+if (result.finishReason === 'error') {
+  // errors フィールドでエラー詳細を確認
+  if (result.errors) {
+    for (const entry of result.errors) {
+      console.error(`[${entry.prefix}] ${entry.message}`);
+    }
+  }
+}
+
+// logEntries で全レベルのログを確認可能
+if (result.logEntries) {
+  console.log(`Query produced ${result.logEntries.length} log entries`);
+}
+```
+
+詳細は [Driver APIリファレンス](../../docs/DRIVER_API.md) を参照してください。
+
 ## 利用可能なドライバー
 
 | ドライバー | プロバイダー | 備考 |
