@@ -3,26 +3,9 @@ import type { ResolvedModule } from '@modular-prompt/core';
 import type { LogEntry } from '@modular-prompt/utils';
 import type { ModelRole } from '../driver-input.js';
 
-// ---------------------------------------------------------------------------
-// Tool specification
-// ---------------------------------------------------------------------------
-
-/**
- * Tool specification: definition for AI + handler for execution
- */
-export interface ToolSpec {
-  definition: ToolDefinition;
-  handler: (args: Record<string, unknown>) => Promise<unknown>;
-}
-
-/**
- * Tool call log entry (builtin tool execution record)
- */
-export interface ToolCallLog {
-  name: string;
-  arguments: Record<string, unknown>;
-  result: unknown;
-}
+// Import shared tool types (re-exported below for backward compatibility)
+import type { ToolSpec, ToolCallLog } from '../types.js';
+export type { ToolSpec, ToolCallLog };
 
 // ---------------------------------------------------------------------------
 // Task types

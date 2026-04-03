@@ -1,7 +1,28 @@
 // Re-export types from driver package
 export type { AIDriver, QueryResult, FinishReason } from '@modular-prompt/driver';
-import type { FinishReason } from '@modular-prompt/driver';
+import type { FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import type { LogEntry } from '@modular-prompt/utils';
+
+// ---------------------------------------------------------------------------
+// Tool types (shared across workflows)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tool specification: definition for AI + handler for execution
+ */
+export interface ToolSpec {
+  definition: ToolDefinition;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * Tool call log entry
+ */
+export interface ToolCallLog {
+  name: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
 
 /**
  * Result of workflow execution

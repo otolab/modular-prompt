@@ -48,6 +48,10 @@ export type {
   TaskTypeConfig
 } from './agentic-workflow/index.js';
 
+// Tool agent workflow
+export { toolAgentProcess } from './tool-agent-workflow.js';
+export type { ToolAgentOptions } from './tool-agent-workflow.js';
+
 // Default workflow
 export { defaultProcess } from './default-workflow.js';
 export type { DefaultProcessOptions } from './default-workflow.js';
