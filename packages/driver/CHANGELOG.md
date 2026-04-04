@@ -1,5 +1,13 @@
 # @modular-prompt/driver
 
+## 0.11.3
+
+### Patch Changes
+
+- 71c44dc: fix: Gemini API の複数 functionResponse を 1 つの user メッセージにまとめるように修正
+
+  VertexAI / GoogleGenAI ドライバーで、複数の tool result（functionResponse）がそれぞれ個別の user メッセージに変換されていた問題を修正。Gemini API は 1 つの model メッセージ内の複数 functionCall に対応する functionResponse を、1 つの user メッセージにまとめる必要がある。
+
 ## 0.11.2
 
 ### Patch Changes
