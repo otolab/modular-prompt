@@ -317,10 +317,10 @@ export class GoogleGenAIDriver implements AIDriver {
     prompt: CompiledPrompt,
     options: GoogleGenAIQueryOptions = {}
   ): Promise<QueryResult> {
-    this.queryLogger.mark();
     try {
       // Merge options with defaults
       const mergedOptions = { ...this.defaultOptions, ...options };
+      this.queryLogger.mark(mergedOptions);
 
       // Convert prompt to GoogleGenAI format
       // Instructions → systemInstruction (Part[])
@@ -439,8 +439,8 @@ export class GoogleGenAIDriver implements AIDriver {
     prompt: CompiledPrompt,
     options?: GoogleGenAIQueryOptions
   ): Promise<StreamResult> {
-    this.queryLogger.mark();
     const mergedOptions = { ...this.defaultOptions, ...options };
+    this.queryLogger.mark(mergedOptions);
 
     // Convert prompt to GoogleGenAI format
     // Instructions → systemInstruction (Part[])

@@ -4,7 +4,7 @@
  * オプションパラメータの存在チェックと値の妥当性検証を行う
  */
 
-import type { MlxMlModelOptions } from './types.js';
+
 
 /**
  * バリデーション結果
@@ -13,7 +13,7 @@ export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
   warnings: ValidationWarning[];
-  validatedOptions?: MlxMlModelOptions;
+  validatedOptions?: Record<string, unknown>;
 }
 
 /**
@@ -109,7 +109,7 @@ export function validateOptions(
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
-  const validatedOptions: MlxMlModelOptions = {};
+  const validatedOptions: Record<string, unknown> = {};
 
   if (!options) {
     return { valid: true, errors: [], warnings: [], validatedOptions: undefined };

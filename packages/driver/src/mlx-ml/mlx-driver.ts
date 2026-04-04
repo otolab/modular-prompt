@@ -320,7 +320,6 @@ export class MlxDriver implements AIDriver {
     prompt: CompiledPrompt,
     options?: QueryOptions
   ): Promise<StreamResult> {
-    this.queryLogger.mark();
     await this.ensureInitialized();
 
     // Merge options (only override if explicitly provided)
@@ -330,6 +329,7 @@ export class MlxDriver implements AIDriver {
       ...(options?.temperature !== undefined && { temperature: options.temperature }),
       ...(options?.topP !== undefined && { topP: options.topP })
     };
+    this.queryLogger.mark(mlxOptions as Record<string, unknown>);
 
     // Use executeQuery for the actual stream generation
     const stream = await this.executeQuery(prompt, mlxOptions, options);
