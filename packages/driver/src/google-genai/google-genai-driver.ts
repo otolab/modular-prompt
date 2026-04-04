@@ -249,6 +249,29 @@ export class GoogleGenAIDriver implements AIDriver {
 
 
   /**
+   * Merge consecutive tool result Contents into a single user message.
+   * Gemini API requires multiple functionResponses in one user message.
+   */
+  private mergeToolResultContents(contents: Content[]): Content[] {
+    const merged: Content[] = [];
+    for (const c of contents) {
+      const prev = merged[merged.length - 1];
+      if (
+        prev &&
+        c.role === 'user' &&
+        prev.role === 'user' &&
+        c.parts?.length === 1 && c.parts[0].functionResponse &&
+        prev.parts && prev.parts.length > 0 && prev.parts[0].functionResponse
+      ) {
+        prev.parts!.push(c.parts[0]);
+      } else {
+        merged.push(c);
+      }
+    }
+    return merged;
+  }
+
+  /**
    * Convert JSON Schema to GoogleGenAI Schema format
    */
   private convertJsonSchema(schema: unknown): unknown {
@@ -329,7 +352,7 @@ export class GoogleGenAIDriver implements AIDriver {
       // Data + Output → contents (Content[])
       const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
       const contents = allDataElements.length > 0
-        ? allDataElements.map(el => this.elementToContent(el))
+        ? this.mergeToolResultContents(allDataElements.map(el => this.elementToContent(el)))
         : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
 
       // Create generation config
