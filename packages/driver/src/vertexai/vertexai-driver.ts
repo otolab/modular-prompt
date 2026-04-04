@@ -136,10 +136,16 @@ export class VertexAIDriver implements AIDriver {
               } else { // 'error'
                 response = { error: toolResultEl.value };
               }
-              result.push({
-                role: 'user',
-                parts: [{ functionResponse: { name: toolResultEl.name, response } }]
-              });
+              // Gemini API requires multiple functionResponses in a single user message
+              const prev = result[result.length - 1];
+              if (prev && prev.role === 'user' && prev.parts.length > 0 && prev.parts[0].functionResponse) {
+                prev.parts.push({ functionResponse: { name: toolResultEl.name, response } });
+              } else {
+                result.push({
+                  role: 'user',
+                  parts: [{ functionResponse: { name: toolResultEl.name, response } }]
+                });
+              }
             } else if ('toolCalls' in el && el.toolCalls) {
               const parts: Part[] = [];
               const content = contentToString(el.content);
