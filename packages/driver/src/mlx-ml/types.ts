@@ -27,14 +27,13 @@ export interface MlxMessage {
  * Python側へはmapOptionsToPythonで変換される
  */
 export interface MlxMlModelOptions {
+  mode?: import('../types.js').QueryMode;
   maxTokens?: number;
   temperature?: number;
   topP?: number;
   topK?: number;
   repetitionPenalty?: number;
   repetitionContextSize?: number;
-  // Allow string indexing for dynamic parameter access
-  [key: string]: number | undefined;
 }
 
 // Re-export from model-spec

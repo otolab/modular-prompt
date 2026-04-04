@@ -57,7 +57,7 @@ const SUPPORTED_PARAMS = new Set([
 export function mapOptionsToPython(
   options?: MlxMlModelOptions,
   strict: boolean = true
-): MlxMlModelOptions | undefined {
+): Record<string, unknown> | undefined {
   if (!options) {
     return undefined;
   }
@@ -90,7 +90,7 @@ export function mapOptionsToPython(
 
   // バリデーション済みのオプションを使用
   const validatedOptions = validationResult.validatedOptions || {};
-  const mappedOptions: MlxMlModelOptions = {};
+  const mappedOptions: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(validatedOptions)) {
     // 特殊なマッピングがある場合はそれを使用

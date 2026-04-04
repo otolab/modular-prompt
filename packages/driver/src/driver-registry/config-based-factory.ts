@@ -72,6 +72,7 @@ export interface ApplicationConfig {
 
   /** デフォルトオプション */
   defaultOptions?: {
+    mode?: import('../types.js').QueryMode;
     temperature?: number;
     maxTokens?: number;
     topP?: number;
@@ -92,11 +93,17 @@ export function registerFactories(
   registry: DriverRegistry,
   config: ApplicationConfig
 ): void {
+  /** ApplicationConfig.defaultOptions と ModelSpec.defaultOptions をマージ（spec が優先） */
+  const mergeDefaults = (spec: ModelSpec) =>
+    spec.defaultOptions
+      ? { ...config.defaultOptions, ...spec.defaultOptions }
+      : config.defaultOptions;
+
   // MLX Driver Factory
   registry.registerFactory('mlx', (spec) => {
     return new MlxDriver({
       model: spec.model,
-      defaultOptions: config.defaultOptions
+      defaultOptions: mergeDefaults(spec)
     });
   });
 
@@ -108,7 +115,7 @@ export function registerFactories(
       baseURL: openaiConfig?.baseURL,
       organization: openaiConfig?.organization,
       model: spec.model,
-      defaultOptions: config.defaultOptions
+      defaultOptions: mergeDefaults(spec)
     });
   });
 
@@ -118,7 +125,7 @@ export function registerFactories(
     return new AnthropicDriver({
       apiKey: anthropicConfig?.apiKey || process.env.ANTHROPIC_API_KEY,
       model: spec.model,
-      defaultOptions: config.defaultOptions,
+      defaultOptions: mergeDefaults(spec),
       vertex: anthropicConfig?.vertex,
     });
   });
@@ -130,7 +137,7 @@ export function registerFactories(
       project: vertexConfig?.project || process.env.VERTEX_AI_PROJECT,
       location: vertexConfig?.location || vertexConfig?.region || 'us-central1',
       model: spec.model,
-      defaultOptions: config.defaultOptions
+      defaultOptions: mergeDefaults(spec)
     });
   });
 
@@ -140,7 +147,7 @@ export function registerFactories(
     return new GoogleGenAIDriver({
       apiKey: googlegenaiConfig?.apiKey || process.env.GOOGLE_GENAI_API_KEY,
       model: spec.model,
-      defaultOptions: config.defaultOptions
+      defaultOptions: mergeDefaults(spec)
     });
   });
 
@@ -150,7 +157,7 @@ export function registerFactories(
     return new OllamaDriver({
       baseURL: ollamaConfig?.baseURL || 'http://localhost:11434',
       model: spec.model,
-      defaultOptions: config.defaultOptions
+      defaultOptions: mergeDefaults(spec)
     });
   });
 
@@ -160,7 +167,7 @@ export function registerFactories(
     const socketPath = vllmConfig?.socketPath || `/tmp/vllm-${spec.model.replace(/\//g, '-')}.sock`;
     return new VllmDriver({
       socketPath,
-      defaultOptions: config.defaultOptions,
+      defaultOptions: mergeDefaults(spec),
     });
   });
 

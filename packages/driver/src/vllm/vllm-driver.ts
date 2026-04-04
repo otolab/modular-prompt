@@ -31,6 +31,7 @@ export interface VllmDriverConfig {
   /** Unix ドメインソケットパス（vLLM エンジンが listen しているパス） */
   socketPath: string;
   defaultOptions?: {
+    mode?: import('../types.js').QueryMode;
     maxTokens?: number;
     temperature?: number;
     topP?: number;

@@ -80,6 +80,15 @@ export interface ModelSpec {
   /** このモデルを無効化する */
   disabled?: boolean;
 
+  /** モデル固有のデフォルトオプション（ApplicationConfig.defaultOptionsとマージされる） */
+  defaultOptions?: {
+    mode?: import('../types.js').QueryMode;
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    topK?: number;
+  };
+
   /** カスタムメタデータ */
   metadata?: Record<string, unknown>;
 }
