@@ -172,10 +172,10 @@ export class VllmDriver implements AIDriver {
   }
 
   async streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult> {
-    this.queryLogger.mark();
     await this.ensureInitialized();
 
     const opts = mapOptions(this.defaultOptions, options);
+    this.queryLogger.mark(opts);
     const messages = formatPromptAsMessages(prompt, this.formatterOptions);
     const stream = await this.process.chatStream(convertMessages(messages), opts);
     const { iterable, completion } = createStreamIterable(stream);

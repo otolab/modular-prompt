@@ -235,10 +235,10 @@ export class OpenAIDriver implements AIDriver {
    * Stream query implementation with both stream and result
    */
   async streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult> {
-    this.queryLogger.mark();
     try {
       const openaiOptions = options as OpenAIQueryOptions || {};
       const mergedOptions = { ...this.defaultOptions, ...openaiOptions };
+      this.queryLogger.mark(mergedOptions);
       const messages = this.compiledPromptToMessages(prompt);
 
       // Convert tools from intermediate format to OpenAI format

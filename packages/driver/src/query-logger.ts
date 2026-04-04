@@ -36,8 +36,17 @@ export class QueryLogger {
   }
 
   /** ログ収集の開始時刻をリセット（各 query 呼び出しの冒頭で呼ぶ） */
-  mark(): void {
+  mark(options?: Record<string, unknown>): void {
     this.startTime = new Date();
+    if (options) {
+      // tools は量が多いので名前のみ出力
+      const { tools, ...rest } = options;
+      const summary: Record<string, unknown> = { ...rest };
+      if (Array.isArray(tools) && tools.length > 0) {
+        summary.tools = tools.map((t: any) => t.name ?? t.function?.name ?? '?');
+      }
+      this.logger.info('Query options:', summary);
+    }
   }
 
   /** Logger インスタンスへのアクセス */

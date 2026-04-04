@@ -306,10 +306,10 @@ export class AnthropicDriver implements AIDriver {
    * Stream query implementation
    */
   async streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult> {
-    this.queryLogger.mark();
     try {
     const anthropicOptions = options as AnthropicQueryOptions || {};
     const mergedOptions = { ...this.defaultOptions, ...anthropicOptions };
+    this.queryLogger.mark(mergedOptions);
 
     // Convert prompt
     const { system, messages } = this.compiledPromptToAnthropic(prompt);

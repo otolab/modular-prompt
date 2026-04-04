@@ -534,7 +534,7 @@ export class VertexAIDriver implements AIDriver {
       return route.driver.query(prompt, { ...mergedOptions, model: route.modelName } as OpenAIQueryOptions);
     }
 
-    this.queryLogger.mark();
+    this.queryLogger.mark(mergedOptions);
     try {
       // Convert prompt to VertexAI format
       const request = this.compiledPromptToVertexAI(prompt);
@@ -644,7 +644,7 @@ export class VertexAIDriver implements AIDriver {
       return route.driver.streamQuery(prompt, { ...mergedOptions, model: route.modelName } as OpenAIQueryOptions);
     }
 
-    this.queryLogger.mark();
+    this.queryLogger.mark(mergedOptions);
 
     // Convert prompt to VertexAI format
     const request = this.compiledPromptToVertexAI(prompt);
