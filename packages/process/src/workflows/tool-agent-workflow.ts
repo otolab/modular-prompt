@@ -18,7 +18,7 @@ import { WorkflowExecutionError, type WorkflowResult, type ToolSpec, type ToolCa
 import { type DriverInput, type ModelRole, resolveDriver } from './driver-input.js';
 import { aggregateUsage, aggregateLogEntries } from './usage-utils.js';
 
-const logger = new Logger({ prefix: 'process', context: 'tool-agent' });
+const logger = new Logger({ prefix: 'process', context: 'tool-agent', accumulate: true });
 
 /**
  * Options for tool agent workflow
@@ -98,6 +98,7 @@ export async function toolAgentProcess<TContext extends ToolAgentContext & Recor
         allErrors.push(result.errors);
 
         logger.info(`[end] ${turn} turn(s)`);
+        allLogEntries.push(logger.getLogEntries());
         return {
           output: content,
           context,
@@ -168,6 +169,7 @@ export async function toolAgentProcess<TContext extends ToolAgentContext & Recor
 
     // maxTurns exhausted — return last content
     logger.info(`[end] max turns (${maxTurns}) reached`);
+    allLogEntries.push(logger.getLogEntries());
     return {
       output: '',
       context,
