@@ -86,13 +86,14 @@ export class QueueManager {
     });
   }
 
-  addCompletionRequest(prompt: string, options?: MlxMlModelOptions): Promise<Readable> {
+  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxCompletionRequest = {
           method: 'completion',
           prompt,
-          options: mapOptionsToPython(options, true)  // strict mode: true
+          options: mapOptionsToPython(options, true),  // strict mode: true
+          ...(images?.length ? { images, maxImageSize } : {})
         };
         this.queue.push({
           request,

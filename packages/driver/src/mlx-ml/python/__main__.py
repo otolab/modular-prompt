@@ -237,14 +237,27 @@ def generate_merged_prompt(messages):
     return '\n'.join(prompt_parts[:-1])
 
 
-def handle_completion(prompt, options=None):
-    """completion API の処理"""
+def handle_completion(prompt, options=None, images=None, max_image_size=768):
+    """completion API の処理
+
+    VLMモデルの場合、TypeScript側でプロンプトにimageトークンが挿入済み。
+    images が渡された場合は VLM 生成を使用する。
+    """
     if options is None:
         options = {}
 
     # promptはTypeScript側で既にモデル固有処理済み
 
-    generate_text(prompt, options)
+    if images:
+        pil_images = load_and_resize_images(images, max_image_size)
+
+        import re
+        display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', prompt)
+        sys.stderr.write(f"--- vlm completion (images: {len(pil_images)}, max_size: {max_image_size})\n{display_prompt}\n")
+
+        generate_text_vlm(prompt, pil_images, options)
+    else:
+        generate_text(prompt, options)
 
 
 def handle_chat_vlm(messages, images, options=None, max_image_size=768, tools=None, primer=None):
@@ -428,7 +441,9 @@ def main():
                     continue
                 
                 options = req.get('options', {})
-                handle_completion(prompt, options)
+                images = req.get('images', [])
+                max_image_size = req.get('maxImageSize', 768)
+                handle_completion(prompt, options, images if images else None, max_image_size)
             
             else:
                 sys.stderr.write(f"Error: Unknown method '{method}'\n")

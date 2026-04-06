@@ -74,9 +74,9 @@ export class MlxProcess {
   }
 
   // API v2.0 Completion - completion APIを直接使用
-  async completion(prompt: string, options?: MlxMlModelOptions): Promise<Readable> {
+  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
     // completion APIを直接使用（前処理はドライバーで実施済み）
-    return this.queueManager.addCompletionRequest(prompt, options);
+    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize);
   }
 
 

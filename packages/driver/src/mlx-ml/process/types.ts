@@ -57,6 +57,8 @@ export interface MlxCompletionRequest extends MlxBaseRequest {
   method: 'completion';
   prompt: string;
   options?: MlxMlModelOptions;
+  images?: string[];  // ファイルパス配列（VLM用）
+  maxImageSize?: number;  // 画像の最大辺ピクセル数
 }
 
 export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest;
