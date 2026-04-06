@@ -1,5 +1,14 @@
 # @modular-prompt/experiment
 
+## 0.4.17
+
+### Patch Changes
+
+- Updated dependencies [9a02d5e]
+- Updated dependencies [e35aab8]
+  - @modular-prompt/driver@0.11.4
+  - @modular-prompt/process@0.4.4
+
 ## 0.4.16
 
 ### Patch Changes

@@ -1,5 +1,20 @@
 # @modular-prompt/driver
 
+## 0.11.4
+
+### Patch Changes
+
+- 9a02d5e: feat: MLX completion API の VLM 画像対応インフラ追加
+
+  - completion API に images/maxImageSize パラメータを追加し、VLM モデルで画像付き completion 推論を可能にする
+  - apply_chat_template の判定をテンプレート設定有無まで確認するよう修正
+  - VLM フォールバック用ダミー画像アセットを追加
+
+- e35aab8: feat: MlxDriver の context-1 モデル tool call 対応
+
+  - context-1 形式（`to=functions.{name}<|channel|>...<|message|>{json}<|call|>`）の検出・パースを追加
+  - `tool_call_format.call_end` を汎用 stop token として使用する機構を追加（context-1 以外のモデルにも有効）
+
 ## 0.11.3
 
 ### Patch Changes
