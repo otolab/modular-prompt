@@ -1,5 +1,5 @@
 ---
-"@modular-prompt/driver": minor
+"@modular-prompt/driver": patch
 ---
 
 feat: MlxDriver の context-1 モデル tool call 対応
