@@ -175,9 +175,7 @@ def handle_chat(messages, primer=None, options=None, tools=None):
         prompt = primer.join(prompt.split(primer)[0:-1]) + primer
         print(primer, end='', flush=True)
 
-    # tools提供時、call_end を追加 stop token として渡す
-    stop_token_ids = get_tool_stop_token_ids() if tools else None
-    generate_text(prompt, options, stop_token_ids=stop_token_ids)
+    generate_text(prompt, options)
 
 
 def generate_merged_prompt(messages):
@@ -332,30 +330,7 @@ def generate_text_vlm(prompt, images, options, stop_token_ids=None):
     print('\n', end='\0', flush=True)
 
 
-def get_tool_stop_token_ids():
-    """tool_call_format.call_end または special_tokens.tool_call_end を stop token ID に変換（汎用）"""
-    stop_ids = set()
-
-    # 1. tool_call_format.call_end から取得
-    tcf = capabilities.get('features', {}).get('chat_template', {}).get('tool_call_format')
-    call_end = tcf.get('call_end') if tcf else None
-    if call_end:
-        token_id = tokenizer.convert_tokens_to_ids(call_end)
-        unk_id = getattr(tokenizer, 'unk_token_id', None)
-        if token_id is not None and token_id != unk_id:
-            stop_ids.add(int(token_id))
-
-    # 2. special_tokens.tool_call_end から直接 ID を取得（フォールバック）
-    tce = capabilities.get('special_tokens', {}).get('tool_call_end')
-    if tce and isinstance(tce, dict) and 'id' in tce:
-        stop_ids.add(int(tce['id']))
-
-    if stop_ids:
-        sys.stderr.write(f"--- tool stop token IDs: {stop_ids}\n")
-    return stop_ids if stop_ids else None
-
-
-def generate_text(prompt, options, stop_token_ids=None):
+def generate_text(prompt, options):
     """テキスト生成の共通処理
 
     注意: optionsはTypeScript側で事前にバリデーション済み
@@ -385,12 +360,6 @@ def generate_text(prompt, options, stop_token_ids=None):
     for response in stream_generate(model, tokenizer, prompt, **final_options):
         # トークンIDによるEOS判定（より確実）
         if is_eod_token(response, tokenizer):
-            eos_detected = True
-            print('\n', end='\0', flush=True)
-            break
-        # 追加 stop token チェック（tool call end 等）
-        if stop_token_ids and hasattr(response, 'token') and int(response.token) in stop_token_ids:
-            sys.stderr.write(f"--- stop token detected: {int(response.token)}\n")
             eos_detected = True
             print('\n', end='\0', flush=True)
             break

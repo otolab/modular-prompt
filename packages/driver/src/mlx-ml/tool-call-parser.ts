@@ -500,8 +500,8 @@ function extractJsonObject(text: string, start: number): string | null {
 
 /**
  * context-1形式のtool callをパース
- * 出力形式（<|call|> stop tokenで切断済み）:
- *   to=functions.{name}<|channel|>commentary json<|message|>{"key": "value"}
+ * 出力形式:
+ *   to=functions.{name}<|channel|>commentary json<|message|>{"key": "value"}<|call|>
  */
 function parseContext1ToolCalls(text: string): ToolCallParseResult {
   const toolCalls: ToolCall[] = [];
