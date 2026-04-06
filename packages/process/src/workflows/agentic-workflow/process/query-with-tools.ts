@@ -18,7 +18,7 @@ import type { ToolSpec, ToolCallLog } from '../types.js';
 import { isBuiltinTool } from './builtin-tools.js';
 import { aggregateUsage, aggregateLogEntries } from '../../usage-utils.js';
 
-const logger = new Logger({ prefix: 'process', context: 'agentic' });
+const logger = new Logger({ prefix: 'process', context: 'agentic', accumulate: true });
 
 /**
  * Execute builtin tool calls and return ToolResultMessageElements
@@ -121,6 +121,7 @@ export async function queryWithTools(
   const buildResult = (content: string, lastResult: QueryResult, extra?: Partial<QueryWithToolsResult>): QueryWithToolsResult => {
     allUsages.push(lastResult.usage);
     allLogEntries.push(lastResult.logEntries);
+    allLogEntries.push(qLogger.getLogEntries());
     allErrors.push(lastResult.errors);
     return {
       content,

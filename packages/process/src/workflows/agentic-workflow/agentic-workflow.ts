@@ -36,7 +36,7 @@ import {
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 
-const logger = new Logger({ prefix: 'process', context: 'agentic' });
+const logger = new Logger({ prefix: 'process', context: 'agentic', accumulate: true });
 
 /**
  * Strip <think>...</think> blocks from model output.
@@ -195,7 +195,7 @@ async function executeTask(
       metadata: {
         consumedUsage: result.consumedUsage,
         responseUsage: result.responseUsage,
-        logEntries: result.logEntries,
+        logEntries: aggregateLogEntries([result.logEntries, taskLogger.getLogEntries()]),
         errors: result.errors,
       },
     };
@@ -347,7 +347,10 @@ export async function agenticProcess<T>(
     },
     consumedUsage: aggregateUsage(executionLog.map(l => l.metadata?.consumedUsage)),
     responseUsage: lastLog?.metadata?.responseUsage,
-    logEntries: aggregateLogEntries(executionLog.map(l => l.metadata?.logEntries)),
+    logEntries: aggregateLogEntries([
+      ...executionLog.map(l => l.metadata?.logEntries),
+      logger.getLogEntries(),
+    ]),
     errors: aggregateLogEntries(executionLog.map(l => l.metadata?.errors)),
     metadata: {
       planTasks: taskList.length,
