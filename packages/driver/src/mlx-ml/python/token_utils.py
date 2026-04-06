@@ -156,6 +156,7 @@ def get_special_tokens(tokenizer):
 
         # ツール関連の単体トークン（追加）
         "tool_calls_marker": "[TOOL_CALLS]",
+        "tool_call_end": "<|call|>",
     }
     
     # VLM processorではconvert_tokens_to_idsがない場合がある
@@ -257,6 +258,8 @@ def detect_tool_call_format(tokenizer):
             (r'<longcat_tool_call>', r'</longcat_tool_call>'),
             # <minimax:tool_call>...</minimax:tool_call>
             (r'<minimax:tool_call>', r'</minimax:tool_call>'),
+            # context-1形式: to=functions.{name}...<|call|>
+            (r'to=functions\.', r'<\|call\|>'),
         ]
 
         for start_pattern, end_pattern in tool_call_patterns:

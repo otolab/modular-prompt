@@ -21,6 +21,7 @@ const KNOWN_TOOL_PARSER_DELIMITERS: Record<string, { start: string; end: string 
   glm47: { start: '<tool_call>', end: '</tool_call>' },
   qwen3_coder: { start: '<tool_call>', end: '</tool_call>' },
   minimax_m2: { start: '<minimax:tool_call>', end: '</minimax:tool_call>' },
+  context_1: { start: 'to=functions.', end: '<|call|>' },
 };
 
 export interface ToolCallParseResult {
@@ -45,6 +46,15 @@ export function parseToolCalls(
 ): ToolCallParseResult {
   // 1. tool_call_format（テンプレート由来）による検出
   const toolCallFormat = runtimeInfo?.features?.chat_template?.tool_call_format;
+
+  // 1.1 context-1形式: to=functions.{name}<|channel|>...<|message|>{json}
+  if (toolCallFormat?.call_start === 'to=functions.' || toolCallFormat?.call_end === '<|call|>') {
+    const result = parseContext1ToolCalls(text);
+    if (result.toolCalls.length > 0) {
+      return result;
+    }
+  }
+
   if (toolCallFormat?.call_start && toolCallFormat?.call_end) {
     const result = parseWithDelimiters(text, toolCallFormat.call_start, toolCallFormat.call_end);
     if (result.toolCalls.length > 0) {
@@ -484,6 +494,42 @@ function extractJsonObject(text: string, start: number): string | null {
   }
 
   return null;
+}
+
+/**
+ * context-1形式のtool callをパース
+ * 出力形式（<|call|> stop tokenで切断済み）:
+ *   to=functions.{name}<|channel|>commentary json<|message|>{"key": "value"}
+ */
+function parseContext1ToolCalls(text: string): ToolCallParseResult {
+  const toolCalls: ToolCall[] = [];
+  let content = text;
+  let callIndex = 0;
+
+  // to=functions.{name} ... <|message|>{json} パターン
+  // <|call|> は stop token で切断されるため、出力に含まれない場合も含まれる場合もある
+  const regex = /to=functions\.([\w.]+)(?:<\|channel\|>[^<]*)?<\|message\|>([\s\S]*?)(?:<\|call\|>|$)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    const argsStr = match[2].trim();
+    try {
+      const args = JSON.parse(argsStr);
+      toolCalls.push({
+        id: `call_${callIndex++}`,
+        name,
+        arguments: typeof args === 'object' && args !== null ? args : {}
+      });
+    } catch {
+      // JSON パース失敗 → スキップ
+    }
+  }
+
+  if (toolCalls.length > 0) {
+    content = text.replace(/to=functions\.[\w.]+(?:<\|channel\|>[^<]*)?<\|message\|>[\s\S]*?(?:<\|call\|>|$)/g, '').trim();
+  }
+
+  return { content, toolCalls };
 }
 
 function parseMistralStyleToolCalls(
