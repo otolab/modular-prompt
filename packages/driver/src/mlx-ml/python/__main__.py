@@ -323,7 +323,8 @@ def generate_text_vlm(prompt, images, options, stop_token_ids=None):
         temperature=temperature,
     ):
         # 追加 stop token チェック（tool call end 等）
-        if stop_token_ids and hasattr(response, 'token') and response.token in stop_token_ids:
+        if stop_token_ids and hasattr(response, 'token') and int(response.token) in stop_token_ids:
+            sys.stderr.write(f"--- stop token detected (vlm): {int(response.token)}\n")
             print('\n', end='\0', flush=True)
             return
         print(response.text.replace('\0', ''), end='', flush=True)
@@ -333,20 +334,25 @@ def generate_text_vlm(prompt, images, options, stop_token_ids=None):
 
 def get_tool_stop_token_ids():
     """tool_call_format.call_end または special_tokens.tool_call_end を stop token ID に変換（汎用）"""
+    stop_ids = set()
+
+    # 1. tool_call_format.call_end から取得
     tcf = capabilities.get('features', {}).get('chat_template', {}).get('tool_call_format')
     call_end = tcf.get('call_end') if tcf else None
-    # フォールバック: special_tokens の tool_call_end 単体トークン
-    if not call_end:
-        tce = capabilities.get('special_tokens', {}).get('tool_call_end')
-        if tce and isinstance(tce, dict) and 'text' in tce:
-            call_end = tce['text']
-    if not call_end:
-        return None
-    token_id = tokenizer.convert_tokens_to_ids(call_end)
-    unk_id = getattr(tokenizer, 'unk_token_id', None)
-    if token_id is not None and token_id != unk_id:
-        return {token_id}
-    return None
+    if call_end:
+        token_id = tokenizer.convert_tokens_to_ids(call_end)
+        unk_id = getattr(tokenizer, 'unk_token_id', None)
+        if token_id is not None and token_id != unk_id:
+            stop_ids.add(int(token_id))
+
+    # 2. special_tokens.tool_call_end から直接 ID を取得（フォールバック）
+    tce = capabilities.get('special_tokens', {}).get('tool_call_end')
+    if tce and isinstance(tce, dict) and 'id' in tce:
+        stop_ids.add(int(tce['id']))
+
+    if stop_ids:
+        sys.stderr.write(f"--- tool stop token IDs: {stop_ids}\n")
+    return stop_ids if stop_ids else None
 
 
 def generate_text(prompt, options, stop_token_ids=None):
@@ -383,7 +389,8 @@ def generate_text(prompt, options, stop_token_ids=None):
             print('\n', end='\0', flush=True)
             break
         # 追加 stop token チェック（tool call end 等）
-        if stop_token_ids and hasattr(response, 'token') and response.token in stop_token_ids:
+        if stop_token_ids and hasattr(response, 'token') and int(response.token) in stop_token_ids:
+            sys.stderr.write(f"--- stop token detected: {int(response.token)}\n")
             eos_detected = True
             print('\n', end='\0', flush=True)
             break
