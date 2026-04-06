@@ -175,7 +175,9 @@ def handle_chat(messages, primer=None, options=None, tools=None):
         prompt = primer.join(prompt.split(primer)[0:-1]) + primer
         print(primer, end='', flush=True)
 
-    generate_text(prompt, options)
+    # tools提供時、call_end を追加 stop token として渡す
+    stop_token_ids = get_tool_stop_token_ids() if tools else None
+    generate_text(prompt, options, stop_token_ids=stop_token_ids)
 
 
 def generate_merged_prompt(messages):
@@ -291,10 +293,12 @@ def handle_chat_vlm(messages, images, options=None, max_image_size=768, tools=No
     display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', formatted_prompt)
     sys.stderr.write(f"--- vlm prompt (images: {len(pil_images)}, max_size: {max_image_size})\n{display_prompt}\n")
 
-    generate_text_vlm(formatted_prompt, pil_images, options)
+    # tools提供時、call_end を追加 stop token として渡す
+    stop_token_ids = get_tool_stop_token_ids() if tools else None
+    generate_text_vlm(formatted_prompt, pil_images, options, stop_token_ids=stop_token_ids)
 
 
-def generate_text_vlm(prompt, images, options):
+def generate_text_vlm(prompt, images, options, stop_token_ids=None):
     """VLMストリーミング生成"""
     temperature = options.pop('temperature', 1.0) if 'temperature' in options else 1.0
     max_tokens = options.pop('max_tokens', 1000) if 'max_tokens' in options else 1000
@@ -305,12 +309,29 @@ def generate_text_vlm(prompt, images, options):
         max_tokens=max_tokens,
         temperature=temperature,
     ):
+        # 追加 stop token チェック（tool call end 等）
+        if stop_token_ids and hasattr(response, 'token') and response.token in stop_token_ids:
+            print('\n', end='\0', flush=True)
+            return
         print(response.text.replace('\0', ''), end='', flush=True)
 
     print('\n', end='\0', flush=True)
 
 
-def generate_text(prompt, options):
+def get_tool_stop_token_ids():
+    """tool_call_format.call_end を stop token ID に変換（汎用）"""
+    tcf = capabilities.get('features', {}).get('chat_template', {}).get('tool_call_format')
+    call_end = tcf.get('call_end') if tcf else None
+    if not call_end:
+        return None
+    token_id = tokenizer.convert_tokens_to_ids(call_end)
+    unk_id = getattr(tokenizer, 'unk_token_id', None)
+    if token_id is not None and token_id != unk_id:
+        return {token_id}
+    return None
+
+
+def generate_text(prompt, options, stop_token_ids=None):
     """テキスト生成の共通処理
 
     注意: optionsはTypeScript側で事前にバリデーション済み
@@ -343,9 +364,14 @@ def generate_text(prompt, options):
             eos_detected = True
             print('\n', end='\0', flush=True)
             break
+        # 追加 stop token チェック（tool call end 等）
+        if stop_token_ids and hasattr(response, 'token') and response.token in stop_token_ids:
+            eos_detected = True
+            print('\n', end='\0', flush=True)
+            break
         if not eos_detected:
             print(response.text.replace('\0', ''), end='', flush=True)
-    
+
     if not eos_detected:
         print('\n', end='\0', flush=True)
 
