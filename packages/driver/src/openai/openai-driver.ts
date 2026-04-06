@@ -120,8 +120,16 @@ export class OpenAIDriver implements AIDriver {
     const messages: ChatCompletionMessageParam[] = [];
 
     // Helper to process elements
-    const processElements = (elements: unknown[]) => {
+    const processElements = (elements: unknown[], defaultRole: 'system' | 'user') => {
       const content: string[] = [];
+
+      // content配列に蓄積されたテキストをメッセージとして追加
+      const flushContent = () => {
+        if (content.length > 0) {
+          messages.push({ role: defaultRole, content: content.join('\n') });
+          content.length = 0;
+        }
+      };
 
       for (const element of elements) {
         if (typeof element === 'string') {
@@ -132,6 +140,9 @@ export class OpenAIDriver implements AIDriver {
           if (el.type === 'text') {
             content.push(el.content);
           } else if (el.type === 'message') {
+            // Flush accumulated content before processing MessageElement
+            flushContent();
+
             // Handle message elements separately
             if (el.role === 'tool') {
               // ToolResultMessageElement
@@ -187,31 +198,23 @@ export class OpenAIDriver implements AIDriver {
         }
       }
 
-      return content.join('\n');
+      // Flush remaining content after processing all elements
+      flushContent();
     };
 
     // Process instructions as system message
     if (prompt.instructions && prompt.instructions.length > 0) {
-      const instructionContent = processElements(prompt.instructions);
-      if (instructionContent) {
-        messages.push({ role: 'system', content: instructionContent });
-      }
+      processElements(prompt.instructions, 'system');
     }
 
     // Process data as user message
     if (prompt.data && prompt.data.length > 0) {
-      const dataContent = processElements(prompt.data);
-      if (dataContent) {
-        messages.push({ role: 'user', content: dataContent });
-      }
+      processElements(prompt.data, 'user');
     }
 
     // Process output as user message (continuation)
     if (prompt.output && prompt.output.length > 0) {
-      const outputContent = processElements(prompt.output);
-      if (outputContent) {
-        messages.push({ role: 'user', content: outputContent });
-      }
+      processElements(prompt.output, 'user');
     }
 
     // Ensure at least one message

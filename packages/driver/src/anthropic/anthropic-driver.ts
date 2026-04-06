@@ -169,8 +169,20 @@ export class AnthropicDriver implements AIDriver {
     const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [];
 
     // Helper to process elements
-    const processElements = (elements: unknown[]): string => {
+    const processElements = (elements: unknown[], target: 'system' | 'user'): void => {
       const content: string[] = [];
+
+      const flushContent = () => {
+        if (content.length > 0) {
+          const text = content.join('\n');
+          if (target === 'system') {
+            system = system ? `${system}\n\n${text}` : text;
+          } else {
+            messages.push({ role: 'user', content: text });
+          }
+          content.length = 0;
+        }
+      };
 
       for (const element of elements) {
         if (typeof element === 'string') {
@@ -181,6 +193,9 @@ export class AnthropicDriver implements AIDriver {
           if (el.type === 'text') {
             content.push(el.content);
           } else if (el.type === 'message') {
+            // Flush accumulated content before processing MessageElement
+            flushContent();
+
             // Handle message elements separately
             if (el.role === 'tool') {
               // ToolResultMessageElement - convert kind+value to Anthropic content format
@@ -241,15 +256,13 @@ export class AnthropicDriver implements AIDriver {
         }
       }
 
-      return content.join('\n');
+      // Flush remaining content after processing all elements
+      flushContent();
     };
 
     // Process instructions as system message
     if (prompt.instructions && prompt.instructions.length > 0) {
-      const instructionContent = processElements(prompt.instructions);
-      if (instructionContent) {
-        system = system ? `${system}\n\n${instructionContent}` : instructionContent;
-      }
+      processElements(prompt.instructions, 'system');
     }
 
     // Add JSON instruction if schema is provided
@@ -260,18 +273,12 @@ export class AnthropicDriver implements AIDriver {
 
     // Process data as user message
     if (prompt.data && prompt.data.length > 0) {
-      const dataContent = processElements(prompt.data);
-      if (dataContent) {
-        messages.push({ role: 'user', content: dataContent });
-      }
+      processElements(prompt.data, 'user');
     }
 
     // Process output as user message
     if (prompt.output && prompt.output.length > 0) {
-      const outputContent = processElements(prompt.output);
-      if (outputContent) {
-        messages.push({ role: 'user', content: outputContent });
-      }
+      processElements(prompt.output, 'user');
     }
 
     // Ensure messages alternate between user and assistant

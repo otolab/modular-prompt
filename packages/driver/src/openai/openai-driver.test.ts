@@ -836,4 +836,82 @@ describe('OpenAIDriver', () => {
     });
   });
 
+  describe('element order preservation', () => {
+    it('should preserve element order when SectionElement precedes MessageElements', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          // SectionElement (テキスト系) → MessageElements の順
+          {
+            type: 'section',
+            category: 'data',
+            title: 'Context',
+            items: ['Background info']
+          },
+          {
+            type: 'message',
+            role: 'user',
+            content: 'Question 1'
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: 'Answer 1'
+          }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      const dataMessages = calledParams.messages.filter(
+        (m: { role: string }) => m.role !== 'system'
+      );
+
+      // SectionElement のテキストが MessageElements より前にあること
+      expect(dataMessages[0]).toEqual(
+        expect.objectContaining({ role: 'user', content: expect.stringContaining('Context') })
+      );
+      expect(dataMessages[1]).toEqual(
+        expect.objectContaining({ role: 'user', content: 'Question 1' })
+      );
+      expect(dataMessages[2]).toEqual(
+        expect.objectContaining({ role: 'assistant', content: 'Answer 1' })
+      );
+    });
+
+    it('should preserve order when text and messages are interleaved', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [],
+        data: [
+          { type: 'text', content: 'Text A' },
+          { type: 'message', role: 'user', content: 'Message B' },
+          { type: 'text', content: 'Text C' },
+          { type: 'message', role: 'assistant', content: 'Message D' }
+        ],
+        output: []
+      };
+
+      await driver.query(prompt);
+
+      const calledParams = mockCreate.mock.calls[mockCreate.mock.calls.length - 1][0];
+      const messages = calledParams.messages;
+
+      // Text A → Message B → Text C → Message D の順序が保持されること
+      expect(messages[0]).toEqual(
+        expect.objectContaining({ role: 'user', content: 'Text A' })
+      );
+      expect(messages[1]).toEqual(
+        expect.objectContaining({ role: 'user', content: 'Message B' })
+      );
+      expect(messages[2]).toEqual(
+        expect.objectContaining({ role: 'user', content: 'Text C' })
+      );
+      expect(messages[3]).toEqual(
+        expect.objectContaining({ role: 'assistant', content: 'Message D' })
+      );
+    });
+  });
+
 });
