@@ -332,9 +332,14 @@ def generate_text_vlm(prompt, images, options, stop_token_ids=None):
 
 
 def get_tool_stop_token_ids():
-    """tool_call_format.call_end を stop token ID に変換（汎用）"""
+    """tool_call_format.call_end または special_tokens.tool_call_end を stop token ID に変換（汎用）"""
     tcf = capabilities.get('features', {}).get('chat_template', {}).get('tool_call_format')
     call_end = tcf.get('call_end') if tcf else None
+    # フォールバック: special_tokens の tool_call_end 単体トークン
+    if not call_end:
+        tce = capabilities.get('special_tokens', {}).get('tool_call_end')
+        if tce and isinstance(tce, dict) and 'text' in tce:
+            call_end = tce['text']
     if not call_end:
         return None
     token_id = tokenizer.convert_tokens_to_ids(call_end)

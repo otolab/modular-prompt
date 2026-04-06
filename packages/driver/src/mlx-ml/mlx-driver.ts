@@ -232,6 +232,10 @@ export class MlxDriver implements AIDriver {
       if (tokens['tool_calls_marker']) {
         return true;
       }
+      // context-1型の単体終了トークン
+      if (tokens['tool_call_end']) {
+        return true;
+      }
     }
 
     return false;

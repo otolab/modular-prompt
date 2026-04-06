@@ -48,7 +48,9 @@ export function parseToolCalls(
   const toolCallFormat = runtimeInfo?.features?.chat_template?.tool_call_format;
 
   // 1.1 context-1形式: to=functions.{name}<|channel|>...<|message|>{json}
-  if (toolCallFormat?.call_start === 'to=functions.' || toolCallFormat?.call_end === '<|call|>') {
+  const toolCallEndToken = runtimeInfo?.special_tokens?.['tool_call_end'];
+  const hasCallEndToken = toolCallEndToken && typeof toolCallEndToken === 'object' && 'text' in toolCallEndToken && (toolCallEndToken as SpecialToken).text === '<|call|>';
+  if (toolCallFormat?.call_start === 'to=functions.' || toolCallFormat?.call_end === '<|call|>' || hasCallEndToken) {
     const result = parseContext1ToolCalls(text);
     if (result.toolCalls.length > 0) {
       return result;
