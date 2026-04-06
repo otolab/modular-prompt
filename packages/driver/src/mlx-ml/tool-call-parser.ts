@@ -510,7 +510,7 @@ function parseContext1ToolCalls(text: string): ToolCallParseResult {
 
   // to=functions.{name} ... <|message|>{json} パターン
   // <|call|> は stop token で切断されるため、出力に含まれない場合も含まれる場合もある
-  const regex = /to=functions\.([\w.]+)(?:<\|channel\|>[^<]*)?<\|message\|>([\s\S]*?)(?:<\|call\|>|$)/g;
+  const regex = /to=functions\.([\w.]+)(?:<\|channel\|>[\s\S]*?)?<\|message\|>([\s\S]*?)(?:<\|call\|>|$)/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
     const name = match[1];
@@ -528,7 +528,7 @@ function parseContext1ToolCalls(text: string): ToolCallParseResult {
   }
 
   if (toolCalls.length > 0) {
-    content = text.replace(/to=functions\.[\w.]+(?:<\|channel\|>[^<]*)?<\|message\|>[\s\S]*?(?:<\|call\|>|$)/g, '').trim();
+    content = text.replace(/to=functions\.[\w.]+(?:<\|channel\|>[\s\S]*?)?<\|message\|>[\s\S]*?(?:<\|call\|>|$)/g, '').trim();
   }
 
   return { content, toolCalls };
