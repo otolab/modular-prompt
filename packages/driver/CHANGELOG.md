@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.11.8
+
+### Patch Changes
+
+- 9470339: fix: MLX ドライバーの誤った tool call stop token 処理を削除し、native tool call が正しく検出されるよう修正
+
 ## 0.11.7
 
 ### Patch Changes
