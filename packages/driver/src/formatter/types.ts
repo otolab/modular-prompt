@@ -1,5 +1,5 @@
 import type { Element } from '@modular-prompt/core';
-import type { StandardChatMessage } from '../types.js';
+import type { StandardChatMessage, AssistantToolCallMessage, ToolResultMessage } from '../types.js';
 
 /**
  * Special token definition
@@ -20,7 +20,7 @@ export interface SpecialTokenPair {
 /**
  * Chat message format (formatter always produces standard messages)
  */
-export type ChatMessage = StandardChatMessage;
+export type ChatMessage = StandardChatMessage | AssistantToolCallMessage | ToolResultMessage;
 
 /**
  * Formatter options for converting elements to text

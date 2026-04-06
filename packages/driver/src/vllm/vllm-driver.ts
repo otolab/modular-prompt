@@ -13,9 +13,9 @@
  * 構造化された JSON で返す。TypeScript 側でのテキストパースは不要。
  */
 
-import type { Attachment } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, FinishReason } from '../types.js';
-import type { FormatterOptions } from '../formatter/types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
+import type { FormatterOptions, ChatMessage } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
@@ -46,12 +46,49 @@ export interface VllmDriverConfig {
 // ---------------------------------------------------------------------------
 
 function convertMessages(
-  messages: Array<{ role: string; content: string | Attachment[] }>
-): Array<{ role: string; content: string }> {
-  return messages.map(msg => ({
-    role: msg.role,
-    content: contentToString(msg.content),
-  }));
+  messages: ChatMessage[]
+): Array<Record<string, unknown>> {
+  return messages.map(msg => {
+    // AssistantToolCallMessage - tool_calls付きメッセージ
+    if (hasToolCalls(msg)) {
+      return {
+        role: 'assistant',
+        content: msg.content,
+        tool_calls: msg.toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments)
+          }
+        }))
+      };
+    }
+
+    // ToolResultMessage - ツール結果メッセージ
+    if (isToolResult(msg)) {
+      let content: string;
+      if (msg.kind === 'text') {
+        content = String(msg.value);
+      } else if (msg.kind === 'data') {
+        content = JSON.stringify(msg.value);
+      } else {
+        content = String(msg.value);
+      }
+      return {
+        role: 'tool',
+        content,
+        tool_call_id: msg.toolCallId,
+        name: msg.name
+      };
+    }
+
+    // StandardChatMessage - 通常メッセージ
+    return {
+      role: msg.role,
+      content: contentToString(msg.content),
+    };
+  });
 }
 
 function mapOptions(

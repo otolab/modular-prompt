@@ -11,10 +11,35 @@ export type MlxContentPart =
   | { type: 'text'; text: string }
   | { type: 'image' };
 
-export interface MlxMessage {
+/** 標準メッセージ（system / user / assistant） */
+export interface MlxStandardMessage {
   role: 'user' | 'assistant' | 'system';
   content: string | MlxContentPart[];
 }
+
+/** tool_calls付きassistantメッセージ（HuggingFace互換形式） */
+export interface MlxAssistantToolCallMessage {
+  role: 'assistant';
+  content: string;
+  tool_calls: Array<{
+    id: string;
+    type: 'function';
+    function: {
+      name: string;
+      arguments: string;  // JSON文字列
+    };
+  }>;
+}
+
+/** tool resultメッセージ（HuggingFace互換形式） */
+export interface MlxToolResultMessage {
+  role: 'tool';
+  content: string;
+  tool_call_id: string;
+  name: string;
+}
+
+export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxToolResultMessage;
 
 // API v2.0 リクエスト型定義
 export interface MlxBaseRequest {

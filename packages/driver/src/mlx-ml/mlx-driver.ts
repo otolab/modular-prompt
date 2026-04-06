@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolCall, FinishReason } from '../types.js';
+import { hasToolCalls, isToolResult } from '../types.js';
 import type { FormatterOptions, ChatMessage } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
@@ -54,6 +55,41 @@ export function hasMessageElement(prompt: CompiledPrompt): boolean {
  */
 export function convertMessages(messages: ChatMessage[], vlm: boolean = false): MlxMessage[] {
   return messages.map(msg => {
+    // AssistantToolCallMessage - tool_calls付きメッセージ
+    if (hasToolCalls(msg)) {
+      return {
+        role: 'assistant' as const,
+        content: msg.content,
+        tool_calls: msg.toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments)
+          }
+        }))
+      };
+    }
+
+    // ToolResultMessage - ツール結果メッセージ
+    if (isToolResult(msg)) {
+      let content: string;
+      if (msg.kind === 'text') {
+        content = String(msg.value);
+      } else if (msg.kind === 'data') {
+        content = JSON.stringify(msg.value);
+      } else {
+        content = String(msg.value);
+      }
+      return {
+        role: 'tool' as const,
+        content,
+        tool_call_id: msg.toolCallId,
+        name: msg.name
+      };
+    }
+
+    // StandardChatMessage - 通常メッセージ（VLM対応含む）
     if (vlm && Array.isArray(msg.content)) {
       const parts: MlxContentPart[] = [];
       for (const att of msg.content) {
@@ -293,7 +329,7 @@ export class MlxDriver implements AIDriver {
       const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
       // VLMの場合は画像パスを抽出（ファイル読み込み用）
       const images = vlm
-        ? messages.flatMap(m => extractImagePaths(m.content))
+        ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
       stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined);
     }
