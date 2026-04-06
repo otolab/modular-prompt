@@ -345,8 +345,10 @@ def get_tokenizer_features(tokenizer):
     Returns:
         dict: features情報
     """
+    # apply_chat_templateメソッドの存在だけでなく、テンプレートが実際に設定されているか確認
+    has_chat_template = hasattr(tokenizer, 'apply_chat_template') and bool(getattr(tokenizer, 'chat_template', None))
     features = {
-        "apply_chat_template": hasattr(tokenizer, 'apply_chat_template'),
+        "apply_chat_template": has_chat_template,
         "vocab_size": getattr(tokenizer, 'vocab_size', None),
         "model_max_length": getattr(tokenizer, 'model_max_length', None)
     }
