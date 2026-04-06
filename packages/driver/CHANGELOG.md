@@ -1,5 +1,16 @@
 # @modular-prompt/driver
 
+## 0.11.7
+
+### Patch Changes
+
+- 649ac0c: fix: compiledPromptToMessages が Element の出現順を保持するように修正
+- 87afa13: fix: converter・MLX・vLLM ドライバーで toolCalls/toolResult メッセージを正しく処理
+
+  formatPromptAsMessages の elementToMessages()が toolCalls と tool result メッセージを
+  失っていた問題、および MLX・vLLM ドライバーの convertMessages()がこれらのメッセージを
+  無視していた問題を修正。
+
 ## 0.11.6
 
 ### Patch Changes
