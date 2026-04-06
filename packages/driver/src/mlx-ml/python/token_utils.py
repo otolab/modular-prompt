@@ -53,10 +53,6 @@ def is_eod_token(response, tokenizer):
                 if token_id is not None:
                     end_token_ids.append(token_id)
         
-        # フォールバック: 直接属性アクセス
-        if hasattr(tokenizer, 'eos_token_id'):
-            end_token_ids.append(tokenizer.eos_token_id)
-        
         # 重複を除去してチェック
         if token in set(end_token_ids):
             return True
