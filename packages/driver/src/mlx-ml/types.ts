@@ -15,12 +15,43 @@ export type MlxContentPart =
   | { type: 'image' };
 
 /**
- * MLX message format
+ * 標準メッセージ（system / user / assistant）
  */
-export interface MlxMessage {
+export interface MlxStandardMessage {
   role: 'system' | 'user' | 'assistant';
   content: string | MlxContentPart[];
 }
+
+/**
+ * tool_calls付きassistantメッセージ（HuggingFace互換形式）
+ */
+export interface MlxAssistantToolCallMessage {
+  role: 'assistant';
+  content: string;
+  tool_calls: Array<{
+    id: string;
+    type: 'function';
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+}
+
+/**
+ * tool resultメッセージ（HuggingFace互換形式）
+ */
+export interface MlxToolResultMessage {
+  role: 'tool';
+  content: string;
+  tool_call_id: string;
+  name: string;
+}
+
+/**
+ * MLX message format（Union型）
+ */
+export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxToolResultMessage;
 
 /**
  * MLX model options (キャメルケース形式)

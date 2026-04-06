@@ -212,7 +212,7 @@ export class VllmProcess {
    * Chat (streaming) — tools なし
    */
   async chatStream(
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<Record<string, unknown>>,
     options?: Record<string, unknown>
   ): Promise<Readable> {
     await this.ensureConnected();
@@ -231,7 +231,7 @@ export class VllmProcess {
    * Chat (JSON) — tools あり。Python 側でツールパースし結果を返す
    */
   async chatWithTools(
-    messages: Array<{ role: string; content: string }>,
+    messages: Array<Record<string, unknown>>,
     options: Record<string, unknown>
   ): Promise<VllmChatResult> {
     await this.ensureConnected();

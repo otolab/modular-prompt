@@ -117,26 +117,21 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
     }
       
     case 'message': {
-      // Preserve original role
+      // ToolResultMessageElement
       if (element.role === 'tool') {
-        // ToolResultMessageElement
-        let messageContent: string;
-        switch (element.kind) {
-          case 'text':
-            messageContent = String(element.value);
-            break;
-          case 'data':
-            messageContent = JSON.stringify(element.value);
-            break;
-          case 'error':
-            messageContent = String(element.value);
-            break;
-          default:
-            messageContent = String(element.value);
-        }
         return [{
-          role: element.role as 'system' | 'user' | 'assistant',
-          content: messageContent
+          role: 'tool' as const,
+          toolCallId: element.toolCallId,
+          name: element.name,
+          kind: element.kind,
+          value: element.value
+        }];
+      } else if (element.toolCalls && element.toolCalls.length > 0) {
+        // AssistantToolCallMessage - toolCalls付きassistantメッセージ
+        return [{
+          role: 'assistant' as const,
+          content: contentToString(element.content),
+          toolCalls: element.toolCalls
         }];
       } else {
         // StandardMessageElement - preserve content as-is (string or Attachment[])
