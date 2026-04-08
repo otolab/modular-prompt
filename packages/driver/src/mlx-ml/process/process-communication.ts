@@ -30,6 +30,10 @@ export interface ProcessCommunicationCallbacks {
   onRequestCompleted: () => void;
 }
 
+export interface ProcessCommunicationOptions {
+  textOnly?: boolean;
+}
+
 export class ProcessCommunication {
   private process: ChildProcessWithoutNullStreams;
   private decoder: StringDecoder;
@@ -37,18 +41,23 @@ export class ProcessCommunication {
   private jsonBuffer: string = '';
   private callbacks: ProcessCommunicationCallbacks;
 
-  constructor(modelName: string, callbacks: ProcessCommunicationCallbacks) {
+  constructor(modelName: string, callbacks: ProcessCommunicationCallbacks, options?: ProcessCommunicationOptions) {
     this.callbacks = callbacks;
     this.decoder = new StringDecoder('utf8');
 
-    this.process = spawn('uv', [
+    const args = [
       '--project',
       mlxDriverDir,
       'run',
       'python',
       '__main__.py',
       modelName
-    ], {
+    ];
+    if (options?.textOnly) {
+      args.push('--text-only');
+    }
+
+    this.process = spawn('uv', args, {
       cwd: mlxDriverDir
     });
 

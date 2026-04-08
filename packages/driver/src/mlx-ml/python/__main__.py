@@ -4,9 +4,10 @@ from vlm_utils import detect_model_kind, load_and_resize_images
 from token_utils import get_capabilities, is_eod_token
 
 model_name = sys.argv[1] if len(sys.argv) > 1 else "mlx-community/gemma-3-270m-it-qat-4bit"
+text_only = "--text-only" in sys.argv
 
 # モデル種別の判定とロード
-model_kind = detect_model_kind(model_name)
+model_kind = "lm" if text_only else detect_model_kind(model_name)
 
 if model_kind == "vlm":
     from mlx_vlm import load as vlm_load, stream_generate as vlm_stream_generate

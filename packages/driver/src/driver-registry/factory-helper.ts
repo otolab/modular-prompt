@@ -68,13 +68,15 @@ export function registerStandardDriverFactories(
   // MLX Driver
   if (drivers.MlxDriver) {
     const Driver = drivers.MlxDriver;
+    // TODO: metadata経由でドライバー固有オプションを渡す仕組みを整理したい
     registry.registerFactory('mlx', (spec: ModelSpec) => {
       return new Driver({
         model: spec.model,
         defaultOptions: validateAndClampMaxTokens(
           spec,
-          spec.metadata
-        ) as Partial<import('../mlx-ml/types.js').MlxMlModelOptions>
+          spec.defaultOptions
+        ) as Partial<import('../mlx-ml/types.js').MlxMlModelOptions>,
+        textOnly: spec.metadata?.textOnly as boolean | undefined
       });
     });
   }
