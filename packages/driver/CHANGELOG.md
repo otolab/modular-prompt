@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.11.9
+
+### Patch Changes
+
+- 07ed99e: feat: MLX ドライバーに textOnly オプションを追加し、VLM モデルをテキストのみで使用可能に
+
 ## 0.11.8
 
 ### Patch Changes
