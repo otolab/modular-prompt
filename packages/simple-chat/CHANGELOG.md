@@ -1,5 +1,25 @@
 # @modular-prompt/simple-chat
 
+## 0.3.0
+
+### Minor Changes
+
+- a3227eb: refactor: simple-chat の systemPrompt を PromptModule 方式に移行
+
+  - DialogProfile: systemPrompt → module (PromptModule インライン定義)
+  - profile.yaml → default-profile.yaml にリネーム、PromptModule 形式に変換
+  - getDefaultProfile() → loadDefaultProfile() (async, YAML 読み込み)
+  - ai-chat: buildChatModule() 導入、workflow mode (direct/default/agentic) 対応
+  - agentic-workflow: non-output タスクから objective を除去
+
+### Patch Changes
+
+- 5a2fefa: fix: リファクタリングで誤って削除された textOnly オプションを復元
+- Updated dependencies [6af12cf]
+- Updated dependencies [a3227eb]
+  - @modular-prompt/driver@0.11.11
+  - @modular-prompt/process@0.4.12
+
 ## 0.2.30
 
 ### Patch Changes
