@@ -22,6 +22,8 @@ export interface DialogProfile {
   preMessage?: string;
   /** Resource files to include in system prompt (relative paths from profile) */
   resourceFiles?: string[];
+  /** VLMモデルをtext-onlyモードで使用する */
+  textOnly?: boolean;
   /** Options */
   options?: {
     /** Temperature (0.0-2.0) */
@@ -92,4 +94,6 @@ export interface SimpleChatOptions {
   maxTokens?: number;
   /** Image file paths for VLM */
   images?: string[];
+  /** VLMモデルをtext-onlyモードで使用する */
+  textOnly?: boolean;
 }
