@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.11.10
+
+### Patch Changes
+
+- 935934a: feat: QueryOptions に topK を追加し、MLX VLM モードで top_p/top_k サンプリングをサポート
+
 ## 0.11.9
 
 ### Patch Changes
