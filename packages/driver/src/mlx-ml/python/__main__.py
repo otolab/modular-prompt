@@ -314,12 +314,16 @@ def generate_text_vlm(prompt, images, options, stop_token_ids=None):
     """VLMストリーミング生成"""
     temperature = options.pop('temperature', 1.0) if 'temperature' in options else 1.0
     max_tokens = options.pop('max_tokens', 1000) if 'max_tokens' in options else 1000
+    top_p = options.pop('top_p', 0.0) if 'top_p' in options else 0.0
+    top_k = options.pop('top_k', 0) if 'top_k' in options else 0
 
     for response in vlm_stream_generate(
         model, processor, prompt,
         image=images if images else None,
         max_tokens=max_tokens,
         temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
     ):
         # 追加 stop token チェック（tool call end 等）
         if stop_token_ids and hasattr(response, 'token') and int(response.token) in stop_token_ids:

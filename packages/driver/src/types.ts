@@ -141,6 +141,7 @@ export interface QueryOptions {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  topK?: number;
   stream?: boolean;
   /**
    * API selection strategy (MLX driver only)

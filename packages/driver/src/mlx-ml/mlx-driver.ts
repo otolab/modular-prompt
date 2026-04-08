@@ -369,7 +369,8 @@ export class MlxDriver implements AIDriver {
       ...this.defaultOptions,
       ...(options?.maxTokens !== undefined && { maxTokens: options.maxTokens }),
       ...(options?.temperature !== undefined && { temperature: options.temperature }),
-      ...(options?.topP !== undefined && { topP: options.topP })
+      ...(options?.topP !== undefined && { topP: options.topP }),
+      ...(options?.topK !== undefined && { topK: options.topK })
     };
     this.queryLogger.mark(mlxOptions as Record<string, unknown>);
 
