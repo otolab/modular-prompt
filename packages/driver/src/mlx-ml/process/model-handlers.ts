@@ -111,6 +111,28 @@ export function processGemmaChat(messages: MlxMessage[]): MlxMessage[] {
 }
 
 /**
+ * Gemma-4用のChat処理
+ * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
+ */
+export function processGemma4Chat(messages: MlxMessage[]): MlxMessage[] {
+  const msgs: MlxMessage[] = [
+    {
+      role: 'system',
+      content: 'You are a helpful assistant.\n',
+    },
+    ...messages,
+  ];
+  return msgs;
+}
+
+export function processGemma4Completion(prompt: string): string {
+  return [
+    'You are a helpful assistant.',
+    prompt,
+  ].join('\n')
+}
+
+/**
  * llm-jp-3.1用のCompletion処理
  * chat_templateに厳密に準拠した形式
  * Note: llm-jp-3.1はforce-completion設定のため、chat APIは使用されない
@@ -197,12 +219,19 @@ export function selectChatProcessor(modelName: string): ((messages: MlxMessage[]
   if (modelName.includes('mlx-community/gemma-3') || modelName.includes('gemma-3')) {
     return processGemmaChat;
   }
+  if (modelName.includes('mlx-community/gemma-4') || modelName.includes('gemma-4')) {
+    return processGemma4Chat;
+  }
   if (modelName.includes('LFM')) {
     return processLfmChat;
   }
   if (modelName.includes('Qwen')) {
     return processQwenChat;
   }
+  if (modelName.includes('llm-jp-4')) {
+    return mergeSystemMessages;
+  }
+
   return null;
 }
 
@@ -220,6 +249,7 @@ export function selectCompletionProcessor(modelName: string): ((prompt: string) 
   if (modelName.includes('llm-jp-3.1')) return processLlmJpCompletion;
   if (modelName.includes('Tanuki-8B')) return processTanukiCompletion;
   if (modelName.includes('gemma-3')) return processGemmaCompletion;
+  if (modelName.includes('gemma-4')) return processGemma4Completion;
   if (modelName.toLowerCase().includes('elyza')) return processElyzaCompletion;
 
   // デフォルト: 汎用フォーマッタで動作する
