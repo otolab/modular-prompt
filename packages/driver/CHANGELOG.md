@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.11.11
+
+### Patch Changes
+
+- 6af12cf: feat: Gemma-4 および llm-jp-4 のモデルハンドラーを追加
+
 ## 0.11.10
 
 ### Patch Changes
