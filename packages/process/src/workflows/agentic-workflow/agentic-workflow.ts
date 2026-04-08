@@ -140,11 +140,10 @@ async function executeTask(
   const taskConfig = getTaskTypeConfig(task.taskType);
 
   // Build workflowBase from resolved userModule
-  // output tasks get the full userModule; other tasks get objective/terms/state only
+  // output tasks get the full userModule; other tasks get terms only
   const workflowBase: PromptModule<AgenticWorkflowContext> = task.taskType === 'output'
     ? { ...userModule } as PromptModule<AgenticWorkflowContext>
     : {
-        objective: userModule.objective,
         terms: userModule.terms,
       };
 

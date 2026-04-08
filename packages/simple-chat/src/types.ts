@@ -2,17 +2,26 @@
  * Simple chat application types
  */
 
+import type { ApplicationConfig, DriverProvider } from '@modular-prompt/driver';
+
+/** Workflow mode */
+export type WorkflowMode = 'direct' | 'default' | 'agentic';
+
+/** Model reference in workflow */
+export interface ModelReference {
+  provider: string;
+  model: string;
+}
+
 export interface DialogProfile {
-  /** Model name to use (optional, uses default if not specified) */
+  /** Model name to use (CLI -m override) */
   model?: string;
-  /** System prompt */
-  systemPrompt: string;
+  /** PromptModule inline definition (objective, instructions, guidelines, etc.) */
+  module?: Record<string, any>;
   /** Pre-message from assistant after system prompt */
   preMessage?: string;
   /** Resource files to include in system prompt (relative paths from profile) */
   resourceFiles?: string[];
-  /** VLMモデルをtext-onlyモードで使用する */
-  textOnly?: boolean;
   /** Options */
   options?: {
     /** Temperature (0.0-2.0) */
@@ -21,6 +30,22 @@ export interface DialogProfile {
     maxTokens?: number;
     /** Top-p setting */
     topP?: number;
+  };
+  /** Driver provider configurations */
+  drivers?: ApplicationConfig['drivers'];
+  /** Workflow configuration */
+  workflow?: {
+    /** Execution mode (default: 'direct') */
+    mode?: WorkflowMode;
+    /** Role-based model assignments */
+    models?: Record<string, ModelReference>;
+    /** Process-specific options (for default/agentic modes) */
+    processOptions?: {
+      /** Maximum tasks for agentic mode (default: 10) */
+      maxTasks?: number;
+      /** Include thinking process in output (default: false) */
+      includeThinking?: boolean;
+    };
   };
 }
 
@@ -53,8 +78,6 @@ export interface SimpleChatOptions {
   profilePath?: string;
   /** Chat log file path */
   logPath?: string;
-  /** Drivers configuration file path */
-  driversPath?: string;
   /** User message from command line */
   userMessage?: string;
   /** Use stdin for input */
@@ -69,6 +92,4 @@ export interface SimpleChatOptions {
   maxTokens?: number;
   /** Image file paths for VLM */
   images?: string[];
-  /** VLMモデルをtext-onlyモードで使用する */
-  textOnly?: boolean;
 }
