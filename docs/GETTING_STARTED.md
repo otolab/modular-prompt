@@ -510,6 +510,13 @@ const aiService = new AIService({
       capabilities: ['local', 'fast', 'japanese'],
       priority: 30  // ローカル優先の場合は低い値に
     },
+    {
+      model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
+      provider: 'mlx',
+      capabilities: ['local', 'vision', 'japanese'],
+      priority: 25,
+      metadata: { textOnly: true }  // VLMモデルをtext-onlyモードで使用
+    },
     // ... クラウドモデル
   ],
   drivers: {

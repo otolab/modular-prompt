@@ -380,6 +380,31 @@ console.log(result.content);
 await driver.close();
 ```
 
+#### VLMモデルをtext-onlyモードで使用
+
+VLM（Vision Language Model）対応モデルを画像なしのテキストのみで使用する場合は、`textOnly`フラグを使用します。
+
+```typescript
+const driver = new MlxDriver({
+  model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
+  textOnly: true,  // VLMモデルをtext-onlyモードで起動
+  defaultOptions: {
+    max_tokens: 500,
+    temperature: 0.7
+  }
+});
+
+const result = await driver.query(prompt);
+console.log(result.content);
+
+await driver.close();
+```
+
+**`textOnly`フラグの用途:**
+- VLM対応モデルを画像なしで使用したい場合
+- VLMモデルの起動を高速化したい場合（`mlx-vlm`の代わりに`mlx-lm`で起動）
+- VLMモデルでテキストのみのベンチマークを行う場合
+
 ### Ollama
 
 ```typescript

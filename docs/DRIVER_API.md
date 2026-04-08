@@ -66,7 +66,7 @@ close(): Promise<void>
 | ドライバー | プロバイダー | Structured Outputs | 用途 |
 |----------|------------|-------------------|------|
 | OllamaDriver | Ollama | ✅ ネイティブ（継承） | ローカルLLM（OpenAI互換） |
-| MlxDriver | MLX | ✅ JSON抽出 | Apple Silicon最適化 |
+| MlxDriver | MLX | ✅ JSON抽出 | Apple Silicon最適化（VLM対応） |
 | VllmDriver | vLLM | ✅ JSON抽出 | CUDA GPU推論（Linux） |
 
 ### テスト用
@@ -87,8 +87,16 @@ close(): Promise<void>
 ```typescript
 interface ChatMessage {
   role: 'system' | 'assistant' | 'user';
-  content: string;
+  content: string | Attachment[];  // MLX VLMモデルでは画像をAttachmentで指定可能
   name?: string;
+}
+
+interface Attachment {
+  type: 'image';
+  source: {
+    type: 'url' | 'base64';
+    data: string;
+  };
 }
 ```
 

@@ -63,7 +63,7 @@ if (result.logEntries) {
 | `VertexAIDriver` | Google Cloud | Gemini + Model Garden（Qwen, Llama等） |
 | `GoogleGenAIDriver` | Google | APIキーのみで利用可能 |
 | `OllamaDriver` | Ollama | ローカルLLM |
-| `MlxDriver` | MLX | Apple Silicon専用 |
+| `MlxDriver` | MLX | Apple Silicon専用（VLM対応） |
 | `VllmDriver` | vLLM | CUDA GPU推論（Linux） |
 | `TestDriver` | - | モックレスポンス |
 | `EchoDriver` | - | プロンプトをそのまま返す |
@@ -111,6 +111,30 @@ npm run setup-mlx
 ```
 
 前提条件: Python 3.11以上、Apple Silicon Mac、uv。
+
+#### VLMモデルのtext-only使用
+
+VLM（Vision Language Model）対応モデルを画像なしのテキストのみで使用する場合は、`textOnly`オプションを使用します。
+
+```typescript
+import { MlxDriver } from '@modular-prompt/driver';
+
+const driver = new MlxDriver({
+  model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
+  textOnly: true,  // VLMモデルをtext-onlyモードで起動
+  defaultOptions: {
+    temperature: 0.7,
+    maxTokens: 500
+  }
+});
+
+const result = await driver.query(prompt);
+console.log(result.content);
+
+await driver.close();
+```
+
+`textOnly: true`を指定すると、VLM対応モデルを`mlx-lm`（高速起動）で起動し、画像処理なしのテキストのみで使用できます。
 
 #### 特殊トークンの確認
 
