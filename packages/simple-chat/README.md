@@ -35,6 +35,9 @@ echo "長い質問文..." | simple-chat --stdin
 
 # オプションの組み合わせ
 simple-chat -p custom.yaml -l session.json --temperature 0.8 "創造的な回答をお願いします"
+
+# VLMモデルをtext-onlyモードで使用
+simple-chat --model mlx-community/Qwen2-VL-2B-Instruct-4bit --text-only "こんにちは"
 ```
 
 ### ライブラリとして使用
@@ -55,6 +58,9 @@ model: "mlx-community/gemma-3-270m-it-qat-4bit"
 
 # ドライバータイプ（現在はmlxのみサポート）
 driver: "mlx"
+
+# VLMモデルをtext-onlyモードで使用（オプション）
+textOnly: false  # trueにするとVLM対応モデルを画像なしで使用
 
 # システムプロンプト - AIの基本的な振る舞いを定義
 systemPrompt: |
@@ -98,6 +104,19 @@ systemPrompt: |
   エラーの解決方法を段階的に説明してください。
 options:
   temperature: 0.3  # より正確な回答のため低めに設定
+```
+
+#### 3. VLMモデルをテキストのみで使用
+
+```yaml
+model: "mlx-community/Qwen2-VL-2B-Instruct-4bit"
+textOnly: true  # VLMモデルを画像なしで使用
+systemPrompt: |
+  あなたは親切で知識豊富なAIアシスタントです。
+  テキストによる質問に回答してください。
+options:
+  temperature: 0.7
+  maxTokens: 4000
 ```
 
 #### 2. 創作支援用プロファイル
