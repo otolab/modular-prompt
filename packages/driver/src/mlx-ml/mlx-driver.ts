@@ -123,6 +123,8 @@ export interface MlxDriverConfig {
   formatterOptions?: FormatterOptions;
   /** VLM画像の最大辺ピクセル数（デフォルト: 768） */
   maxImageSize?: number;
+  /** VLMモデルをtext-onlyモードで使用する（VLM判定を抑制） */
+  textOnly?: boolean;
 }
 
 /**
@@ -187,7 +189,7 @@ export class MlxDriver implements AIDriver {
     this._defaultOptions = config.defaultOptions || {};
     this.formatterOptions = config.formatterOptions || {};
     this.maxImageSize = config.maxImageSize ?? 768;
-    this.process = new MlxProcess(config.model);
+    this.process = new MlxProcess(config.model, { textOnly: config.textOnly });
     this.modelProcessor = createModelSpecificProcessor(config.model);
   }
 

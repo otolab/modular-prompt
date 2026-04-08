@@ -25,13 +25,17 @@ export type {
   MlxToolDefinition
 };
 
+export interface MlxProcessOptions {
+  textOnly?: boolean;
+}
+
 export class MlxProcess {
   modelName: string;
 
   private queueManager: QueueManager;
   private processComm: ProcessCommunication;
 
-  constructor(modelName: string) {
+  constructor(modelName: string, options?: MlxProcessOptions) {
     this.modelName = modelName;
 
     // コールバック設定
@@ -46,7 +50,7 @@ export class MlxProcess {
     };
 
     // 各コンポーネント初期化
-    this.processComm = new ProcessCommunication(modelName, processCallbacks);
+    this.processComm = new ProcessCommunication(modelName, processCallbacks, options);
     this.queueManager = new QueueManager(queueCallbacks);
   }
 

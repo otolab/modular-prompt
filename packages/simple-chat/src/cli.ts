@@ -33,6 +33,7 @@ program
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
   .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
+  .option('--text-only', 'Use VLM model in text-only mode')
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
@@ -74,6 +75,7 @@ program
         temperature: options.temperature,
         maxTokens: options.maxTokens,
         images: options.image,
+        textOnly: options.textOnly,
       };
       
       await runChat(chatOptions);

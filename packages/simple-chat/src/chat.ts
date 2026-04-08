@@ -111,6 +111,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.options = profile.options || {};
     profile.options.maxTokens = options.maxTokens;
   }
+  if (options.textOnly) profile.textOnly = true;
   
   // Load or create chat log
   let chatLog: ChatLog;

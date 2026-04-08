@@ -143,7 +143,10 @@ export async function createDriver(profile: DialogProfile, customRegistry?: Driv
       const modelSpec = {
         model: profile.model,
         provider,
-        capabilities: ['chat'] as DriverCapability[]
+        capabilities: ['chat'] as DriverCapability[],
+        metadata: {
+          ...(profile.textOnly && { textOnly: true })
+        }
       };
       return await registry.createDriver(modelSpec);
     } catch {
@@ -151,7 +154,8 @@ export async function createDriver(profile: DialogProfile, customRegistry?: Driv
       logger.warn(`Model ${profile.model} not found in registry, using MLX driver directly`);
       return new MlxDriver({
         model: profile.model,
-        defaultOptions: profile.options
+        defaultOptions: profile.options,
+        textOnly: profile.textOnly
       });
     }
   }
@@ -166,7 +170,8 @@ export async function createDriver(profile: DialogProfile, customRegistry?: Driv
     // フォールバック: MLXドライバを直接作成
     return new MlxDriver({
       model: DEFAULT_DRIVER,
-      defaultOptions: profile.options
+      defaultOptions: profile.options,
+      textOnly: profile.textOnly
     });
   }
 

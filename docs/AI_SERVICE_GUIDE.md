@@ -112,6 +112,7 @@ interface ModelSpec {
 | capabilities | モデルの能力リスト | ['streaming', 'japanese'] |
 | priority | 選択時の優先度（高いほど優先） | 10, 20, 30 |
 | cost | トークンあたりのコスト | { input: 0.01, output: 0.03 } |
+| metadata | ドライバー固有のオプション | { textOnly: true } (MLX) |
 
 ## DriverCapability（ドライバー能力）
 
@@ -305,9 +306,11 @@ interface ApplicationConfig {
 | openai | apiKey | baseURL, organization |
 | anthropic | apiKey | baseURL |
 | vertexai | project, location | region |
-| mlx | なし | baseURL, pythonPath |
+| mlx | なし | baseURL, pythonPath, textOnly (metadata経由) |
 | ollama | なし | baseURL |
 | vllm | socketPath | なし |
+
+**注**: MLXドライバー固有のオプション（`textOnly`など）は、`ModelSpec.metadata`経由で指定します。詳細は[ドライバーAPI](./DRIVER_API.md)を参照してください。
 
 ## まとめ
 

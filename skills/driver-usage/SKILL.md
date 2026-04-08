@@ -204,6 +204,7 @@ import { MlxDriver } from '@modular-prompt/driver';
 
 const driver = new MlxDriver({
   model: 'mlx-community/Llama-3.2-3B-Instruct-4bit',  // 必須
+  textOnly: false,                // VLMモデルをtext-onlyモードで使用する場合はtrue（デフォルト: false）
   defaultOptions: {
     temperature: 0.7,
     maxTokens: 500,
@@ -217,6 +218,22 @@ await driver.close();
 ```
 
 Apple Silicon専用。Python 3.11以上が必要。
+
+#### textOnlyオプション
+
+VLM（Vision Language Model）対応モデルを画像なしのテキストのみで使用する場合に`textOnly: true`を指定します。
+
+```typescript
+const driver = new MlxDriver({
+  model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
+  textOnly: true  // VLMモデルをtext-onlyモードで起動（mlx-lmを使用）
+});
+```
+
+**用途:**
+- VLM対応モデルを画像なしで使用したい場合
+- VLMモデルの起動を高速化したい場合
+- VLMモデルでテキストのみのベンチマークを行う場合
 
 ### テスト・デバッグ用ドライバー
 
