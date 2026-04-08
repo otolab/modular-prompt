@@ -1,6 +1,6 @@
 {
   "name": "@modular-prompt/root",
-  "version": "0.13.10",
+  "version": "0.13.11",
   "private": true,
   "description": "Modular prompt framework for generative AI",
   "scripts": {
