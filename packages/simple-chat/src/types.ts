@@ -2,7 +2,7 @@
  * Simple chat application types
  */
 
-import type { ApplicationConfig, DriverProvider } from '@modular-prompt/driver';
+import type { ApplicationConfig } from '@modular-prompt/driver';
 
 /** Workflow mode */
 export type WorkflowMode = 'direct' | 'default' | 'agentic';
