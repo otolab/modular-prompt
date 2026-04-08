@@ -3,23 +3,22 @@
  */
 
 import { readFile } from 'fs/promises';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import type { DialogProfile } from './types.js';
 import { validateProfileOptions } from './utils/profile-validator.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Path to the default profile bundled with the package */
+const DEFAULT_PROFILE_PATH = join(__dirname, '../default-profile.yaml');
+
 /**
- * Get default profile
+ * Load default profile
  */
-export function getDefaultProfile(): DialogProfile {
-  return {
-    // modelは指定しない（デフォルトドライバを使用）
-    systemPrompt: 'あなたは親切で知識豊富なAIアシスタントです。ユーザーの質問に対して、正確で分かりやすい回答を提供してください。日本語で応答してください。',
-    options: {
-      temperature: 0.7,
-      maxTokens: 4000,
-      topP: 0.9,
-    },
-  };
+export async function loadDefaultProfile(): Promise<DialogProfile> {
+  return loadDialogProfile(DEFAULT_PROFILE_PATH);
 }
 
 /**

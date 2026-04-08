@@ -3,8 +3,8 @@
  */
 
 export { runChat } from './chat.js';
-export { 
-  getDefaultProfile, 
+export {
+  loadDefaultProfile,
   loadDialogProfile
 } from './profile.js';
 export {
@@ -15,7 +15,7 @@ export {
   getChatLogStats,
 } from './chat-log.js';
 export {
-  chatPromptModule,
+  buildChatModule,
   createDriver,
   performAIChat,
   closeDriver,

@@ -28,12 +28,10 @@ program
   .argument('[message...]', 'User message (use "-" for stdin)')
   .option('-p, --profile <path>', 'Dialog profile file path (YAML)')
   .option('-l, --log [path]', 'Chat log file path (JSON), show log if no message')
-  .option('-d, --drivers <path>', 'Drivers configuration file path (YAML)')
   .option('-m, --model <model>', 'Override model name')
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
   .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
-  .option('--text-only', 'Use VLM model in text-only mode')
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
@@ -68,14 +66,12 @@ program
       const chatOptions: SimpleChatOptions = {
         profilePath: options.profile,
         logPath: options.log,
-        driversPath: options.drivers,
         userMessage,
         useStdin: hasStdinFlag || !!options.stdin,
         model: options.model,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
         images: options.image,
-        textOnly: options.textOnly,
       };
       
       await runChat(chatOptions);

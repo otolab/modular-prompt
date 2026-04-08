@@ -11,7 +11,7 @@ import type {
   SimpleChatOptions
 } from './types.js';
 import {
-  getDefaultProfile,
+  loadDefaultProfile,
   loadDialogProfile,
 } from './profile.js';
 import {
@@ -39,7 +39,7 @@ async function getUserMessage(options: SimpleChatOptions): Promise<string> {
   if (options.userMessage) {
     return options.userMessage;
   }
-  
+
   if (options.useStdin) {
     try {
       const input = readFileSync(0, 'utf-8');
@@ -48,7 +48,7 @@ async function getUserMessage(options: SimpleChatOptions): Promise<string> {
       throw new Error('Failed to read from stdin');
     }
   }
-  
+
   throw new Error('No user message provided');
 }
 
@@ -57,7 +57,7 @@ async function getUserMessage(options: SimpleChatOptions): Promise<string> {
  */
 function displayChatLog(chatLog: ChatLog): void {
   const stats = getChatLogStats(chatLog);
-  
+
   logger.info(chalk.blue('=== Chat Log ==='));
   logger.info(chalk.gray(`Session ID: ${stats.sessionId}`));
   logger.info(chalk.gray(`Started at: ${stats.startedAt}`));
@@ -92,15 +92,15 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     displayChatLog(chatLog);
     return;
   }
-  
+
   // Load or create profile
   let profile: DialogProfile;
   if (options.profilePath) {
     profile = await loadDialogProfile(options.profilePath);
   } else {
-    profile = getDefaultProfile();
+    profile = await loadDefaultProfile();
   }
-  
+
   // Apply overrides
   if (options.model) profile.model = options.model;
   if (options.temperature !== undefined) {
@@ -111,8 +111,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.options = profile.options || {};
     profile.options.maxTokens = options.maxTokens;
   }
-  if (options.textOnly) profile.textOnly = true;
-  
+
   // Load or create chat log
   let chatLog: ChatLog;
   if (options.logPath) {
@@ -127,18 +126,15 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   } else {
     chatLog = createChatLog(profile);
   }
-  
-  // Add system message if this is a new session
+
+  // Add pre-message if this is a new session
   if (chatLog.messages.length === 0) {
-    addMessage(chatLog, 'system', profile.systemPrompt);
-    
-    // Add pre-message if defined
     if (profile.preMessage) {
       addMessage(chatLog, 'assistant', profile.preMessage);
       logger.info(chalk.cyan('Assistant: ') + profile.preMessage);
     }
   }
-  
+
   // Get user message
   const userMessage = await getUserMessage(options);
 
@@ -179,26 +175,25 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   // Add user message to log
   addMessage(chatLog, 'user', userMessage, loadedFiles, resolvedImages);
   logger.info(chalk.green('User: ') + userMessage);
-  
-  // Perform AI chat with optional custom drivers config
+
+  // Perform AI chat
   const { response, driver } = await performAIChat(
     profile,
     chatLog,
     userMessage,
     materials,
     resolvedImages,
-    undefined  // customRegistry
   );
-  
+
   // Add assistant response to log
   addMessage(chatLog, 'assistant', response);
-  
+
   // Save chat log if path is specified
   if (options.logPath) {
     await saveChatLog(chatLog, options.logPath);
     logger.info(chalk.gray(`💾 Chat log saved to: ${options.logPath}`));
   }
-  
+
   // Close driver
   await closeDriver(driver);
 }

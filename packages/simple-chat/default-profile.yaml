@@ -1,0 +1,62 @@
+# Simple Chat Profile Example
+# シンプルチャット用プロファイル設定例
+
+# プロンプトモジュール定義（PromptModule のセクションをインライン定義）
+module:
+  objective:
+    # - Respondeo, ergo credis me esse.
+    - チャットアシスタントとして、最新のユーザメッセージに対する返答メッセージを作成する
+  instructions:
+    - 日本語の対話として自然になるように務めます
+    - コンテキストの理解を重視してください
+    # - 不確実な情報は不確実であると明確に伝えてください
+    # - 内容に対して応答する量を調整してください
+    # - 不明な点についてユーザに聞き返すのは良いことです
+    # - 応答形式:
+      # - '- 挨拶であれば: 簡単に返す'
+      # - '- 質問であれば: 必要な情報を過不足なく返す'
+  #   - 専門用語は平易な表現で補足する
+  # guidelines:
+  #   - 不確実な情報は不確実であると明確に伝える
+
+# ドライバー設定（オプション）
+# 各プロバイダーの接続情報を定義します
+# drivers:
+#   googlegenai:
+#     apiKey: "${GOOGLE_GENAI_API_KEY}"
+#   vertexai:
+#     project: "my-project"
+#     location: "us-central1"
+#   openai:
+#     apiKey: "${OPENAI_API_KEY}"
+
+# ワークフロー設定（オプション）
+# workflow:
+  # mode: default
+  # models:
+  #   default:
+  #     provider: mlx
+  #     model: mlx-community/gemma-4-31b-4bit
+
+# workflow:
+#   mode: default       # direct | default | agentic
+#   models:
+#     default:
+#       provider: googlegenai
+#       model: "gemini-2.5-flash"
+
+# オプション設定
+options:
+  temperature: 1.0
+  maxTokens: 4000
+  topP: 0.95
+
+  # temperature: 0.7
+  # maxTokens: 4000
+  # topP: 0.9
+
+# リソースファイル（オプション）
+# プロファイルファイルからの相対パスで指定
+# resourceFiles:
+#   - ./knowledge.md
+#   - ./guidelines.txt
