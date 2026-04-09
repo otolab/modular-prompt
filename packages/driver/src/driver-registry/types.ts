@@ -41,6 +41,19 @@ export type DriverCapability =
   | 'function-calling'; // 関数呼び出し対応
 
 /**
+ * MLXドライバー固有オプション
+ */
+export interface MlxModelDriverOptions {
+  /** VLMモデルをtext-onlyモードで使用する */
+  textOnly?: boolean;
+  /** VLM画像の最大辺ピクセル数 */
+  maxImageSize?: number;
+}
+
+/** ドライバー固有オプションのunion（将来拡張） */
+export type ModelDriverOptions = MlxModelDriverOptions;
+
+/**
  * モデル仕様（code-bugsのModelSpecと同等）
  */
 export interface ModelSpec {
@@ -88,6 +101,9 @@ export interface ModelSpec {
     topP?: number;
     topK?: number;
   };
+
+  /** ドライバー固有オプション（プロバイダーに応じた設定） */
+  driverOptions?: ModelDriverOptions;
 
   /** カスタムメタデータ */
   metadata?: Record<string, unknown>;
