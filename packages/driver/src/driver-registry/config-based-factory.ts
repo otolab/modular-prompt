@@ -7,7 +7,7 @@
  */
 
 import type { DriverRegistry } from './registry.js';
-import type { ModelSpec } from './types.js';
+import type { ModelSpec, MlxModelDriverOptions } from './types.js';
 
 // 個別ドライバーのインポート
 import { MlxDriver } from '../mlx-ml/mlx-driver.js';
@@ -101,9 +101,12 @@ export function registerFactories(
 
   // MLX Driver Factory
   registry.registerFactory('mlx', (spec) => {
+    const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
     return new MlxDriver({
       model: spec.model,
-      defaultOptions: mergeDefaults(spec)
+      defaultOptions: mergeDefaults(spec),
+      textOnly: driverOpts?.textOnly,
+      maxImageSize: driverOpts?.maxImageSize,
     });
   });
 
