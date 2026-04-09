@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.11.12
+
+### Patch Changes
+
+- 1797a1a: ModelSpec に driverOptions フィールドを追加。ドライバー固有オプション（MLX の textOnly / maxImageSize 等）を型安全に設定可能にした。
+
 ## 0.11.11
 
 ### Patch Changes
