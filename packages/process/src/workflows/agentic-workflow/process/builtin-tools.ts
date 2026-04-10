@@ -1,12 +1,11 @@
 /**
  * Agentic workflow 組み込みツール定義 (v2)
  *
- * - __register_tasks: タスク登録（planning タスクから利用可能）
+ * - __register_task: タスク登録（planning タスクから利用可能、1タスクずつ呼び出し）
  * - __replan: 再プランニング要求（execution タスクから利用可能）
  * - __time: 現在時刻取得
  */
 
-import type { ToolDefinition } from '@modular-prompt/driver';
 import type { ToolSpec, AgenticTask, TaskType } from '../types.js';
 import type { ModelRole } from '../../driver-input.js';
 import { EXECUTION_TASK_DEFS } from '../task-types/execution-tasks.js';
@@ -119,35 +118,24 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: n
 /**
  * Planning フェーズ用の組み込みツールを生成
  *
- * __register_tasks ツールは tasks 配列で複数タスクを一括登録する。
- * 単体の instruction 指定も後方互換として受け付ける。
+ * __register_task ツールは1タスクずつ登録する。
+ * 複数タスクの場合はモデルが複数回 tool call する。
  */
 export function createPlanningTools(taskList: AgenticTask[], currentIndex: number): ToolSpec[] {
+  let insertOffset = 0;
   return [{
     definition: {
-      name: '__register_tasks',
-      description: 'Register tasks into the existing workflow. Tasks are appended after the current position. Do not re-register tasks that already exist. Each task produces a specific deliverable and is executed by a separate AI instance.',
-      parameters: {
-        type: 'object',
-        properties: {
-          tasks: {
-            type: 'array',
-            description: 'Array of Task objects.',
-            items: TASK_ENTRY_SCHEMA,
-          },
-        },
-        required: ['tasks'],
-      },
+      name: '__register_task',
+      description: 'Register a single task into the workflow. Call once per task. Tasks are appended after the current position. Each task produces a specific deliverable and is executed by a separate AI instance.',
+      parameters: TASK_ENTRY_SCHEMA,
     },
     handler: async (args) => {
-      if (!Array.isArray(args.tasks) || args.tasks.length === 0) {
-        throw new Error('Provide a non-empty "tasks" array.');
+      const entry = args as unknown as TaskEntry;
+      if (!entry.instruction) {
+        throw new Error('Provide an "instruction" field.');
       }
-      let insertOffset = 0;
-      for (const entry of args.tasks as TaskEntry[]) {
-        registerTask(taskList, entry, currentIndex + insertOffset);
-        insertOffset++;
-      }
+      registerTask(taskList, entry, currentIndex + insertOffset);
+      insertOffset++;
 
       // Return full updated task list so the model can see the current plan
       return 'Updated task list:\n' + taskList
@@ -208,19 +196,6 @@ const replanTool: ToolSpec = {
     };
   },
 };
-
-/**
- * ビルトインツールの定義一覧（planning向け情報提供用）
- *
- * planningタスクが適切なタスク設計を行うには、各タスクで利用可能な
- * ツールの全体像が必要。「できないことリスト」ではなく「ツールが
- * 存在するから使う」形で、必要なactタスクを計画させる。
- */
-export function getBuiltinToolDefinitions(): ToolDefinition[] {
-  return [
-    timeTool.definition,
-  ];
-}
 
 /**
  * Execution フェーズ用の組み込みツールを生成

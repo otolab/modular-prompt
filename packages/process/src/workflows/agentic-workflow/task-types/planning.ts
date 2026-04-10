@@ -9,9 +9,9 @@
  * - userModule compiled as "Original Request" material (includes inputs)
  *
  * Output side:
- * - cue: user message instructing to call __register_tasks tool
+ * - cue: user message instructing to call __register_task tool
  *
- * Tools: __register_tasks
+ * Tools: __register_task
  */
 
 import type { PromptModule } from '@modular-prompt/core';
@@ -49,13 +49,13 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '1. **Analyze**',
     '  - Read "Original Request" to grasp what is being asked and what the final deliverable should be.',
     '  - Check "Available Tools" to understand what deliverables tools can produce.',
+    // '  - If the work is simple enough (e.g. a single tool call), you may call the tool directly.',
     '2. **Design**',
     '  - Design the sequence of Tasks and deliverables that leads from the input to the final deliverable. See "Task Type Guide" and "Planning Theory".',
     '3. **Refine**',
     '  - Adjust each Task\'s input so it can work correctly and efficiently. Exclude Original Data when deliverables are sufficient. See "What Each Task Can See".',
     '4. **Register**',
-    '  - Call `__register_tasks` to register the designed Tasks.',
-    '  - If the work is simple enough (e.g. a single tool call), you may call the tool directly.',
+    '  - Call `__register_task` tool once per Task to register them.',
   ],
   guidelines: [
     '- Focus on designing the flow of deliverables, not on solving the problem itself. Each Task executor will handle the specifics — never dictate how a Task should be solved.',
@@ -116,18 +116,6 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
         '  - **withoutMaterials**: Exclude materials. Use when the Task requires focused reasoning on deliverables alone.',
       ],
     },
-    {
-      type: 'subsection' as const,
-      title: 'Available Tools',
-      items: [
-        (ctx: AgenticWorkflowContext) => {
-          if (!ctx.availableTools?.length) return 'No tools available.';
-          return ctx.availableTools.map(t =>
-            `- **${t.name}**: ${t.description || '(no description)'}`
-          ).join('\n');
-        },
-      ],
-    },
   ],
 
   materials: [
@@ -151,7 +139,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     {
       type: 'message' as const,
       role: 'user' as const,
-      content: 'Analyze the prompt and register tasks by calling `__register_tasks`.',
+      content: 'Analyze the prompt and register tasks by calling `__register_task`.',
     },
   ],
 };
@@ -183,6 +171,6 @@ export const replanningModule: PromptModule<AgenticWorkflowContext> = {
 
 export const config: TaskTypeConfig = {
   module: planningModule,
-  builtinToolNames: ['__register_tasks', '__time'],
+  builtinToolNames: ['__register_task', '__time'],
   maxTokensTier: 'high',
 };

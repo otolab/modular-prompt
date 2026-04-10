@@ -83,15 +83,15 @@ describe('integration tests', () => {
     // Planning → Think×2 → OutputMessage の4タスクシーケンス
     const driver = new TestDriver({
       responses: [
-        // Planning: __register_tasks で2タスク登録（stopAfterToolCallで1回で終了）
+        // Planning: __register_task × 2
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_tasks', arguments: {
-              tasks: [
-                { instruction: '入力データを分析する' },
-                { instruction: '分析結果をまとめる' },
-              ]
+            { id: 'tc-1', name: '__register_task', arguments: {
+              name: 'analyze', instruction: '入力データを分析する', taskType: 'think', reason: '分析が必要'
+            }},
+            { id: 'tc-2', name: '__register_task', arguments: {
+              name: 'summarize', instruction: '分析結果をまとめる', taskType: 'think', reason: 'まとめが必要'
             }},
           ]
         },
@@ -128,19 +128,15 @@ describe('integration tests', () => {
   });
 
   it('agenticProcessで外部ツール呼び出しがpendingとして返される', async () => {
-    let fetchCalled = false;
     const tools = [
       {
-        definition: {
-          name: 'fetchData',
-          description: 'データを取得する',
-          parameters: {
-            type: 'object',
-            properties: { source: { type: 'string' } },
-            required: ['source']
-          }
-        },
-        handler: async () => { fetchCalled = true; return {}; }
+        name: 'fetchData',
+        description: 'データを取得する',
+        parameters: {
+          type: 'object',
+          properties: { source: { type: 'string' } },
+          required: ['source']
+        }
       }
     ];
 
@@ -150,11 +146,11 @@ describe('integration tests', () => {
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_tasks', arguments: {
-              tasks: [
-                { instruction: 'データを取得する' },
-                { instruction: 'データを処理する' },
-              ]
+            { id: 'tc-1', name: '__register_task', arguments: {
+              name: 'fetch', instruction: 'データを取得する', taskType: 'act', reason: '取得が必要'
+            }},
+            { id: 'tc-2', name: '__register_task', arguments: {
+              name: 'process', instruction: 'データを処理する', taskType: 'think', reason: '処理が必要'
             }},
           ]
         },
@@ -180,8 +176,6 @@ describe('integration tests', () => {
 
     const result = await agenticProcess(driver, userModule, context, { tools });
 
-    // 外部ツールのhandlerは呼ばれない
-    expect(fetchCalled).toBe(false);
     // pendingToolCallsとして返される（executionLog[1]がthink task 1）
     expect(result.context.executionLog?.[1].pendingToolCalls?.[0].name).toBe('fetchData');
     expect(result.context.executionLog?.[1].pendingToolCalls?.[0].arguments).toEqual({ source: 'api' });
