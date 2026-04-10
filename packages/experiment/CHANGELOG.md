@@ -1,5 +1,21 @@
 # @modular-prompt/experiment
 
+## 0.4.27
+
+### Patch Changes
+
+- 50396a6: fix: **register_tasks を **register_task に単数化し、Gemma4 tool call 対応を追加
+
+  - `__register_tasks`（配列）を`__register_task`（単一）にフラット化。モデルが複数回 tool call することで複数タスクを登録する方式に変更
+  - Gemma4 形式の tool call パーサーを追加（`call:fn{key:value}` 形式）
+  - VLM パスの未定義関数`get_tool_stop_token_ids`参照を修正
+  - `AgenticWorkflowOptions.tools`の型を`ToolSpec[]`から`ToolDefinition[]`に変更
+  - 実験フレームワークで`queryOptions.tools`を`processOptions.tools`に渡すよう修正
+
+- Updated dependencies [50396a6]
+  - @modular-prompt/process@0.4.14
+  - @modular-prompt/driver@0.11.13
+
 ## 0.4.26
 
 ### Patch Changes
