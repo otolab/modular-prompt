@@ -533,6 +533,86 @@ describe('parseToolCalls', () => {
       expect(result.toolCalls[1].arguments).toEqual({ x: 1 });
     });
   });
+
+  describe('Gemma 4形式', () => {
+    const runtimeInfo = {
+      methods: ['chat'],
+      special_tokens: {},
+      features: {
+        apply_chat_template: true,
+        chat_template: {
+          supported_roles: ['system', 'user', 'assistant'],
+          constraints: {},
+          tool_call_format: {
+            call_start: '<|tool_call>',
+            call_end: '<tool_call|>'
+          }
+        }
+      }
+    } as MlxRuntimeInfo;
+
+    it('should detect Gemma 4 tool call with call: prefix and special quote tokens', () => {
+      const text = '<|tool_call>call:get_weather{location:<|"|>東京<|"|>}<tool_call|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]).toEqual({
+        id: 'call_0',
+        name: 'get_weather',
+        arguments: { location: '東京' }
+      });
+      expect(result.content).toBe('');
+    });
+
+    it('should handle multiple parameters', () => {
+      const text = '<|tool_call>call:search{query:<|"|>hello world<|"|>,limit:10}<tool_call|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].arguments).toEqual({
+        query: 'hello world',
+        limit: 10
+      });
+    });
+
+    it('should handle boolean and numeric values', () => {
+      const text = '<|tool_call>call:calculate{x:42,y:3.14,verbose:true}<tool_call|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].arguments).toEqual({
+        x: 42,
+        y: 3.14,
+        verbose: true
+      });
+    });
+
+    it('should handle no parameters', () => {
+      const text = '<|tool_call>call:get_status{}<tool_call|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('get_status');
+      expect(result.toolCalls[0].arguments).toEqual({});
+    });
+
+    it('should handle multiple tool calls', () => {
+      const text = '<|tool_call>call:fn_a{x:1}<tool_call|><|tool_call>call:fn_b{y:<|"|>test<|"|>}<tool_call|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls[0].name).toBe('fn_a');
+      expect(result.toolCalls[1].name).toBe('fn_b');
+    });
+
+    it('should extract content before tool call', () => {
+      const text = '天気を確認します。\n<|tool_call>call:get_weather{location:<|"|>東京<|"|>}<tool_call|>';
+      const result = parseToolCalls(text, runtimeInfo);
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.content).toBe('天気を確認します。');
+    });
+  });
 });
 
 describe('formatToolDefinitionsAsText', () => {

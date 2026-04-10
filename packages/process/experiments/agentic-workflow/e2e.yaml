@@ -31,15 +31,29 @@ models:
     model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
     provider: "mlx"
 
+  gemma4-e4b:
+    model: "mlx-community/gemma-4-e4b-it-4bit"
+    provider: "mlx"
+    defaultOptions:
+      temperature: 1.0
+      topP: 0.95
+      topK: 64
+      maxTokens: 1024
+    driverOptions:
+      textOnly: true
+
+  llm-jp-4-8b-thinking:
+    model: "llm-jp/llm-jp-4-8b-thinking"
+    provider: "mlx"
+
 drivers:
   mlx: {}
 
 _shared:
   models: &models
-    # - qwen3.5-9b
-    - default: quen3.5-2b-optiq
-      think: qwen3.5-4b-optiq
-      plan: qwen3.5-4b-optiq
+    - lfm2.5-instruct
+    - quen3.5-2b-optiq
+    - llm-jp-4-8b-thinking
 
 modules:
   - name: agentic-time-check

@@ -61,7 +61,7 @@ describe('Agentic Workflow v2 Prompt Inspection', () => {
     // objective は指示側にある
     const instructionText = collectText(prompt.instructions);
     expect(instructionText).toContain('文書を分析し、重要な洞察を抽出する');
-    expect(instructionText).toContain('__register_tasks');
+    expect(instructionText).toContain('__register_task');
 
     // terms が指示側にある（taskCommon + userModule）
     expect(instructionText).toContain('Objective');  // taskCommon.terms

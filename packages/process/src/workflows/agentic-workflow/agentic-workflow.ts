@@ -12,7 +12,7 @@
 
 import { merge, resolve } from '@modular-prompt/core';
 import type { PromptModule, ResolvedModule, ResolvedSectionContent } from '@modular-prompt/core';
-import type { FinishReason } from '@modular-prompt/driver';
+import type { FinishReason, ToolDefinition } from '@modular-prompt/driver';
 import { Logger } from '@modular-prompt/utils';
 import type { WorkflowResult } from '../types.js';
 import { aggregateUsage, aggregateLogEntries } from '../usage-utils.js';
@@ -32,7 +32,6 @@ import { replanningModule } from './task-types/planning.js';
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
-  getBuiltinToolDefinitions,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 
@@ -104,7 +103,7 @@ function getBuiltinToolsForTask(
 
   const allTools: ToolSpec[] = [];
 
-  if (toolNames.has('__register_tasks')) {
+  if (toolNames.has('__register_task')) {
     allTools.push(...createPlanningTools(taskList, currentIndex));
   }
 
@@ -132,7 +131,7 @@ async function executeTask(
   task: AgenticTask,
   taskIndex: number,
   taskList: AgenticTask[],
-  externalTools: ToolSpec[]
+  externalTools: ToolDefinition[]
 ): Promise<AgenticTaskExecutionLog> {
   const taskLogger = logger.context(`agentic:task:${taskIndex + 1}:${task.taskType}`);
   taskLogger.info(`[start] (${task.taskType})`, task.instruction);
@@ -161,8 +160,7 @@ async function executeTask(
   }
 
   const builtinTools = getBuiltinToolsForTask(task.taskType, taskList, taskIndex, context);
-  const externalToolDefs = externalTools.map(t => t.definition);
-  const allToolNames = [...builtinTools.map(t => t.definition.name), ...externalToolDefs.map(t => t.name)];
+  const allToolNames = [...builtinTools.map(t => t.definition.name), ...externalTools.map(t => t.name)];
   taskLogger.verbose('[prompt]', JSON.stringify(resolved), allToolNames.length > 0 ? `tools: [${allToolNames.join(', ')}]` : '');
 
   const driverRole = task.driverRole || DEFAULT_DRIVER_ROLE[task.taskType];
@@ -175,7 +173,7 @@ async function executeTask(
       resolved,
       builtinTools,
       {
-        externalToolDefs: externalToolDefs.length > 0 ? externalToolDefs : undefined,
+        externalToolDefs: externalTools.length > 0 ? externalTools : undefined,
         toolChoice: 'auto',
         maxTokens,
         logger: taskLogger,
@@ -235,11 +233,6 @@ export async function agenticProcess<T>(
     taskList: resumeState?.taskList ?? bootstrap(userModule, enablePlanning),
     executionLog: resumeState?.executionLog ? [...resumeState.executionLog] : [],
     currentTaskIndex: 0,
-    // planningがタスク設計時にツールの存在を把握し、適切なactタスクを計画できるようにする
-    availableTools: [
-      ...getBuiltinToolDefinitions(),
-      ...tools.map(t => t.definition),
-    ],
   };
 
   const { taskList, executionLog } = internalContext as Required<Pick<AgenticWorkflowContext, 'taskList' | 'executionLog'>>;

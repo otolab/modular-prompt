@@ -2,6 +2,18 @@
 # MLXドライバーでのtool calling動作確認
 
 models:
+  gemma4-e4b:
+    model: "mlx-community/gemma-4-e4b-it-4bit"
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    defaultOptions:
+      temperature: 1.0
+      topP: 0.95
+      topK: 64
+      maxTokens: 1024
+    driverOptions:
+      textOnly: true
+    priority: 10
   qwen3-4b:
     model: "mlx-community/Qwen3-4B-Thinking-2507-heretic-8bit"
     provider: "mlx"
@@ -25,19 +37,36 @@ models:
     provider: "mlx"
     capabilities: ["local", "fast", "japanese"]
     priority: 20
-    # disabled: true
+    disabled: true
   lfm2.5-instruct:
     model: LiquidAI/LFM2.5-1.2B-Instruct-MLX-8bit
     provider: "mlx"
     capabilities: ["local", "fast", "japanese"]
     priority: 20
-    # disabled: true
+    disabled: true
   lfm2.5-thinking:
     model: LiquidAI/LFM2.5-1.2B-Thinking-MLX-8bit
     provider: "mlx"
     capabilities: ["local", "thinking", "japanese"]
     priority: 20
-    # disabled: true
+    disabled: true
+  qwen3.5-2b-optiq:
+    model: mlx-community/Qwen3.5-2B-OptiQ-4bit
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 20
+    disabled: true
+  llm-jp-4-8b-thinking:
+    model: llm-jp/llm-jp-4-8b-thinking
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 20
+    disabled: true
+  qwen3.5-4b-optiq:
+    model: mlx-community/Qwen3.5-4B-OptiQ-4bit
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    priority: 10
 
 drivers:
   mlx: {}
@@ -84,6 +113,16 @@ testCases:
     input:
       question: "1 + 1 は何ですか？"
     queryOptions: *tool_math
+
+  - name: "agentic: 天気ツール呼び出し"
+    description: "agenticProcessでget_weatherツールを呼び出すことを期待"
+    input:
+      question: "東京と大阪の天気を比較して教えてください。"
+    queryOptions: *tool_weather
+    process: agenticProcess
+    processOptions:
+      maxTasks: 3
+      includeThinking: true
 
 evaluators:
   - name: llm-requirement-fulfillment

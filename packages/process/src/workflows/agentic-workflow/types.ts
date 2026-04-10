@@ -116,8 +116,6 @@ export interface AgenticWorkflowContext {
   executionLog?: AgenticTaskExecutionLog[];
   /** Index of the currently executing task */
   currentTaskIndex?: number;
-  /** External tool definitions available to tasks (for planning visibility) */
-  availableTools?: ToolDefinition[];
 }
 
 // ---------------------------------------------------------------------------
@@ -147,8 +145,8 @@ export interface AgenticResumeState {
 export interface AgenticWorkflowOptions {
   /** Maximum number of tasks (default: 10) */
   maxTasks?: number;
-  /** External tools available to tasks */
-  tools?: ToolSpec[];
+  /** External tool definitions available to tasks */
+  tools?: ToolDefinition[];
   /** Skip planning and use provided taskList (default: true) */
   enablePlanning?: boolean;
   /** Include intermediate task results wrapped in <think> tags before the final output (default: false) */

@@ -305,9 +305,7 @@ def handle_chat_vlm(messages, images, options=None, max_image_size=768, tools=No
     display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', formatted_prompt)
     sys.stderr.write(f"--- vlm prompt (images: {len(pil_images)}, max_size: {max_image_size})\n{display_prompt}\n")
 
-    # tools提供時、call_end を追加 stop token として渡す
-    stop_token_ids = get_tool_stop_token_ids() if tools else None
-    generate_text_vlm(formatted_prompt, pil_images, options, stop_token_ids=stop_token_ids)
+    generate_text_vlm(formatted_prompt, pil_images, options)
 
 
 def generate_text_vlm(prompt, images, options, stop_token_ids=None):

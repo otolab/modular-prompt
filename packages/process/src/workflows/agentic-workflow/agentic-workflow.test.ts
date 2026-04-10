@@ -1,22 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { agenticProcess } from './agentic-workflow.js';
 import { TestDriver } from '@modular-prompt/driver';
-import type { ToolSpec } from './types.js';
+import type { ToolDefinition } from '@modular-prompt/driver';
 
 describe('agenticProcess v2', () => {
   // 1. 基本ワークフロー
   it('should execute basic workflow with planning and tasks', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning: __register_tasks（1回で完了）
+        // Planning: __register_task × 2
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_tasks', arguments: {
-              tasks: [
-                { instruction: 'Analyze input data' },
-                { instruction: 'Process results' },
-              ]
+            { id: 'tc-1', name: '__register_task', arguments: {
+              name: 'analyze', instruction: 'Analyze input data', taskType: 'think', reason: 'Need analysis'
+            }},
+            { id: 'tc-2', name: '__register_task', arguments: {
+              name: 'process', instruction: 'Process results', taskType: 'think', reason: 'Need processing'
             }},
           ]
         },
@@ -46,21 +46,14 @@ describe('agenticProcess v2', () => {
 
   // 2. 外部ツール呼び出しは pending として返す
   it('should return external tool calls as pending without executing', async () => {
-    let toolCalled = false;
-    const tools: ToolSpec[] = [
+    const tools: ToolDefinition[] = [
       {
-        definition: {
-          name: 'getData',
-          description: 'Get data by ID',
-          parameters: {
-            type: 'object',
-            properties: { id: { type: 'string' } },
-            required: ['id']
-          }
-        },
-        handler: async () => {
-          toolCalled = true;
-          return { data: 'test' };
+        name: 'getData',
+        description: 'Get data by ID',
+        parameters: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id']
         }
       }
     ];
@@ -70,8 +63,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
-            tasks: [{ instruction: 'Get external data' }]
+          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
+            name: 'fetch', instruction: 'Get external data', taskType: 'act', reason: 'Need data'
           }}]
         },
         // Think: 外部ツール呼び出し → pending として返す
@@ -91,7 +84,6 @@ describe('agenticProcess v2', () => {
       { tools }
     );
 
-    expect(toolCalled).toBe(false);
     expect(result.context.executionLog?.[1].pendingToolCalls).toHaveLength(1);
     expect(result.context.executionLog?.[1].pendingToolCalls?.[0].name).toBe('getData');
     expect(result.metadata?.toolCallsUsed).toBe(1);
@@ -105,8 +97,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
-            tasks: [{ instruction: 'Simple task' }]
+          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
+            name: 'simple', instruction: 'Simple task', taskType: 'think', reason: 'Need to think'
           }}]
         },
         // Think
@@ -130,15 +122,13 @@ describe('agenticProcess v2', () => {
         // Planning: 5タスク登録
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
-            tasks: [
-              { instruction: 'Task 1' },
-              { instruction: 'Task 2' },
-              { instruction: 'Task 3' },
-              { instruction: 'Task 4' },
-              { instruction: 'Task 5' },
-            ]
-          }}]
+          toolCalls: [
+            { id: 'tc-1', name: '__register_task', arguments: { name: 't1', instruction: 'Task 1', taskType: 'think', reason: 'r' } },
+            { id: 'tc-2', name: '__register_task', arguments: { name: 't2', instruction: 'Task 2', taskType: 'think', reason: 'r' } },
+            { id: 'tc-3', name: '__register_task', arguments: { name: 't3', instruction: 'Task 3', taskType: 'think', reason: 'r' } },
+            { id: 'tc-4', name: '__register_task', arguments: { name: 't4', instruction: 'Task 4', taskType: 'think', reason: 'r' } },
+            { id: 'tc-5', name: '__register_task', arguments: { name: 't5', instruction: 'Task 5', taskType: 'think', reason: 'r' } },
+          ]
         },
         // maxTasks=3: planning + think×2 まで実行
         'Task 1 done',
@@ -188,8 +178,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
-            tasks: [{ instruction: 'Check time' }]
+          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
+            name: 'check', instruction: 'Check time', taskType: 'think', reason: 'Need time'
           }}]
         },
         // Think: __time ツール呼び出し（1回のqueryで完了、tool結果は次タスクへ）
@@ -218,8 +208,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_tasks', arguments: {
-            tasks: [{ instruction: 'Analyze' }]
+          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
+            name: 'analyze', instruction: 'Analyze', taskType: 'think', reason: 'Need analysis'
           }}]
         },
         // Think

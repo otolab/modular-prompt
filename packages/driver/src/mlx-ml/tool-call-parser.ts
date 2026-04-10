@@ -22,6 +22,7 @@ const KNOWN_TOOL_PARSER_DELIMITERS: Record<string, { start: string; end: string 
   qwen3_coder: { start: '<tool_call>', end: '</tool_call>' },
   minimax_m2: { start: '<minimax:tool_call>', end: '</minimax:tool_call>' },
   context_1: { start: 'to=functions.', end: '<|call|>' },
+  gemma4: { start: '<|tool_call>', end: '<tool_call|>' },
 };
 
 export interface ToolCallParseResult {
@@ -327,6 +328,68 @@ function parseXmlToolCallContent(content: string): ParsedToolCall | null {
 }
 
 /**
+ * Gemma 4形式のtool callコンテンツをパース
+ * 例: call:get_weather{location:<|"|>東京<|"|>,limit:10}
+ */
+function parseGemma4ToolCallContent(content: string): ParsedToolCall | null {
+  const match = content.match(/^call:([\w.-]+)\{([\s\S]*)\}$/);
+  if (!match) return null;
+
+  const name = match[1];
+  const argsStr = match[2].trim();
+  const args: Record<string, unknown> = {};
+
+  if (argsStr) {
+    // <|"|> を通常の引用符に置換
+    const normalized = argsStr.replace(/<\|"\|>/g, '"');
+
+    // key:value ペアを抽出
+    let pos = 0;
+    while (pos < normalized.length) {
+      // key の抽出
+      const keyMatch = normalized.slice(pos).match(/^(\w+):/);
+      if (!keyMatch) break;
+      const key = keyMatch[1];
+      pos += keyMatch[0].length;
+
+      // value の抽出
+      const ch = normalized[pos];
+      let value: string;
+
+      if (ch === '"') {
+        // 引用符で囲まれた文字列
+        let end = pos + 1;
+        while (end < normalized.length && normalized[end] !== '"') {
+          if (normalized[end] === '\\') end++;
+          end++;
+        }
+        value = normalized.slice(pos + 1, end);
+        pos = end + 1;
+      } else if (ch === '[' || ch === '{') {
+        // 括弧対応で値を抽出
+        const extracted = extractBracketedValue(normalized, pos);
+        if (!extracted) break;
+        value = extracted;
+        pos += value.length;
+      } else {
+        // カンマまたは末尾まで
+        const endMatch = normalized.slice(pos).match(/^([^,}]*)/);
+        value = endMatch ? endMatch[1].trim() : '';
+        pos += endMatch ? endMatch[0].length : 0;
+      }
+
+      args[key] = coerceValue(value);
+
+      // カンマをスキップ
+      const sep = normalized.slice(pos).match(/^\s*,\s*/);
+      if (sep) pos += sep[0].length;
+    }
+  }
+
+  return { name, arguments: args };
+}
+
+/**
  * 複数形式を試行してtool callコンテンツをパース
  */
 function parseToolCallContent(
@@ -336,11 +399,15 @@ function parseToolCallContent(
   const jsonResult = parseJsonToolCallContent(content);
   if (jsonResult) return jsonResult;
 
-  // 2. Pythonic形式を試行
+  // 2. Gemma 4形式を試行
+  const gemma4Result = parseGemma4ToolCallContent(content);
+  if (gemma4Result) return gemma4Result;
+
+  // 3. Pythonic形式を試行
   const pythonicResult = parsePythonicToolCallContent(content);
   if (pythonicResult) return pythonicResult;
 
-  // 3. XML形式を試行
+  // 4. XML形式を試行
   const xmlResult = parseXmlToolCallContent(content);
   if (xmlResult) return xmlResult;
 

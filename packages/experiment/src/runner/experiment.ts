@@ -269,7 +269,10 @@ export class ExperimentRunner {
       try {
         const processFn = resolveProcess(testCase.process);
         const processOptions = testCase.process
-          ? testCase.processOptions
+          ? {
+              ...testCase.processOptions,
+              ...(testCase.queryOptions?.tools ? { tools: testCase.queryOptions.tools } : {}),
+            }
           : {
               queryOptions: {
                 temperature: 0.7,
