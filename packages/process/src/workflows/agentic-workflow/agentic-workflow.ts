@@ -42,7 +42,12 @@ const logger = new Logger({ prefix: 'process', context: 'agentic', accumulate: t
  * Thinking traces are internal reasoning and should not be passed to subsequent tasks.
  */
 function stripThinkBlocks(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>\s*/g, '').replace(/^[\s\S]*?<\/think>\s*/g, '').trim();
+  return text
+    .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
+    .replace(/^[\s\S]*?<\/think>\s*/g, '')
+    .replace(/<\|channel>thought[\s\S]*?<channel\|>\s*/g, '')
+    .replace(/^[\s\S]*?<channel\|>\s*/g, '')
+    .trim();
 }
 
 /**
