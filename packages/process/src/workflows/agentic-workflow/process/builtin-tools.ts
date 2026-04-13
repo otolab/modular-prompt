@@ -38,14 +38,13 @@ interface TaskEntry {
   withoutInputs?: boolean;
   withoutMessages?: boolean;
   withoutMaterials?: boolean;
-  insertAt?: number;
 }
 
 const TASK_ENTRY_SCHEMA = {
   type: 'object',
   properties: {
     name: { type: 'string', description: 'Short identifier for this task (e.g. "search", "analyze"). Used in dep references and display.' },
-    instruction: { type: 'string', description: 'Description of the deliverable this task produces.' },
+    instruction: { type: 'string', description: 'Directive for the AI worker executing this task. Specify what deliverable to produce and any constraints. This is the sole instruction the worker receives.' },
     taskType: {
       type: 'string',
       enum: [...Object.keys(EXECUTION_TASK_DEFS), 'output'],
@@ -56,7 +55,7 @@ const TASK_ENTRY_SCHEMA = {
     },
     reason: {
       type: 'string',
-      description: 'Why this task is necessary — what gap it fills in the deliverable chain.',
+      description: 'Why this task is necessary — what gap it fills in the deliverable chain. This field is used to evaluate planning quality, so be precise and specific.',
     },
     dep: {
       type: 'array',
@@ -80,17 +79,13 @@ const TASK_ENTRY_SCHEMA = {
       type: 'boolean',
       description: 'Exclude the original user materials from this Task. Default: false (materials are included).',
     },
-    insertAt: {
-      type: 'number',
-      description: 'Position in the task list to insert at. If omitted, the task is scheduled as the next task. Values before the current task are ignored.',
-    },
   },
   required: ['name', 'instruction', 'taskType', 'reason'],
 } as const;
 
 /**
  * TaskEntry からタスクを登録し、結果メッセージを返す
- * @param currentIndex 現在実行中のタスクのインデックス。insertAt がこれ以下の場合はクランプされる。
+ * @param currentIndex 現在実行中のタスクのインデックス。この直後に挿入される。
  */
 function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: number): void {
   const rawType = entry.taskType || 'think';
@@ -109,10 +104,7 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: n
     withoutMaterials: entry.withoutMaterials,
   };
 
-  const minInsertAt = currentIndex + 1;
-  const requestedAt = typeof entry.insertAt === 'number' ? entry.insertAt : minInsertAt;
-  const insertAt = Math.max(requestedAt, minInsertAt);
-  taskList.splice(insertAt, 0, task);
+  taskList.splice(currentIndex + 1, 0, task);
 }
 
 /**
