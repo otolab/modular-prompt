@@ -1,5 +1,19 @@
 # @modular-prompt/process
 
+## 0.4.18
+
+### Patch Changes
+
+- 69d3cd1: fix: **replan ログ改善、**register_task 二重出力修正、Logger drain デフォルト化
+
+  - \_\_replan の tool result に完了済み/残りタスクの情報を含めるようにした
+  - \_\_register_task の tool result を登録確認のみに簡素化（並列呼び出し時の冗長出力を解消）
+  - Logger.getLogEntries() に drain オプション追加（デフォルト true）で蓄積の無制限増大を防止
+
+- Updated dependencies [69d3cd1]
+  - @modular-prompt/utils@0.3.4
+  - @modular-prompt/driver@0.11.15
+
 ## 0.4.17
 
 ### Patch Changes
