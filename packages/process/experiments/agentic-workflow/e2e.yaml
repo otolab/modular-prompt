@@ -46,14 +46,23 @@ models:
     model: "llm-jp/llm-jp-4-8b-thinking"
     provider: "mlx"
 
+  gemma4-e4b-mxfp8:
+    model: "mlx-community/gemma-4-e4b-it-mxfp8"
+    provider: "mlx"
+    defaultOptions:
+      temperature: 1.0
+      topP: 0.95
+      topK: 64
+      maxTokens: 1024
+    driverOptions:
+      textOnly: true
+
 drivers:
   mlx: {}
 
 _shared:
   models: &models
-    - lfm2.5-instruct
-    - quen3.5-2b-optiq
-    - llm-jp-4-8b-thinking
+    - gemma4-e4b-mxfp8
 
 modules:
   - name: agentic-time-check
