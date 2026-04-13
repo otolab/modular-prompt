@@ -1,5 +1,13 @@
 # @modular-prompt/process
 
+## 0.4.16
+
+### Patch Changes
+
+- 6757cd1: fix: planning フェーズの Original Request を blockquote 形式に変更
+
+  Original Request material の content に markdown blockquote (`> `) を適用し、プランニングプロンプト自体の構造と引用データを視覚的に区別できるようにした。
+
 ## 0.4.15
 
 ### Patch Changes

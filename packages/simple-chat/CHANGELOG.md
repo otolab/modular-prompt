@@ -1,5 +1,12 @@
 # @modular-prompt/simple-chat
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [6757cd1]
+  - @modular-prompt/process@0.4.16
+
 ## 0.3.3
 
 ### Patch Changes
