@@ -1,5 +1,11 @@
 # @modular-prompt/process
 
+## 0.4.15
+
+### Patch Changes
+
+- a243023: fix: Gemma4 の `<|channel>thought...<channel|>` ブロックを `<think>` と同様に除去する対応を追加
+
 ## 0.4.14
 
 ### Patch Changes
