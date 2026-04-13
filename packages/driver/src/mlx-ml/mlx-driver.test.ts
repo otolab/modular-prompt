@@ -36,7 +36,6 @@ vi.mock('./process/index.js', () => ({
         vocab_size: 32000,
         model_max_length: 4096,
         chat_template: {
-          template_string: 'some_template',
           supported_roles: ['system', 'user', 'assistant'],
           preview: null,
           constraints: {}

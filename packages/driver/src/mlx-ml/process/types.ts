@@ -109,7 +109,6 @@ export interface ToolCallFormat {
 }
 
 export interface ChatTemplateInfo {
-  template_string?: string;
   supported_roles: string[];
   preview?: string;
   constraints: Record<string, unknown>;

@@ -85,7 +85,6 @@ export interface ToolCallFormat {
  * チャットテンプレート情報
  */
 export interface ChatTemplateInfo {
-  templateString?: string;
   supportedRoles: string[];
   preview?: string;
   constraints: Record<string, unknown>;

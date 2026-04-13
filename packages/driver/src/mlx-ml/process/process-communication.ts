@@ -70,14 +70,30 @@ export class ProcessCommunication {
     });
 
     this.process.stdout.on('data', (data) => {
-      // ここはnull文字でなくてはならない
-      const nullIndex = data.indexOf('\0');
-      
+      this.processData(data);
+    });
+
+    this.process.on('error', (err) => {
+      logger.error('Child process error:', err);
+    });
+  }
+
+  /**
+   * stdoutから受信したデータを処理する
+   * null文字をレスポンス区切りとして解釈し、
+   * 1つのdataチャンクに複数のレスポンスが含まれる場合も正しく処理する
+   */
+  private processData(data: Buffer): void {
+    let remaining: Buffer = data;
+
+    while (remaining.length > 0) {
+      const nullIndex = remaining.indexOf('\0');
+
       if (nullIndex !== -1) {
         // null文字が見つかった場合、レスポンス終了
-        const chunk = this.decoder.write(data.slice(0, nullIndex));
+        const chunk = this.decoder.write(remaining.slice(0, nullIndex));
         this.decoder = new StringDecoder('utf8');
-        
+
         if (this.currentStream) {
           // ストリーミングレスポンスの場合
           this.currentStream.push(chunk);
@@ -89,12 +105,15 @@ export class ProcessCommunication {
           this.callbacks.onJsonResponse(this.jsonBuffer);
           this.jsonBuffer = '';
         }
-        
+
         this.callbacks.onRequestCompleted();
+
+        // null文字以降の残りデータを続けて処理
+        remaining = remaining.slice(nullIndex + 1);
       } else {
         // null文字がない場合、データを蓄積
-        const chunk = this.decoder.write(data);
-        
+        const chunk = this.decoder.write(remaining);
+
         if (this.currentStream) {
           // ストリーミング中
           this.currentStream.push(chunk);
@@ -102,12 +121,9 @@ export class ProcessCommunication {
           // JSONレスポンス蓄積中
           this.jsonBuffer += chunk;
         }
+        break;
       }
-    });
-
-    this.process.on('error', (err) => {
-      logger.error('Child process error:', err);
-    });
+    }
   }
 
   createNewStream(): Readable {

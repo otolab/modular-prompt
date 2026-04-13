@@ -291,7 +291,6 @@ def get_chat_template_info(tokenizer):
         return None
 
     template_info = {
-        "template_string": getattr(tokenizer, 'chat_template', None),
         "supported_roles": [],
         "preview": None,
         "constraints": {}
