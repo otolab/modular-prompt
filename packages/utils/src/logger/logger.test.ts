@@ -248,11 +248,11 @@ describe('Logger', () => {
       logger.info('info msg');
       logger.debug('debug msg');
 
-      const errorLogs = logger.getLogEntries({ level: 'error' });
+      const errorLogs = logger.getLogEntries({ level: 'error', drain: false });
       expect(errorLogs).toHaveLength(1);
       expect(errorLogs[0].level).toBe('error');
 
-      const warnLogs = logger.getLogEntries({ level: ['warn', 'error'] });
+      const warnLogs = logger.getLogEntries({ level: ['warn', 'error'], drain: false });
       expect(warnLogs).toHaveLength(2);
     });
 
@@ -529,13 +529,13 @@ describe('Logger', () => {
       logger2.info('message 2');
 
       // All instances see the same log entries (when filterByContext is disabled)
-      expect(logger1.getLogEntries({ filterByContext: false })).toHaveLength(2);
-      expect(logger2.getLogEntries({ filterByContext: false })).toHaveLength(2);
-      expect(logger.getLogEntries({ filterByContext: false })).toHaveLength(2);
+      expect(logger1.getLogEntries({ filterByContext: false, drain: false })).toHaveLength(2);
+      expect(logger2.getLogEntries({ filterByContext: false, drain: false })).toHaveLength(2);
+      expect(logger.getLogEntries({ filterByContext: false, drain: false })).toHaveLength(2);
 
-      // By default, each instance only sees its own context
-      expect(logger1.getLogEntries()).toHaveLength(1);
-      expect(logger2.getLogEntries()).toHaveLength(1);
+      // By default, each instance only sees its own context (drain removes them)
+      expect(logger1.getLogEntries({ drain: false })).toHaveLength(1);
+      expect(logger2.getLogEntries({ drain: false })).toHaveLength(1);
     });
 
     it('should write to same log file from all instances', async () => {
@@ -573,14 +573,14 @@ describe('Logger', () => {
       testLogger.info('should not log');
       testLogger.warn('should log');
 
-      expect(logger.getLogEntries()).toHaveLength(1);
+      expect(logger.getLogEntries({ drain: false })).toHaveLength(1);
 
       // Change global config
       Logger.configure({ level: 'info', accumulateLevel: 'info' });
 
       testLogger.info('now should log');
 
-      expect(logger.getLogEntries()).toHaveLength(2);
+      expect(logger.getLogEntries({ drain: false })).toHaveLength(2);
     });
 
     it('should filter by context by default', () => {
@@ -597,12 +597,12 @@ describe('Logger', () => {
       dbLogger.info('db message 3');
 
       // Each logger sees only its own context by default
-      expect(apiLogger.getLogEntries()).toHaveLength(2);
-      expect(dbLogger.getLogEntries()).toHaveLength(3);
+      expect(apiLogger.getLogEntries({ drain: false })).toHaveLength(2);
+      expect(dbLogger.getLogEntries({ drain: false })).toHaveLength(3);
 
       // Disable filter to see all
-      expect(apiLogger.getLogEntries({ filterByContext: false })).toHaveLength(5);
-      expect(dbLogger.getLogEntries({ filterByContext: false })).toHaveLength(5);
+      expect(apiLogger.getLogEntries({ filterByContext: false, drain: false })).toHaveLength(5);
+      expect(dbLogger.getLogEntries({ filterByContext: false, drain: false })).toHaveLength(5);
     });
 
     it('should filter stats by context by default', () => {

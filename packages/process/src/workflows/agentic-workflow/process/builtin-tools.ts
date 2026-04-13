@@ -137,10 +137,7 @@ export function createPlanningTools(taskList: AgenticTask[], currentIndex: numbe
       registerTask(taskList, entry, currentIndex + insertOffset);
       insertOffset++;
 
-      // Return full updated task list so the model can see the current plan
-      return 'Updated task list:\n' + taskList
-        .map((t, i) => `${i + 1}. ${t.name ? `[${t.name}] ` : ''}(${t.taskType}): ${t.instruction}`)
-        .join('\n');
+      return `Registered: [${entry.name}] (${entry.taskType || 'think'})`;
     },
   }];
 }
@@ -174,38 +171,57 @@ const timeTool: ToolSpec = {
  * 再プランニング要求ツール
  * ワークフロー側で検出され、実際の再プランニングが実行される
  */
-const replanTool: ToolSpec = {
-  definition: {
-    name: '__replan',
-    description: 'Request re-planning of the workflow. Triggers a new planning phase that considers completed deliverables and remaining tasks.',
-    parameters: {
-      type: 'object',
-      properties: {
-        reason: {
-          type: 'string',
-          description: 'Why re-planning is needed.',
+/**
+ * Execution フェーズ用の __replan ツールを生成
+ * タスクリストと現在位置を参照してログに残す
+ */
+function createReplanTool(taskList: AgenticTask[], currentIndex: number): ToolSpec {
+  return {
+    definition: {
+      name: '__replan',
+      description: 'Request re-planning of the workflow. Triggers a new planning phase that considers completed deliverables and remaining tasks.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: {
+            type: 'string',
+            description: 'Why re-planning is needed.',
+          },
         },
       },
     },
-  },
-  handler: async (args) => {
-    // Return marker object. Actual re-planning is handled by the workflow.
-    return {
-      replan: true,
-      reason: args.reason,
-    };
-  },
-};
+    handler: async (args) => {
+      const completed = taskList
+        .slice(0, currentIndex + 1)
+        .map((t, i) => `${i + 1}. [${t.name || '-'}] (${t.taskType}): ${t.instruction}`)
+        .join('\n');
+      const remaining = taskList
+        .slice(currentIndex + 1)
+        .map((t, i) => `${currentIndex + 2 + i}. [${t.name || '-'}] (${t.taskType}): ${t.instruction}`)
+        .join('\n');
+
+      return [
+        `Re-planning requested: ${args.reason || '(no reason)'}`,
+        '',
+        'Completed tasks:',
+        completed || '(none)',
+        '',
+        'Remaining tasks (will be cleared):',
+        remaining || '(none)',
+      ].join('\n');
+    },
+  };
+}
 
 /**
  * Execution フェーズ用の組み込みツールを生成
  */
 export function createExecutionBuiltinTools(
-  _taskList: AgenticTask[],
-  _currentIndex: number
+  taskList: AgenticTask[],
+  currentIndex: number
 ): ToolSpec[] {
   return [
-    replanTool,
+    createReplanTool(taskList, currentIndex),
     timeTool,
   ];
 }
