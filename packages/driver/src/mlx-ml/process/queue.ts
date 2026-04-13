@@ -158,8 +158,9 @@ export class QueueManager {
         }
       }
     }
-    this.isProcessing = false;
-    this.processNext(); // 次のリクエストを処理
+    // 注: isProcessing/processNext は onRequestCompleted() に一元化
+    // handleJsonResponse と onRequestCompleted の二重呼び出しによる
+    // isProcessing フラグの不整合を防止
   }
 
   onRequestCompleted(): void {

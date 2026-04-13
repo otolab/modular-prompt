@@ -445,7 +445,6 @@ export class MlxDriver implements AIDriver {
         vocabSize: this.runtimeInfo.features.vocab_size,
         modelMaxLength: this.runtimeInfo.features.model_max_length,
         chatTemplate: this.runtimeInfo.features.chat_template ? {
-          templateString: this.runtimeInfo.features.chat_template.template_string,
           supportedRoles: this.runtimeInfo.features.chat_template.supported_roles,
           preview: this.runtimeInfo.features.chat_template.preview,
           constraints: this.runtimeInfo.features.chat_template.constraints,
