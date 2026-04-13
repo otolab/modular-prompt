@@ -304,6 +304,7 @@ export class Logger {
       limit?: number;
       search?: string;
       filterByContext?: boolean; // デフォルト: true（このインスタンスのcontextのみ）
+      drain?: boolean; // デフォルト: true（取得したエントリを蓄積から除去）
     } = {}
   ): LogEntry[] {
     let filtered = [...Logger.logEntries];
@@ -342,6 +343,13 @@ export class Logger {
     // 制限
     if (options.limit && options.limit > 0) {
       filtered = filtered.slice(-options.limit);
+    }
+
+    // 取得したエントリを蓄積から除去（デフォルト有効）
+    const drain = options.drain ?? true;
+    if (drain && filtered.length > 0) {
+      const drained = new Set(filtered);
+      Logger.logEntries = Logger.logEntries.filter(entry => !drained.has(entry));
     }
 
     return filtered;
