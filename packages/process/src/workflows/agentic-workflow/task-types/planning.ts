@@ -122,10 +122,11 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     (ctx: AgenticWorkflowContext) => {
       if (!ctx.userModule) return null;
       const compiled = distribute(ctx.userModule);
-      const text = formatCompletionPrompt(compiled, {
+      const rawText = formatCompletionPrompt(compiled, {
         sectionDescriptions: {},
       });
-      if (!text.trim()) return null;
+      if (!rawText.trim()) return null;
+      const text = rawText.split('\n').map(line => `> ${line}`).join('\n');
       return {
         type: 'material' as const,
         id: 'user-prompt',
