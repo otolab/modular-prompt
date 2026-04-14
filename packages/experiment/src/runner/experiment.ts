@@ -231,8 +231,13 @@ export class ExperimentRunner {
         }
       }
 
-      // 単一モデルの場合のみclose（セットの場合はcleanupで処理）
-      if (!firstItem.driverSetMapping) {
+      // モデルグループ完了後にドライバをclose
+      if (firstItem.driverSetMapping) {
+        for (const refName of Object.values(firstItem.driverSetMapping)) {
+          logger.info(`Closing driver: ${refName}`);
+          await this.driverManager.close(refName);
+        }
+      } else {
         logger.info(`Closing driver: ${modelName}`);
         await this.driverManager.close(modelName);
       }

@@ -25,7 +25,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
   objective: [
     '- You are the planner. Your responsibility is to analyze the request and design a Workflow.',
     '- Your output consists of two parts: a user-readable analysis of the request, and task registrations via tool calls.',
-    '- Analyze the original request to understand what is being asked, then decompose it into a Workflow.',
+    '- Analyze the original request data to understand what is being asked, then decompose it into a Workflow.',
     '- The Workflow must satisfy these principles:',
     '  - **Solvability**: Each task must be completable by a single AI instance with available tools.',
     '  - **Completeness**: The full set of tasks must cover the entire user objective.',

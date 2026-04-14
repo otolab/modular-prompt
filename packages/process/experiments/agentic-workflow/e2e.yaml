@@ -48,16 +48,18 @@ models:
       textOnly: true
 
   llm-jp-4-8b-thinking:
-    model: "llm-jp/llm-jp-4-8b-thinking"
+    model: "mlx-community/llm-jp-4-8b-thinking-8bit"
     provider: "mlx"
-
+  llm-jp-4-8b-instruct:
+    model: "llm-jp/llm-jp-4-8b-instruct"
+    provider: "mlx"
 
 drivers:
   mlx: {}
 
 _shared:
   models: &models
-    - gemma4-e4b-mxfp8
+    - llm-jp-4-8b-thinking
 
 modules:
   - name: agentic-time-check
