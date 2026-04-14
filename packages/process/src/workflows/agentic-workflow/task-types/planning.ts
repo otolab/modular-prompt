@@ -23,9 +23,10 @@ import { buildTaskListWithResults } from './index.js';
 
 const planningModule: PromptModule<AgenticWorkflowContext> = {
   objective: [
-    '- You are the planner. Workflow design is your responsibility.',
-    '- Decompose the original request and reconstruct it as a workflow.',
-    '- Design a Workflow by composing Tasks that satisfy these principles:',
+    '- You are the planner. Your responsibility is to analyze the request and design a Workflow.',
+    '- Your output consists of two parts: a user-readable analysis of the request, and task registrations via tool calls.',
+    '- Analyze the original request to understand what is being asked, then decompose it into a Workflow.',
+    '- The Workflow must satisfy these principles:',
     '  - **Solvability**: Each task must be completable by a single AI instance with available tools.',
     '  - **Completeness**: The full set of tasks must cover the entire user objective.',
     '  - **Non-redundancy**: No unnecessary or overlapping tasks.',
@@ -42,15 +43,17 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '- A **Workflow** is a sequence of Tasks that begins with this planning Task and ends with an output Task.',
     '- Each Task is executed by a separate AI instance. It receives deliverables from all previously completed Tasks and produces its own deliverable.',
     '- Your job is to design this Workflow: decide what deliverables are needed and how each Task produces them.',
+    '- This planning Task produces two kinds of output:',
+    '  - **Text output**: Your analysis of the request. This becomes a deliverable visible to all subsequent Tasks.',
+    '  - **Tool calls** (`__register_task`): Each call registers a Task into the Workflow.',
   ],
   instructions: [
     'Follow these 3 steps:',
     '',
-    '1. **Analyze** — Output your analysis as text.',
+    '1. **Analyze** — Output your analysis in a user-readable format.',
     '  - Read "Original Request" to grasp what is being asked and what the final deliverable should be.',
     '  - Check "Available Tools" to understand what deliverables tools can produce.',
     '  - Identify the key complexity: what makes this request non-trivial, what knowledge or steps are required.',
-    '  - Write your analysis as text output. This becomes a deliverable visible to subsequent Tasks.',
     '2. **Design & Refine**',
     '  - Design the sequence of Tasks and deliverables that leads from the input to the final deliverable. See "Task Type Guide" and "Planning Theory".',
     '  - Adjust each Task\'s input so it can work correctly and efficiently. Exclude Original Data when deliverables are sufficient. See "What Each Task Can See".',
@@ -140,7 +143,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     {
       type: 'message' as const,
       role: 'user' as const,
-      content: 'Analyze the prompt and register tasks by calling `__register_task`.',
+      content: 'Output your analysis in a user-readable format, then register tasks.',
     },
   ],
 };

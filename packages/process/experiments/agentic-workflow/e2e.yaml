@@ -2,13 +2,10 @@
 # agenticProcess を通して planning → execution → output の全フローを検証
 
 models:
-  qwen3.5-27b:
-    model: "mlx-community/Qwen3.5-27B-4bit"
-    provider: "mlx"
-    disabled: true
-  gemma-3-27b:
-    model: "mlx-community/gemma-3-27b-it-qat-4bit"
-    provider: "mlx"
+  # qwen3.5-27b:
+  #   model: "mlx-community/Qwen3.5-27B-4bit"
+  #   provider: "mlx"
+  #   disabled: true
   qwen3.5-9b:
     model: mlx-community/Qwen3.5-9B-OptiQ-4bit
     provider: "mlx"
@@ -18,9 +15,7 @@ models:
   quen3.5-2b-optiq:
     model: mlx-community/Qwen3.5-2B-OptiQ-4bit
     provider: "mlx"
-  qwq-bakeneko-32b:
-    model: mlx-community/qwq-bakeneko-32b-4bit
-    provider: "mlx"
+
   lfm2.5-jp:
     model: LiquidAI/LFM2.5-1.2B-JP-MLX-8bit
     provider: "mlx"
@@ -41,11 +36,6 @@ models:
       maxTokens: 1024
     driverOptions:
       textOnly: true
-
-  llm-jp-4-8b-thinking:
-    model: "llm-jp/llm-jp-4-8b-thinking"
-    provider: "mlx"
-
   gemma4-e4b-mxfp8:
     model: "mlx-community/gemma-4-e4b-it-mxfp8"
     provider: "mlx"
@@ -56,6 +46,11 @@ models:
       maxTokens: 1024
     driverOptions:
       textOnly: true
+
+  llm-jp-4-8b-thinking:
+    model: "llm-jp/llm-jp-4-8b-thinking"
+    provider: "mlx"
+
 
 drivers:
   mlx: {}
