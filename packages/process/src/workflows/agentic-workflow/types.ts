@@ -59,6 +59,8 @@ export interface AgenticTask {
   instruction: string;
   /** Task type determining prompt construction and input contract */
   taskType: TaskType;
+  /** Names of prior tasks whose deliverables this task depends on */
+  dep?: string[];
   /** Driver role override (defaults per task type) */
   driverRole?: ModelRole;
   /** Exclude user inputs from data (default: false = inputs are included) */
