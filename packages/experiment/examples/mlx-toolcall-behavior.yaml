@@ -1,0 +1,130 @@
+# MLXドライバー tool call 性質チェック
+# tool callとテキスト応答の同時生成、tool call精度などを確認
+#
+# 対象: Qwen3.5 4B, Gemma-4 4B
+
+models:
+  qwen3.5-4b:
+    model: mlx-community/Qwen3.5-4B-OptiQ-4bit
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    defaultOptions:
+      temperature: 0.3
+      maxTokens: 1024
+    priority: 10
+
+  gemma4-e4b:
+    model: "mlx-community/gemma-4-e4b-it-4bit"
+    provider: "mlx"
+    capabilities: ["local", "tools"]
+    defaultOptions:
+      temperature: 1.0
+      topP: 0.95
+      topK: 64
+      maxTokens: 1024
+    driverOptions:
+      textOnly: true
+    priority: 10
+
+drivers:
+  mlx: {}
+
+# 共通ツール定義
+_shared:
+  tools:
+    simple: &tools_simple
+      - name: get_weather
+        description: "指定された場所の現在の天気を取得する"
+        parameters:
+          type: object
+          properties:
+            location:
+              type: string
+              description: "天気を取得する場所（都市名）"
+          required:
+            - location
+
+    multiple: &tools_multiple
+      - name: get_weather
+        description: "指定された場所の現在の天気を取得する"
+        parameters:
+          type: object
+          properties:
+            location:
+              type: string
+              description: "天気を取得する場所（都市名）"
+          required:
+            - location
+      - name: get_time
+        description: "指定されたタイムゾーンの現在時刻を取得する"
+        parameters:
+          type: object
+          properties:
+            timezone:
+              type: string
+              description: "タイムゾーン（例: Asia/Tokyo）"
+          required:
+            - timezone
+
+modules:
+  - name: toolcall-behavior
+    path: ./mlx-toolcall-behavior-module.mjs
+    description: "tool call性質チェック用"
+
+testCases:
+  # 1. 基本: ツールを呼ぶべき場面で呼ぶか
+  - name: "基本: tool call発火"
+    description: "ツールを呼ぶべき質問でtool callが発生するか"
+    input:
+      question: "東京の天気を教えてください。"
+    queryOptions:
+      tools: *tools_simple
+      toolChoice: auto
+
+  # 2. 基本: ツール不要な場面で呼ばないか
+  - name: "基本: tool call抑制"
+    description: "ツール不要な質問でtool callが発生しないか"
+    input:
+      question: "1 + 1 は何ですか？"
+    queryOptions:
+      tools: *tools_simple
+      toolChoice: auto
+
+  # 3. テキストとtool callの同時生成
+  - name: "同時生成: テキスト + tool call"
+    description: "テキスト応答とtool callを同時に返すか、tool callのみか"
+    input:
+      question: "東京の天気を調べてください。調べる前に、何を調べるか説明してから実行してください。"
+    queryOptions:
+      tools: *tools_simple
+      toolChoice: auto
+
+  # 4. 複数ツールの選択
+  - name: "選択: 正しいツール選択"
+    description: "複数ツールから適切なものを選べるか"
+    input:
+      question: "東京の現在時刻を教えてください。"
+    queryOptions:
+      tools: *tools_multiple
+      toolChoice: auto
+
+  # 5. 複数ツールの同時呼び出し (parallel tool calls)
+  - name: "並列: 複数tool call"
+    description: "複数のtool callを同時に発行するか"
+    input:
+      question: "東京と大阪の天気をそれぞれ教えてください。"
+    queryOptions:
+      tools: *tools_simple
+      toolChoice: auto
+
+  # 6. 引数の正確さ
+  - name: "引数: パラメータ精度"
+    description: "ツール引数が正確に生成されるか"
+    input:
+      question: "ニューヨークの天気はどうですか？"
+    queryOptions:
+      tools: *tools_simple
+      toolChoice: auto
+
+evaluators:
+  - name: llm-requirement-fulfillment

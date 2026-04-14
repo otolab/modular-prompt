@@ -97,6 +97,9 @@ console.log(`Dry run: ${options.dryRun ? 'enabled (plan only)' : 'disabled'}`);
 if (options.traceDir) {
   console.log(`Trace dir: ${options.traceDir}`);
 }
+if (options.outputFile) {
+  console.log(`Output: ${options.outputFile}`);
+}
 console.log('='.repeat(80));
 console.log();
 
@@ -245,8 +248,10 @@ const runner = new ExperimentRunner(
   evaluatorModel
 );
 
+let experimentResults: Awaited<ReturnType<typeof runner.run>> | undefined;
+
 try {
-  const results = await runner.run();
+  experimentResults = await runner.run();
 
   // Display completion
   console.log('='.repeat(80));
@@ -255,7 +260,7 @@ try {
 
   // Display statistics if repeated
   if (options.repeatCount > 1) {
-    const reporter = new StatisticsReporter(results);
+    const reporter = new StatisticsReporter(experimentResults);
     reporter.report();
   }
 } catch (error) {
@@ -264,6 +269,24 @@ try {
     console.error(error.stack);
   }
 } finally {
+  // Write results JSON if configured
+  if (options.outputFile && experimentResults) {
+    const { mkdir, writeFile } = await import('fs/promises');
+    const { dirname } = await import('path');
+    const outputData = {
+      metadata: {
+        timestamp: new Date().toISOString(),
+        configPath: options.configPath,
+        models: modelEntries.map(([name]) => name),
+        repeatCount: options.repeatCount,
+      },
+      results: experimentResults,
+    };
+    await mkdir(dirname(options.outputFile), { recursive: true });
+    await writeFile(options.outputFile, JSON.stringify(outputData, null, 2));
+    console.log(`📄 Results written: ${options.outputFile}`);
+  }
+
   // Flush log file if configured
   if (options.logFile) {
     const { logger } = await import('./logger.js');

@@ -177,4 +177,5 @@ export interface ExtendedExperimentOptions extends ExperimentOptions {
   logFile?: string;
   verbose?: boolean;
   traceDir?: string;
+  outputFile?: string;
 }
