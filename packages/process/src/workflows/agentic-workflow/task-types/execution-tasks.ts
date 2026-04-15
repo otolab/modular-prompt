@@ -93,16 +93,17 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
     maxTokensTier: 'high',
   },
   recall: {
-    objective: '- Retrieve information relevant to your Focus using search tools or training knowledge.',
+    objective: '- Retrieve known information relevant to your Focus from the workflow\'s internal knowledge base or your own training knowledge.',
     instructions: [
       '- You will retrieve information relevant to your Focus.',
-      '- If search tools are available, formulate appropriate search queries and use them.',
-      '- If the information is already known from your training data and no search is needed, return it directly.',
+      '- Use your training knowledge to provide what you already know.',
+      '- If internal knowledge-retrieval tools are provided, use them to search the knowledge base.',
+      '- If internal knowledge-retrieval tools are NOT available, state that the internal knowledge base is not yet implemented and answer from your training knowledge only.',
       '- Do not fabricate information. If uncertain, state what you know and what is unverified.',
     ],
     driverRole: 'instruct',
     defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },
-    toolDescription: 'produces retrieved knowledge from search tools or training data',
+    toolDescription: 'retrieves known information from the workflow\'s internal knowledge base or model knowledge',
     maxTokensTier: 'middle',
   },
   determine: {

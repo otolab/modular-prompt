@@ -103,6 +103,7 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: n
     name: entry.name,
     instruction: entry.instruction,
     taskType,
+    dep: entry.dep,
     driverRole: entry.driverRole as ModelRole | undefined,
     withoutInputs: entry.withoutInputs,
     withoutMessages: entry.withoutMessages,

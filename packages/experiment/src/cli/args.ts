@@ -23,6 +23,7 @@ export function parseArgs(): ExtendedExperimentOptions {
     .option('--log-file <path>', 'Log file path for JSONL output (detailed logs)')
     .option('--verbose', 'Enable verbose output (show detailed internal operations)', false)
     .option('--trace-dir <dir>', 'Trace output directory (structured execution logs)')
+    .option('--output <path>', 'Experiment results JSON output file path')
     .parse();
 
   const config = program.args[0];
@@ -40,5 +41,6 @@ export function parseArgs(): ExtendedExperimentOptions {
     logFile: options.logFile,
     verbose: options.verbose,
     traceDir: options.traceDir,
+    outputFile: options.output,
   };
 }

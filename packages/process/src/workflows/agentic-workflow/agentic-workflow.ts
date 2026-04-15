@@ -34,6 +34,7 @@ import {
   createExecutionBuiltinTools,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
+import { topologicalSortTasks } from './process/topological-sort.js';
 
 const logger = new Logger({ prefix: 'process', context: 'agentic', accumulate: true });
 
@@ -259,6 +260,12 @@ export async function agenticProcess<T>(
       tools
     );
     executionLog.push(logEntry);
+
+    // After planning completes, topologically sort newly registered tasks by dep
+    if (task.taskType === 'planning') {
+      const newTasks = topologicalSortTasks(taskList.slice(i + 1));
+      taskList.splice(i + 1, taskList.length - i - 1, ...newTasks);
+    }
 
     // Check if __replan was called
     const hasReplanCall = logEntry.toolCallLog?.some(
