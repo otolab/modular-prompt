@@ -120,6 +120,51 @@ describe('parseHarmonyResponse', () => {
     });
   });
 
+  it('parses stream output where initial <|start|> is omitted', () => {
+    // chat templateのadd_generation_promptが<|start|>assistantを付与するため、
+    // ストリーム出力では最初の<|start|>が含まれない
+    const result = parseHarmonyResponse(
+      '<|channel|>analysis<|message|>ユーザーは天気を聞いている<|end|><|start|>assistant<|channel|>final<|message|>今日は晴れです。<|end|>'
+    );
+
+    expect(result).toEqual({
+      content: '今日は晴れです。',
+      thinkingContent: 'ユーザーは天気を聞いている',
+      toolCalls: undefined,
+    });
+  });
+
+  it('parses stream output with leading space before <|channel|>', () => {
+    // 実際の出力では <|channel|> の前にスペースがある場合がある
+    const result = parseHarmonyResponse(
+      ' <|channel|> analysis<|message|> We need to check<|end|><|start|> assistant<|channel|> final<|message|> 1 + 1 = 2<|end|>'
+    );
+
+    expect(result).toEqual({
+      content: '1 + 1 = 2',
+      thinkingContent: 'We need to check',
+      toolCalls: undefined,
+    });
+  });
+
+  it('parses stream output with tool call and no initial <|start|>', () => {
+    const result = parseHarmonyResponse(
+      '<|channel|>analysis<|message|>天気を調べる<|end|><|start|>assistant to=functions.get_weather<|channel|>commentary json<|message|>{"location":"Tokyo"}<|call|>'
+    );
+
+    expect(result).toEqual({
+      content: '',
+      thinkingContent: '天気を調べる',
+      toolCalls: [
+        {
+          id: 'harmony_call_0',
+          name: 'get_weather',
+          arguments: { location: 'Tokyo' },
+        },
+      ],
+    });
+  });
+
   it('skips constrain tokens before the message payload', () => {
     const result = parseHarmonyResponse(
       '<|start|>assistant<|channel|>final<|constrain|>json<|message|>{"result": true}<|end|>'

@@ -99,6 +99,92 @@ describe('MlxDriver', () => {
 
   });
 
+  describe('hasNativeToolSupport', () => {
+    it('should return true when tool_call_format.call_start exists', async () => {
+      const driver = new MlxDriver({ model: 'test-model' });
+      // @ts-expect-error - Accessing private property for testing
+      await driver.ensureInitialized();
+      // @ts-expect-error - Accessing private property for testing
+      driver.runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          vocab_size: 32000,
+          model_max_length: 4096,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant'],
+            tool_call_format: {
+              tool_parser_type: 'json_tools',
+              call_start: '<tool_call>',
+              call_end: '</tool_call>',
+            }
+          }
+        }
+      };
+
+      // @ts-expect-error - Accessing private method for testing
+      expect(driver.hasNativeToolSupport()).toBe(true);
+    });
+
+    it('should return true for harmony format', async () => {
+      const driver = new MlxDriver({ model: 'test-model' });
+      // @ts-expect-error - Accessing private property for testing
+      await driver.ensureInitialized();
+      // @ts-expect-error - Accessing private property for testing
+      driver.runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          vocab_size: 32000,
+          model_max_length: 4096,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant'],
+            tool_call_format: {
+              tool_parser_type: 'harmony',
+              call_start: 'to=functions.',
+              call_end: '<|call|>',
+            }
+          }
+        }
+      };
+
+      // @ts-expect-error - Accessing private method for testing
+      expect(driver.hasNativeToolSupport()).toBe(true);
+    });
+
+    it('should return false when no tool_call_format exists', async () => {
+      const driver = new MlxDriver({ model: 'test-model' });
+      // @ts-expect-error - Accessing private property for testing
+      await driver.ensureInitialized();
+      // @ts-expect-error - Accessing private property for testing
+      driver.runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {
+          harmony_call: { text: '<|call|>', id: 100 },
+        },
+        features: {
+          apply_chat_template: true,
+          vocab_size: 32000,
+          model_max_length: 4096,
+        }
+      };
+
+      // @ts-expect-error - Accessing private method for testing
+      expect(driver.hasNativeToolSupport()).toBe(false);
+    });
+
+    it('should return false when runtimeInfo is null', async () => {
+      const driver = new MlxDriver({ model: 'test-model' });
+      // @ts-expect-error - Accessing private property for testing
+      driver.runtimeInfo = null;
+
+      // @ts-expect-error - Accessing private method for testing
+      expect(driver.hasNativeToolSupport()).toBe(false);
+    });
+  });
+
   describe('convertMessages', () => {
     it('should convert messages with string content', () => {
       const input: ChatMessage[] = [

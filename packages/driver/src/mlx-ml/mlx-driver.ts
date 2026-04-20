@@ -244,40 +244,10 @@ export class MlxDriver implements AIDriver {
 
   /**
    * モデルがnativeツール対応かを判定
-   * 複数のシグナルから総合的に判定する
+   * tool_call_format（Python側検出結果）を唯一の判断基準とする
    */
   private hasNativeToolSupport(): boolean {
-    // 1. chat_template 由来の tool_call_format
-    const toolCallFormat = this.runtimeInfo?.features?.chat_template?.tool_call_format;
-    if (toolCallFormat?.call_start) {
-      return true;
-    }
-
-    // 2. special_tokens にtool_call関連トークンが存在するか
-    if (this.runtimeInfo?.special_tokens) {
-      const tokens = this.runtimeInfo.special_tokens;
-      const toolCallKeys = [
-        'tool_call', 'tool_call_explicit', 'tool_call_xml',
-        'tool_calls_section', 'function_call_tags',
-        'longcat_tool_call', 'minimax_tool_call'
-      ];
-      for (const key of toolCallKeys) {
-        const token = tokens[key];
-        if (token && typeof token === 'object' && 'start' in token) {
-          return true;
-        }
-      }
-      // Mistral型の単体マーカー
-      if (tokens['tool_calls_marker']) {
-        return true;
-      }
-      // context-1型の単体終了トークン
-      if (tokens['tool_call_end']) {
-        return true;
-      }
-    }
-
-    return false;
+    return !!this.runtimeInfo?.features?.chat_template?.tool_call_format?.call_start;
   }
   
   /**
@@ -390,7 +360,7 @@ export class MlxDriver implements AIDriver {
       }
 
       // Response post-processing via model-specific processor
-      const responseProcessor = selectResponseProcessor(this.model);
+      const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo);
       let finalContent = content;
       let thinkingContent: string | undefined;
       let toolCalls: ToolCall[] | undefined;

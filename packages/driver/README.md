@@ -146,6 +146,31 @@ npx tsx scripts/check-special-tokens.ts <model-name>
 npx tsx scripts/check-special-tokens.ts mlx-community/gemma-3-270m-it-qat-8bit
 ```
 
+#### Thinking系モデルの推論深度制御
+
+`reasoningEffort` オプションで推論深度を制御できます（llm-jp-4-thinking等に対応）:
+
+```typescript
+const result = await driver.query(prompt, {
+  reasoningEffort: 'high',  // 'low' | 'medium' | 'high'
+  temperature: 0.7
+});
+
+// thinking チャネルの内容を取得
+if (result.thinkingContent) {
+  console.log('Thinking:', result.thinkingContent);
+}
+console.log('Response:', result.content);
+```
+
+**対応モデル**:
+- `llm-jp-4-*-thinking` シリーズ（Harmonyフォーマット）
+- `reasoningEffort` は Python側の `apply_chat_template` に渡されます
+
+**Harmonyフォーマット**: llm-jp-4が採用するOpenAI Harmony Response Format。スペシャルトークン（`<|start|>`, `<|channel|>`, `<|message|>` 等）でメッセージを分割し、`analysis` チャネルを `thinkingContent`、`final` チャネルを `content` に振り分けます。
+
+**技術詳細**: Harmonyフォーマットの後処理設計、ResponseProcessorアーキテクチャ、tool call形式については [prompts/memos/harmony-format-postprocessing.v1.md](../../prompts/memos/harmony-format-postprocessing.v1.md) を参照してください。
+
 ### vLLM（CUDA GPU）
 
 vLLMドライバーは独立したPythonエンジンプロセスとして起動します。

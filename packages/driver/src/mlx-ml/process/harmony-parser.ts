@@ -62,6 +62,19 @@ function extractHarmonyMessages(rawText: string): ParsedHarmonyMessage[] {
   const messages: ParsedHarmonyMessage[] = [];
   let cursor = 0;
 
+  // ストリーム出力では最初の <|start|>assistant が含まれない場合がある
+  // （chat templateのadd_generation_promptで付与されるため）
+  // <|channel|> から始まるテキストを最初のメッセージとして処理
+  const firstStart = rawText.indexOf(START_TOKEN);
+  const firstChannel = rawText.indexOf(CHANNEL_TOKEN);
+  if (firstChannel !== -1 && (firstStart === -1 || firstChannel < firstStart)) {
+    const implicitMessage = parseMessageAt(rawText, -START_TOKEN.length, true);
+    if (implicitMessage) {
+      messages.push(implicitMessage.value);
+      cursor = implicitMessage.nextIndex;
+    }
+  }
+
   while (cursor < rawText.length) {
     const startIndex = rawText.indexOf(START_TOKEN, cursor);
     if (startIndex === -1) {
@@ -83,10 +96,24 @@ function extractHarmonyMessages(rawText: string): ParsedHarmonyMessage[] {
 
 function parseMessageAt(
   rawText: string,
-  startIndex: number
+  startIndex: number,
+  implicitRole?: boolean
 ): { value: ParsedHarmonyMessage; nextIndex: number } | null {
-  const roleStart = startIndex + START_TOKEN.length;
-  const channelIndex = rawText.indexOf(CHANNEL_TOKEN, roleStart);
+  let role: string;
+  let channelIndex: number;
+
+  if (implicitRole) {
+    // <|start|> が省略されたケース: roleは "assistant" と推定
+    role = 'assistant';
+    channelIndex = rawText.indexOf(CHANNEL_TOKEN, 0);
+  } else {
+    const roleStart = startIndex + START_TOKEN.length;
+    channelIndex = rawText.indexOf(CHANNEL_TOKEN, roleStart);
+    if (channelIndex === -1) {
+      return null;
+    }
+    role = rawText.slice(roleStart, channelIndex).trim();
+  }
 
   if (channelIndex === -1) {
     return null;
@@ -97,7 +124,6 @@ function parseMessageAt(
     return null;
   }
 
-  const role = rawText.slice(roleStart, channelIndex).trim();
   let channel = rawText.slice(channelIndex + CHANNEL_TOKEN.length, messageIndex);
   channel = stripTrailingConstraint(channel).trim();
 

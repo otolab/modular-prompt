@@ -4,7 +4,7 @@
  * 各モデル特有のメッセージ変換やプロンプト生成処理を管理
  */
 
-import type { MlxMessage } from './types.js';
+import type { MlxMessage, MlxRuntimeInfo } from './types.js';
 import type { ResponseProcessor } from './response-processor.js';
 import { parseHarmonyResponse } from './harmony-parser.js';
 
@@ -259,11 +259,20 @@ export function selectCompletionProcessor(modelName: string): ((prompt: string) 
 }
 
 /**
- * モデル名に基づいてレスポンス後処理を選択
+ * レスポンス後処理を選択
  *
+ * tool_parser_type ベースの判定を優先し、モデル名はフォールバック。
  * null を返す場合は既存の tool-call-parser のみで処理する。
  */
-export function selectResponseProcessor(modelName: string): ResponseProcessor | null {
+export function selectResponseProcessor(
+  modelName: string,
+  runtimeInfo: MlxRuntimeInfo | null
+): ResponseProcessor | null {
+  const parserType = runtimeInfo?.features?.chat_template?.tool_call_format?.tool_parser_type;
+  if (parserType === 'harmony') {
+    return parseHarmonyResponse;
+  }
+
   if (modelName.includes('llm-jp-4')) {
     return parseHarmonyResponse;
   }

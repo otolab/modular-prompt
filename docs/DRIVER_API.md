@@ -106,12 +106,17 @@ interface Attachment {
 
 ```typescript
 interface QueryOptions {
-  temperature?: number;   // 生成のランダム性 (0-2)
-  maxTokens?: number;     // 最大トークン数
-  topP?: number;          // トップPサンプリング
-  stream?: boolean;       // ストリーミング有効化
+  temperature?: number;         // 生成のランダム性 (0-2)
+  maxTokens?: number;           // 最大トークン数
+  topP?: number;                // トップPサンプリング
+  stream?: boolean;             // ストリーミング有効化
+  reasoningEffort?: 'low' | 'medium' | 'high';  // 推論深度（thinking系モデル用）
 }
 ```
+
+**reasoningEffort**: 推論特化モデル（OpenAI o-series、llm-jp-4-thinking等）の思考深度を制御します。
+- 対応ドライバー: OpenAI（APIパラメータとして送信）、MLX（`apply_chat_template`に渡す）
+- 非対応ドライバーでは無視されます
 
 ### QueryResult
 
@@ -120,6 +125,7 @@ interface QueryOptions {
 ```typescript
 interface QueryResult {
   content: string;                     // テキストレスポンス
+  thinkingContent?: string;            // 思考・推論チャネルの内容
   structuredOutput?: unknown;          // 構造化出力（スキーマ指定時）
   finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
   usage?: {
@@ -131,6 +137,10 @@ interface QueryResult {
   errors?: LogEntry[];                 // エラーレベルのログエントリ
 }
 ```
+
+**thinkingContent**: モデルの思考・推論過程の内容を格納します。
+- Harmonyフォーマット（llm-jp-4等）の `analysis` チャネル
+- 将来的にAnthropicのthinkingブロック等にも対応予定
 
 ### StreamResult
 
