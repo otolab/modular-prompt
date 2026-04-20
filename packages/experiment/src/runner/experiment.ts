@@ -299,9 +299,7 @@ export class ExperimentRunner {
         logger.verbose(`Module ${moduleName} run ${i + 1}: Success (${elapsed}ms)`);
 
         // Display result summary (思考ブロックはプレビューから除外)
-        const displayContent = result.content
-          .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
-          .replace(/^[\s\S]*?<\/think>\s*/g, '');
+        const displayContent = result.content;
         const contentPreview = displayContent.length > 200
           ? displayContent.substring(0, 200) + '...'
           : displayContent;

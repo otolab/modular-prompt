@@ -8,10 +8,11 @@ import { MlxProcess } from './process/index.js';
 import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities, MlxContentPart } from './types.js';
 import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
 import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
+import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
 import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
-import { contentToString, extractImagePaths } from '../content-utils.js';
+import { contentToString, extractImagePaths, extractThinkingContent } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
 
 // ========================================================================
@@ -243,40 +244,10 @@ export class MlxDriver implements AIDriver {
 
   /**
    * モデルがnativeツール対応かを判定
-   * 複数のシグナルから総合的に判定する
+   * tool_call_format（Python側検出結果）を唯一の判断基準とする
    */
   private hasNativeToolSupport(): boolean {
-    // 1. chat_template 由来の tool_call_format
-    const toolCallFormat = this.runtimeInfo?.features?.chat_template?.tool_call_format;
-    if (toolCallFormat?.call_start) {
-      return true;
-    }
-
-    // 2. special_tokens にtool_call関連トークンが存在するか
-    if (this.runtimeInfo?.special_tokens) {
-      const tokens = this.runtimeInfo.special_tokens;
-      const toolCallKeys = [
-        'tool_call', 'tool_call_explicit', 'tool_call_xml',
-        'tool_calls_section', 'function_call_tags',
-        'longcat_tool_call', 'minimax_tool_call'
-      ];
-      for (const key of toolCallKeys) {
-        const token = tokens[key];
-        if (token && typeof token === 'object' && 'start' in token) {
-          return true;
-        }
-      }
-      // Mistral型の単体マーカー
-      if (tokens['tool_calls_marker']) {
-        return true;
-      }
-      // context-1型の単体終了トークン
-      if (tokens['tool_call_end']) {
-        return true;
-      }
-    }
-
-    return false;
+    return !!this.runtimeInfo?.features?.chat_template?.tool_call_format?.call_start;
   }
   
   /**
@@ -333,7 +304,7 @@ export class MlxDriver implements AIDriver {
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined);
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort);
     }
 
     return stream;
@@ -370,7 +341,7 @@ export class MlxDriver implements AIDriver {
       ...(options?.maxTokens !== undefined && { maxTokens: options.maxTokens }),
       ...(options?.temperature !== undefined && { temperature: options.temperature }),
       ...(options?.topP !== undefined && { topP: options.topP }),
-      ...(options?.topK !== undefined && { topK: options.topK })
+      ...(options?.topK !== undefined && { topK: options.topK }),
     };
     this.queryLogger.mark(mlxOptions as Record<string, unknown>);
 
@@ -388,29 +359,48 @@ export class MlxDriver implements AIDriver {
         throw error;
       }
 
-      // Handle structured output if schema is provided
-      let structuredOutput: unknown | undefined;
-      if (prompt.metadata?.outputSchema && content) {
-        const extracted = extractJSON(content, { multiple: false });
-        if (extracted.source !== 'none' && extracted.data !== null) {
-          structuredOutput = extracted.data;
+      // Response post-processing via model-specific processor
+      const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo);
+      let finalContent = content;
+      let thinkingContent: string | undefined;
+      let toolCalls: ToolCall[] | undefined;
+
+      if (responseProcessor) {
+        const parsed = responseProcessor(content);
+        finalContent = parsed.content;
+        thinkingContent = parsed.thinkingContent;
+        toolCalls = parsed.toolCalls;
+      } else {
+        // Legacy flow: tool call detection only
+        if (options?.tools && options.tools.length > 0) {
+          const parseResult = parseToolCalls(content, this.runtimeInfo);
+          if (parseResult.toolCalls.length > 0) {
+            toolCalls = parseResult.toolCalls;
+            finalContent = parseResult.content;
+          }
         }
       }
 
-      // Tool call detection
-      let toolCalls: ToolCall[] | undefined;
-      let finalContent = content;
-      if (options?.tools && options.tools.length > 0) {
-        const parseResult = parseToolCalls(content, this.runtimeInfo);
-        if (parseResult.toolCalls.length > 0) {
-          toolCalls = parseResult.toolCalls;
-          finalContent = parseResult.content;
+      // Extract <think> tags if not already handled by responseProcessor
+      if (!thinkingContent) {
+        const extracted = extractThinkingContent(finalContent);
+        finalContent = extracted.content;
+        thinkingContent = extracted.thinkingContent;
+      }
+
+      // Handle structured output if schema is provided
+      let structuredOutput: unknown | undefined;
+      if (prompt.metadata?.outputSchema && finalContent) {
+        const extracted = extractJSON(finalContent, { multiple: false });
+        if (extracted.source !== 'none' && extracted.data !== null) {
+          structuredOutput = extracted.data;
         }
       }
 
       const finishReason: FinishReason = toolCalls ? 'tool_calls' : 'stop';
       return {
         content: finalContent,
+        thinkingContent,
         structuredOutput,
         toolCalls,
         finishReason,

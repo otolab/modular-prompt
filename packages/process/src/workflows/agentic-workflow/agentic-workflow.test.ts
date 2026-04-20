@@ -8,15 +8,15 @@ describe('agenticProcess v2', () => {
   it('should execute basic workflow with planning and tasks', async () => {
     const driver = new TestDriver({
       responses: [
-        // Planning: __register_task × 2
+        // Planning: think × 2
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_task', arguments: {
-              name: 'analyze', instruction: 'Analyze input data', taskType: 'think', reason: 'Need analysis'
+            { id: 'tc-1', name: 'think', arguments: {
+              name: 'analyze', instruction: 'Analyze input data', reason: 'Need analysis'
             }},
-            { id: 'tc-2', name: '__register_task', arguments: {
-              name: 'process', instruction: 'Process results', taskType: 'think', reason: 'Need processing'
+            { id: 'tc-2', name: 'think', arguments: {
+              name: 'process', instruction: 'Process results', reason: 'Need processing'
             }},
           ]
         },
@@ -63,8 +63,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
-            name: 'fetch', instruction: 'Get external data', taskType: 'act', reason: 'Need data'
+          toolCalls: [{ id: 'tc-1', name: 'act', arguments: {
+            name: 'fetch', instruction: 'Get external data', reason: 'Need data'
           }}]
         },
         // Think: 外部ツール呼び出し → pending として返す
@@ -97,8 +97,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
-            name: 'simple', instruction: 'Simple task', taskType: 'think', reason: 'Need to think'
+          toolCalls: [{ id: 'tc-1', name: 'think', arguments: {
+            name: 'simple', instruction: 'Simple task', reason: 'Need to think'
           }}]
         },
         // Think
@@ -123,11 +123,11 @@ describe('agenticProcess v2', () => {
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_task', arguments: { name: 't1', instruction: 'Task 1', taskType: 'think', reason: 'r' } },
-            { id: 'tc-2', name: '__register_task', arguments: { name: 't2', instruction: 'Task 2', taskType: 'think', reason: 'r' } },
-            { id: 'tc-3', name: '__register_task', arguments: { name: 't3', instruction: 'Task 3', taskType: 'think', reason: 'r' } },
-            { id: 'tc-4', name: '__register_task', arguments: { name: 't4', instruction: 'Task 4', taskType: 'think', reason: 'r' } },
-            { id: 'tc-5', name: '__register_task', arguments: { name: 't5', instruction: 'Task 5', taskType: 'think', reason: 'r' } },
+            { id: 'tc-1', name: 'think', arguments: { name: 't1', instruction: 'Task 1', reason: 'r' } },
+            { id: 'tc-2', name: 'think', arguments: { name: 't2', instruction: 'Task 2', reason: 'r' } },
+            { id: 'tc-3', name: 'think', arguments: { name: 't3', instruction: 'Task 3', reason: 'r' } },
+            { id: 'tc-4', name: 'think', arguments: { name: 't4', instruction: 'Task 4', reason: 'r' } },
+            { id: 'tc-5', name: 'think', arguments: { name: 't5', instruction: 'Task 5', reason: 'r' } },
           ]
         },
         // maxTasks=3: planning + think×2 まで実行
@@ -178,8 +178,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
-            name: 'check', instruction: 'Check time', taskType: 'think', reason: 'Need time'
+          toolCalls: [{ id: 'tc-1', name: 'think', arguments: {
+            name: 'check', instruction: 'Check time', reason: 'Need time'
           }}]
         },
         // Think: __time ツール呼び出し（1回のqueryで完了、tool結果は次タスクへ）
@@ -208,8 +208,8 @@ describe('agenticProcess v2', () => {
         // Planning
         {
           content: '',
-          toolCalls: [{ id: 'tc-1', name: '__register_task', arguments: {
-            name: 'analyze', instruction: 'Analyze', taskType: 'think', reason: 'Need analysis'
+          toolCalls: [{ id: 'tc-1', name: 'think', arguments: {
+            name: 'analyze', instruction: 'Analyze', reason: 'Need analysis'
           }}]
         },
         // Think

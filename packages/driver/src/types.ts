@@ -94,6 +94,12 @@ export interface QueryResult {
   content: string;
 
   /**
+   * Thinking/reasoning content from the model.
+   * Populated when the model uses a thinking channel (e.g., Harmony analysis, Anthropic thinking blocks).
+   */
+  thinkingContent?: string;
+
+  /**
    * Structured output extracted from the response
    * - undefined: no schema was specified or no valid JSON found
    * - object/array: extracted JSON matching the schema
@@ -154,6 +160,8 @@ export interface QueryOptions {
   tools?: ToolDefinition[];
   /** Tool usage strategy */
   toolChoice?: ToolChoice;
+  /** Reasoning effort level for thinking models (e.g., o-series, llm-jp-4-thinking) */
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 /**

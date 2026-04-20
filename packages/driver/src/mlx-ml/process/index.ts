@@ -72,9 +72,9 @@ export class MlxProcess {
   }
 
   // API v2.0 Chat - chat APIを直接使用
-  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number): Promise<Readable> {
+  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high'): Promise<Readable> {
     // chat APIを直接使用（前処理はドライバーで実施済み）
-    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize);
+    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort);
   }
 
   // API v2.0 Completion - completion APIを直接使用

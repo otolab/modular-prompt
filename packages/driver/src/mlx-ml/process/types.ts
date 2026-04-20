@@ -76,6 +76,7 @@ export interface MlxChatRequest extends MlxBaseRequest {
   options?: MlxMlModelOptions;
   images?: string[];  // ファイルパス配列（VLM用）
   maxImageSize?: number;  // 画像の最大辺ピクセル数
+  reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
 export interface MlxCompletionRequest extends MlxBaseRequest {

@@ -152,7 +152,8 @@ def get_special_tokens(tokenizer):
 
         # ツール関連の単体トークン（追加）
         "tool_calls_marker": "[TOOL_CALLS]",
-        "tool_call_end": "<|call|>",
+        # Harmony形式のcallトークン（tool_call_endとは異なる用途）
+        "harmony_call": "<|call|>",
     }
     
     # VLM processorではconvert_tokens_to_idsがない場合がある
@@ -254,8 +255,6 @@ def detect_tool_call_format(tokenizer):
             (r'<longcat_tool_call>', r'</longcat_tool_call>'),
             # <minimax:tool_call>...</minimax:tool_call>
             (r'<minimax:tool_call>', r'</minimax:tool_call>'),
-            # context-1形式: to=functions.{name}...<|call|>
-            (r'to=functions\.', r'<\|call\|>'),
         ]
 
         for start_pattern, end_pattern in tool_call_patterns:
@@ -265,6 +264,16 @@ def detect_tool_call_format(tokenizer):
                 result["call_start"] = start_match.group(0)
                 result["call_end"] = end_match.group(0)
                 break
+
+        # Harmony形式の専用検出
+        # テンプレート内で "functions." と <|call|> が共存する場合
+        if "call_start" not in result:
+            has_functions = re.search(r'"functions\."', template)
+            has_call = re.search(r'<\|call\|>', template)
+            if has_functions and has_call:
+                result["tool_parser_type"] = "harmony"
+                result["call_start"] = "to=functions."
+                result["call_end"] = "<|call|>"
 
         # Mistral特殊ケース
         if "call_start" not in result:
