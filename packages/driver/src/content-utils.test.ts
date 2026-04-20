@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contentToString, extractImagePaths } from './content-utils.js';
+import { contentToString, extractImagePaths, extractThinkingContent } from './content-utils.js';
 import type { Attachment } from '@modular-prompt/core';
 
 describe('contentToString', () => {
@@ -61,6 +61,50 @@ describe('contentToString', () => {
     ];
     const result = contentToString(input);
     expect(result).toBe('Text content\nMore text');
+  });
+});
+
+describe('extractThinkingContent', () => {
+  it('should extract a single think block', () => {
+    const result = extractThinkingContent('<think>考え中...</think>回答です。');
+    expect(result.content).toBe('回答です。');
+    expect(result.thinkingContent).toBe('考え中...');
+  });
+
+  it('should extract multiple think blocks', () => {
+    const result = extractThinkingContent('<think>最初の思考</think>中間テキスト<think>追加の思考</think>最終回答');
+    expect(result.content).toBe('中間テキスト最終回答');
+    expect(result.thinkingContent).toBe('最初の思考\n追加の思考');
+  });
+
+  it('should handle closing tag only (stream truncation)', () => {
+    const result = extractThinkingContent('途中の思考</think>回答です。');
+    expect(result.content).toBe('回答です。');
+    expect(result.thinkingContent).toBe('途中の思考');
+  });
+
+  it('should return undefined thinkingContent when no think tags', () => {
+    const result = extractThinkingContent('普通のテキストです。');
+    expect(result.content).toBe('普通のテキストです。');
+    expect(result.thinkingContent).toBeUndefined();
+  });
+
+  it('should handle empty think block', () => {
+    const result = extractThinkingContent('<think></think>回答');
+    expect(result.content).toBe('回答');
+    expect(result.thinkingContent).toBeUndefined();
+  });
+
+  it('should handle multiline think content', () => {
+    const result = extractThinkingContent('<think>\nステップ1: 分析\nステップ2: 判断\n</think>\n結果です。');
+    expect(result.content).toBe('結果です。');
+    expect(result.thinkingContent).toBe('ステップ1: 分析\nステップ2: 判断');
+  });
+
+  it('should handle empty string input', () => {
+    const result = extractThinkingContent('');
+    expect(result.content).toBe('');
+    expect(result.thinkingContent).toBeUndefined();
   });
 });
 

@@ -1,5 +1,39 @@
 import type { Attachment } from '@modular-prompt/core';
 
+export interface ThinkingExtractResult {
+  content: string;
+  thinkingContent?: string;
+}
+
+/**
+ * Extract <think>...</think> blocks from model output.
+ * Returns cleaned content and extracted thinking content.
+ */
+export function extractThinkingContent(text: string): ThinkingExtractResult {
+  const thinkingParts: string[] = [];
+
+  const fullBlockRegex = /<think>([\s\S]*?)<\/think>\s*/g;
+  let match;
+  while ((match = fullBlockRegex.exec(text)) !== null) {
+    const inner = match[1].trim();
+    if (inner) thinkingParts.push(inner);
+  }
+  let cleaned = text.replace(fullBlockRegex, '');
+
+  const headRegex = /^[\s\S]*?<\/think>\s*/;
+  const headMatch = cleaned.match(headRegex);
+  if (headMatch) {
+    const inner = headMatch[0].replace(/<\/think>\s*$/, '').trim();
+    if (inner) thinkingParts.push(inner);
+    cleaned = cleaned.replace(headRegex, '');
+  }
+
+  return {
+    content: cleaned.trim(),
+    thinkingContent: thinkingParts.length > 0 ? thinkingParts.join('\n') : undefined,
+  };
+}
+
 /**
  * Extract text content from string or Attachment array.
  * For Attachment arrays, only text-type attachments are included.

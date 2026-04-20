@@ -32,24 +32,12 @@ import { replanningModule } from './task-types/planning.js';
 import {
   createPlanningTools,
   createExecutionBuiltinTools,
+  TASK_TYPE_TOOL_NAMES,
 } from './process/builtin-tools.js';
 import { queryWithTools, rethrowAsWorkflowError } from './process/query-with-tools.js';
 import { topologicalSortTasks } from './process/topological-sort.js';
 
 const logger = new Logger({ prefix: 'process', context: 'agentic', accumulate: true });
-
-/**
- * Strip <think>...</think> blocks from model output.
- * Thinking traces are internal reasoning and should not be passed to subsequent tasks.
- */
-function stripThinkBlocks(text: string): string {
-  return text
-    .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
-    .replace(/^[\s\S]*?<\/think>\s*/g, '')
-    .replace(/<\|channel>thought[\s\S]*?<channel\|>\s*/g, '')
-    .replace(/^[\s\S]*?<channel\|>\s*/g, '')
-    .trim();
-}
 
 /**
  * Check if the resolved user module's messages end with a tool result.
@@ -109,7 +97,8 @@ function getBuiltinToolsForTask(
 
   const allTools: ToolSpec[] = [];
 
-  if (toolNames.has('__register_task')) {
+  const hasPlanningTools = [...TASK_TYPE_TOOL_NAMES].some(name => toolNames.has(name));
+  if (hasPlanningTools) {
     allTools.push(...createPlanningTools(taskList, currentIndex));
   }
 
@@ -192,7 +181,7 @@ async function executeTask(
       taskName: task.name,
       taskType: task.taskType,
       instruction: task.instruction,
-      result: stripThinkBlocks(result.content),
+      result: result.content,
       toolCallLog: result.toolCallLog.length > 0 ? result.toolCallLog : undefined,
       pendingToolCalls: result.pendingToolCalls,
       metadata: {

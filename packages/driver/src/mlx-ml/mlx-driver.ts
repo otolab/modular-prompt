@@ -12,7 +12,7 @@ import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
 import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
-import { contentToString, extractImagePaths } from '../content-utils.js';
+import { contentToString, extractImagePaths, extractThinkingContent } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
 
 // ========================================================================
@@ -379,6 +379,13 @@ export class MlxDriver implements AIDriver {
             finalContent = parseResult.content;
           }
         }
+      }
+
+      // Extract <think> tags if not already handled by responseProcessor
+      if (!thinkingContent) {
+        const extracted = extractThinkingContent(finalContent);
+        finalContent = extracted.content;
+        thinkingContent = extracted.thinkingContent;
       }
 
       // Handle structured output if schema is provided
