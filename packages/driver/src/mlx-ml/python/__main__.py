@@ -134,7 +134,7 @@ def handle_format_test(messages, options=None, tools=None):
 
     print(json.dumps(result), end='\0', flush=True)
 
-def handle_chat(messages, primer=None, options=None, tools=None):
+def handle_chat(messages, primer=None, options=None, tools=None, reasoning_effort=None):
     """chat API の処理"""
     if options is None:
         options = {}
@@ -157,20 +157,39 @@ def handle_chat(messages, primer=None, options=None, tools=None):
         add_generation_prompt = False
         tokenize = False
 
-    # tools対応を試みる（テンプレートが対応していなければtools無しで実行）
+    # apply_chat_templateの追加引数（reasoning_effort等）
+    extra_kwargs = {}
+    if tools is not None:
+        extra_kwargs['tools'] = tools
+    if reasoning_effort is not None:
+        extra_kwargs['reasoning_effort'] = reasoning_effort
+
+    # テンプレート適用（対応していないkwargsはTypeErrorになるので段階的にフォールバック）
     try:
         prompt = tokenizer.apply_chat_template(
             messages,
-            tools=tools,
             add_generation_prompt=add_generation_prompt,
             tokenize=tokenize,
+            **extra_kwargs,
         )
     except TypeError:
-        prompt = tokenizer.apply_chat_template(
-            messages,
-            add_generation_prompt=add_generation_prompt,
-            tokenize=tokenize,
-        )
+        # reasoning_effort非対応の場合、toolsのみで再試行
+        try:
+            fallback_kwargs = {}
+            if tools is not None:
+                fallback_kwargs['tools'] = tools
+            prompt = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=add_generation_prompt,
+                tokenize=tokenize,
+                **fallback_kwargs,
+            )
+        except TypeError:
+            prompt = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=add_generation_prompt,
+                tokenize=tokenize,
+            )
 
     if primer is not None:
         prompt = primer.join(prompt.split(primer)[0:-1]) + primer
@@ -410,12 +429,13 @@ def main():
                 options = req.get('options', {})
                 tools = req.get('tools')
                 images = req.get('images', [])
+                reasoning_effort = req.get('reasoning_effort')
 
                 if model_kind == "vlm":
                     max_image_size = req.get('maxImageSize', 768)
                     handle_chat_vlm(messages, images, options, max_image_size, tools, primer)
                 else:
-                    handle_chat(messages, primer, options, tools)
+                    handle_chat(messages, primer, options, tools, reasoning_effort=reasoning_effort)
             
             elif method == 'completion':
                 prompt = req.get('prompt')

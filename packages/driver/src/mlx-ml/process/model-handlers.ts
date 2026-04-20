@@ -5,6 +5,8 @@
  */
 
 import type { MlxMessage } from './types.js';
+import type { ResponseProcessor } from './response-processor.js';
+import { parseHarmonyResponse } from './harmony-parser.js';
 
 /**
  * システムメッセージをマージ（末尾の改行をtrim）
@@ -254,4 +256,17 @@ export function selectCompletionProcessor(modelName: string): ((prompt: string) 
 
   // デフォルト: 汎用フォーマッタで動作する
   return (prompt: string) => prompt;
+}
+
+/**
+ * モデル名に基づいてレスポンス後処理を選択
+ *
+ * null を返す場合は既存の tool-call-parser のみで処理する。
+ */
+export function selectResponseProcessor(modelName: string): ResponseProcessor | null {
+  if (modelName.includes('llm-jp-4')) {
+    return parseHarmonyResponse;
+  }
+
+  return null;
 }

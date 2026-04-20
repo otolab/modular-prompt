@@ -64,7 +64,7 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high'): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
@@ -73,7 +73,8 @@ export class QueueManager {
           primer,
           tools,
           options: mapOptionsToPython(options, true),  // strict mode: true
-          ...(images?.length ? { images, maxImageSize } : {})
+          ...(images?.length ? { images, maxImageSize } : {}),
+          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         };
         this.queue.push({
           request,

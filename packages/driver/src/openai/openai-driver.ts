@@ -38,8 +38,6 @@ export interface OpenAIQueryOptions extends QueryOptions {
   seed?: number;
   tools?: ToolDefinition[];
   toolChoice?: ToolChoice;
-  /** Reasoning effort for o-series models (requires mode: 'thinking') */
-  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 /**
