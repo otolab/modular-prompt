@@ -9,9 +9,9 @@
  * - userModule compiled as "Original Request" material (includes inputs)
  *
  * Output side:
- * - cue: user message instructing to call __register_task tool
+ * - cue: user message instructing to call task type tools
  *
- * Tools: __register_task
+ * Tools: think, verify, act, extractContext, recall, determine, output
  */
 
 import type { PromptModule } from '@modular-prompt/core';
@@ -20,6 +20,7 @@ import { formatCompletionPrompt } from '@modular-prompt/driver';
 import type { AgenticWorkflowContext } from '../types.js';
 import type { TaskTypeConfig } from './index.js';
 import { buildTaskListWithResults } from './index.js';
+import { TASK_TYPE_TOOL_NAMES } from '../process/builtin-tools.js';
 
 const planningModule: PromptModule<AgenticWorkflowContext> = {
   objective: [
@@ -45,7 +46,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '- Your job is to design this Workflow: decide what deliverables are needed and how each Task produces them.',
     '- This planning Task produces two kinds of output:',
     '  - **Text output**: Your analysis of the request. This becomes a deliverable visible to all subsequent Tasks.',
-    '  - **Tool calls** (`__register_task`): Each call registers a Task into the Workflow.',
+    '  - **Tool calls**: Call the task type tool (e.g. `think()`, `output()`) to register each Task into the Workflow.',
   ],
   instructions: [
     'Follow these 3 steps:',
@@ -57,7 +58,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '2. **Design & Refine**',
     '  - Design the sequence of Tasks and deliverables that leads from the input to the final deliverable. See "Task Type Guide" and "Planning Theory".',
     '  - Adjust each Task\'s input so it can work correctly and efficiently. Exclude Original Data when deliverables are sufficient. See "What Each Task Can See".',
-    '3. **Register** — Call `__register_task` tool once per Task.',
+    '3. **Register** — Call the task type tool once per Task (e.g. `think({...})`, `output({...})`).',
     '  - Each Task\'s `reason` should explain why it is needed. Each Task\'s `instruction` should describe the deliverable to produce.',
   ],
   guidelines: [
@@ -175,6 +176,6 @@ export const replanningModule: PromptModule<AgenticWorkflowContext> = {
 
 export const config: TaskTypeConfig = {
   module: planningModule,
-  builtinToolNames: ['__register_task', '__time'],
+  builtinToolNames: [...TASK_TYPE_TOOL_NAMES, '__time'],
   maxTokensTier: 'high',
 };

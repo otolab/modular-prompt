@@ -83,15 +83,15 @@ describe('integration tests', () => {
     // Planning → Think×2 → OutputMessage の4タスクシーケンス
     const driver = new TestDriver({
       responses: [
-        // Planning: __register_task × 2
+        // Planning: think × 2
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_task', arguments: {
-              name: 'analyze', instruction: '入力データを分析する', taskType: 'think', reason: '分析が必要'
+            { id: 'tc-1', name: 'think', arguments: {
+              name: 'analyze', instruction: '入力データを分析する', reason: '分析が必要'
             }},
-            { id: 'tc-2', name: '__register_task', arguments: {
-              name: 'summarize', instruction: '分析結果をまとめる', taskType: 'think', reason: 'まとめが必要'
+            { id: 'tc-2', name: 'think', arguments: {
+              name: 'summarize', instruction: '分析結果をまとめる', reason: 'まとめが必要'
             }},
           ]
         },
@@ -146,11 +146,11 @@ describe('integration tests', () => {
         {
           content: '',
           toolCalls: [
-            { id: 'tc-1', name: '__register_task', arguments: {
-              name: 'fetch', instruction: 'データを取得する', taskType: 'act', reason: '取得が必要'
+            { id: 'tc-1', name: 'act', arguments: {
+              name: 'fetch', instruction: 'データを取得する', reason: '取得が必要'
             }},
-            { id: 'tc-2', name: '__register_task', arguments: {
-              name: 'process', instruction: 'データを処理する', taskType: 'think', reason: '処理が必要'
+            { id: 'tc-2', name: 'think', arguments: {
+              name: 'process', instruction: 'データを処理する', reason: '処理が必要'
             }},
           ]
         },

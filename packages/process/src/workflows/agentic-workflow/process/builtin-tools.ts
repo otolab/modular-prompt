@@ -1,9 +1,13 @@
 /**
- * Agentic workflow 組み込みツール定義 (v2)
+ * Agentic workflow 組み込みツール定義 (v3)
  *
- * - __register_task: タスク登録（planning タスクから利用可能、1タスクずつ呼び出し）
- * - __replan: 再プランニング要求（execution タスクから利用可能）
- * - __time: 現在時刻取得
+ * Planning tools:
+ *   タスクタイプ名をそのままツール名として使用（think, verify, act, ...）
+ *   モデルが自然に呼びやすい形式
+ *
+ * Execution tools:
+ *   __replan: 再プランニング要求（execution タスクから利用可能）
+ *   __time: 現在時刻取得
  */
 
 import type { ToolSpec, AgenticTask, TaskType } from '../types.js';
@@ -12,21 +16,18 @@ import { EXECUTION_TASK_DEFS } from '../task-types/execution-tasks.js';
 
 export const BUILTIN_TOOL_PREFIX = '__';
 
-/** 有効な実行タスクタイプ（planning は除外 — モデルが指定する対象外） */
-const VALID_TASK_TYPES = new Set<string>([...Object.keys(EXECUTION_TASK_DEFS), 'output']);
+/** タスクタイプ名ツール（planning用） */
+export const TASK_TYPE_TOOL_NAMES = new Set<string>([...Object.keys(EXECUTION_TASK_DEFS), 'output']);
 
 /**
  * 組み込みツールかどうかを判定
  */
 export function isBuiltinTool(name: string): boolean {
-  return name.startsWith(BUILTIN_TOOL_PREFIX);
+  return name.startsWith(BUILTIN_TOOL_PREFIX) || TASK_TYPE_TOOL_NAMES.has(name);
 }
 
 /**
- * Planning フェーズ用の組み込みツールを生成
- */
-/**
- * 単一タスク定義の型
+ * 単一タスク定義の型（内部用、taskType はツール名から暗黙設定）
  */
 interface TaskEntry {
   name?: string;
@@ -41,19 +42,14 @@ interface TaskEntry {
   insertAt?: number;
 }
 
-const TASK_ENTRY_SCHEMA = {
+/** 有効な実行タスクタイプ（planning は除外 — モデルが指定する対象外） */
+const VALID_TASK_TYPES = new Set<string>([...Object.keys(EXECUTION_TASK_DEFS), 'output']);
+
+const COMMON_TASK_PARAMS = {
   type: 'object',
   properties: {
     name: { type: 'string', description: 'Short identifier for this task (e.g. "search", "analyze"). Used in dep references and display.' },
     instruction: { type: 'string', description: 'Description of the deliverable this task produces.' },
-    taskType: {
-      type: 'string',
-      enum: [...Object.keys(EXECUTION_TASK_DEFS), 'output'],
-      description: Object.entries(EXECUTION_TASK_DEFS)
-        .map(([name, def]) => `${name}: ${def.toolDescription}`)
-        .concat(['output: produces the final user-facing response (must be the last task)'])
-        .join('. ') + '. Default: think',
-    },
     reason: {
       type: 'string',
       description: 'Why this task is necessary — what gap it fills in the deliverable chain.',
@@ -85,11 +81,11 @@ const TASK_ENTRY_SCHEMA = {
       description: 'Position in the task list to insert at. If omitted, the task is scheduled as the next task. Values before the current task are ignored.',
     },
   },
-  required: ['name', 'instruction', 'taskType', 'reason'],
+  required: ['name', 'instruction', 'reason'],
 } as const;
 
 /**
- * TaskEntry からタスクを登録し、結果メッセージを返す
+ * TaskEntry からタスクを登録する
  * @param currentIndex 現在実行中のタスクのインデックス。insertAt がこれ以下の場合はクランプされる。
  */
 function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: number): void {
@@ -119,28 +115,37 @@ function registerTask(taskList: AgenticTask[], entry: TaskEntry, currentIndex: n
 /**
  * Planning フェーズ用の組み込みツールを生成
  *
- * __register_task ツールは1タスクずつ登録する。
- * 複数タスクの場合はモデルが複数回 tool call する。
+ * タスクタイプ名をそのままツール名として使用:
+ * think(), verify(), act(), extractContext(), recall(), determine(), output()
  */
 export function createPlanningTools(taskList: AgenticTask[], currentIndex: number): ToolSpec[] {
   let insertOffset = 0;
-  return [{
+
+  const outputDescription = 'produces the final user-facing response (must be the last task)';
+
+  const taskTypeEntries: Array<[string, string]> = [
+    ...Object.entries(EXECUTION_TASK_DEFS).map(([name, def]) => [name, def.toolDescription] as [string, string]),
+    ['output', outputDescription],
+  ];
+
+  return taskTypeEntries.map(([typeName, description]) => ({
     definition: {
-      name: '__register_task',
-      description: 'Register a single task into the workflow. Call once per task. Tasks are appended after the current position. Each task produces a specific deliverable and is executed by a separate AI instance.',
-      parameters: TASK_ENTRY_SCHEMA,
+      name: typeName,
+      description: `Register a "${typeName}" task: ${description}. Call once per task.`,
+      parameters: COMMON_TASK_PARAMS,
     },
-    handler: async (args) => {
+    handler: async (args: Record<string, unknown>) => {
       const entry = args as unknown as TaskEntry;
+      entry.taskType = typeName;
       if (!entry.instruction) {
         throw new Error('Provide an "instruction" field.');
       }
       registerTask(taskList, entry, currentIndex + insertOffset);
       insertOffset++;
 
-      return `Registered: [${entry.name}] (${entry.taskType || 'think'})`;
+      return `Registered: [${entry.name}] (${typeName})`;
     },
-  }];
+  }));
 }
 
 /**
@@ -169,12 +174,7 @@ const timeTool: ToolSpec = {
 };
 
 /**
- * 再プランニング要求ツール
- * ワークフロー側で検出され、実際の再プランニングが実行される
- */
-/**
  * Execution フェーズ用の __replan ツールを生成
- * タスクリストと現在位置を参照してログに残す
  */
 function createReplanTool(taskList: AgenticTask[], currentIndex: number): ToolSpec {
   return {
