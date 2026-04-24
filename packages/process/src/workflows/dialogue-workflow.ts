@@ -154,6 +154,7 @@ export async function dialogueProcess(
     return {
       output: response,
       context: finalContext,
+      thinkingContent: secondPassResult.thinkingContent,
       consumedUsage: aggregateUsage([firstPassResult.usage, secondPassResult.usage]),
       responseUsage: secondPassResult.usage,
       logEntries: aggregateLogEntries([firstPassResult.logEntries, secondPassResult.logEntries]),
@@ -214,6 +215,7 @@ export async function dialogueProcess(
     return {
       output: response,
       context: finalContext,
+      thinkingContent: singlePassResult.thinkingContent,
       consumedUsage: singlePassResult.usage,
       responseUsage: singlePassResult.usage,
       logEntries: singlePassResult.logEntries,

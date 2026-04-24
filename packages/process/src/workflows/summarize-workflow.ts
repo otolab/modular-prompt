@@ -75,6 +75,7 @@ export async function summarizeProcess(
   const allLogEntries: (LogEntry[] | undefined)[] = [];
   const allErrors: (LogEntry[] | undefined)[] = [];
   let lastUsage: QueryResult['usage'] | undefined;
+  let lastThinkingContent: string | undefined;
   
   // Require chunks to be provided by caller
   if (!currentContext.chunks || currentContext.chunks.length === 0) {
@@ -125,6 +126,7 @@ export async function summarizeProcess(
         allLogEntries.push(queryResult.logEntries);
         allErrors.push(queryResult.errors);
         lastUsage = queryResult.usage;
+        lastThinkingContent = queryResult.thinkingContent;
       } catch (error) {
         // If it's already a WorkflowExecutionError, re-throw
         if (error instanceof WorkflowExecutionError) {
@@ -206,6 +208,7 @@ export async function summarizeProcess(
       allLogEntries.push(queryResult.logEntries);
       allErrors.push(queryResult.errors);
       lastUsage = queryResult.usage;
+      lastThinkingContent = queryResult.thinkingContent;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -245,6 +248,7 @@ export async function summarizeProcess(
   return {
     output: summaryState,
     context: finalContext,
+    thinkingContent: lastThinkingContent,
     consumedUsage: aggregateUsage(allUsages),
     responseUsage: lastUsage,
     logEntries: aggregateLogEntries(allLogEntries),

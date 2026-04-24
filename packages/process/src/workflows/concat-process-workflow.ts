@@ -90,6 +90,7 @@ export async function concatProcess(
   const allLogEntries: (LogEntry[] | undefined)[] = [];
   const allErrors: (LogEntry[] | undefined)[] = [];
   let lastUsage: QueryResult['usage'] | undefined;
+  let lastThinkingContent: string | undefined;
 
   // Calculate starting point based on processed count
   const startIndex = processedCount;
@@ -151,6 +152,7 @@ export async function concatProcess(
       allLogEntries.push(qr.logEntries);
       allErrors.push(qr.errors);
       lastUsage = qr.usage;
+      lastThinkingContent = qr.thinkingContent;
     }
     processedCount = context.chunks.length;
   } else {
@@ -193,6 +195,7 @@ export async function concatProcess(
         allLogEntries.push(queryResult.logEntries);
         allErrors.push(queryResult.errors);
         lastUsage = queryResult.usage;
+        lastThinkingContent = queryResult.thinkingContent;
         processedCount = startIndex + i + batch.length;
       } catch (error) {
         // If it's already a WorkflowExecutionError, re-throw
@@ -225,6 +228,7 @@ export async function concatProcess(
   return {
     output,
     context: finalContext,
+    thinkingContent: lastThinkingContent,
     consumedUsage: aggregateUsage(allUsages),
     responseUsage: lastUsage,
     logEntries: aggregateLogEntries(allLogEntries),

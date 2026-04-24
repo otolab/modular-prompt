@@ -83,6 +83,7 @@ export interface AgenticTaskExecutionLog {
   taskType: TaskType;
   instruction: string;
   result: string;
+  thinkingContent?: string;
   /** Builtin tool call results from this task */
   toolCallLog?: ToolCallLog[];
   pendingToolCalls?: ToolCall[];

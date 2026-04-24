@@ -77,6 +77,7 @@ export async function toolAgentProcess<TContext extends ToolAgentContext & Recor
     const allLogEntries: (LogEntry[] | undefined)[] = [];
     const allErrors: (LogEntry[] | undefined)[] = [];
     let turn = 0;
+    let lastThinkingContent: string | undefined;
 
     while (turn < maxTurns) {
       turn++;
@@ -96,12 +97,14 @@ export async function toolAgentProcess<TContext extends ToolAgentContext & Recor
         allUsages.push(result.usage);
         allLogEntries.push(result.logEntries);
         allErrors.push(result.errors);
+        lastThinkingContent = result.thinkingContent;
 
         logger.info(`[end] ${turn} turn(s)`);
         allLogEntries.push(logger.getLogEntries());
         return {
           output: content,
           context,
+          thinkingContent: lastThinkingContent,
           consumedUsage: aggregateUsage(allUsages),
           responseUsage: result.usage,
           logEntries: aggregateLogEntries(allLogEntries),
@@ -155,6 +158,7 @@ export async function toolAgentProcess<TContext extends ToolAgentContext & Recor
       allUsages.push(result.usage);
       allLogEntries.push(result.logEntries);
       allErrors.push(result.errors);
+      lastThinkingContent = result.thinkingContent;
 
       // 会話履歴を context に蓄積（次の compile で反映される）
       const assistantMessage: StandardMessageElement = {
@@ -173,6 +177,7 @@ export async function toolAgentProcess<TContext extends ToolAgentContext & Recor
     return {
       output: '',
       context,
+      thinkingContent: lastThinkingContent,
       consumedUsage: aggregateUsage(allUsages),
       logEntries: aggregateLogEntries(allLogEntries),
       errors: aggregateLogEntries(allErrors),

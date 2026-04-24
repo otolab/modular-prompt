@@ -210,6 +210,7 @@ export class ExperimentRunner {
               success: r.success,
               elapsed: r.elapsed,
               content: r.queryResult?.content || '',
+              thinkingContent: r.queryResult?.thinkingContent,
               toolCalls: r.queryResult?.toolCalls,
               finishReason: r.queryResult?.finishReason,
               error: r.error,
@@ -291,6 +292,7 @@ export class ExperimentRunner {
         // Convert workflow result to QueryResult-like structure
         const result: QueryResult = {
           content: workflowResult.output,
+          thinkingContent: workflowResult.thinkingContent,
           toolCalls: workflowResult.metadata?.toolCalls as any,
           finishReason: workflowResult.metadata?.finishReason as any,
           usage: workflowResult.metadata?.usage as any,
@@ -308,6 +310,12 @@ export class ExperimentRunner {
           for (const tc of result.toolCalls) {
             console.log(`      🔧 toolCall: ${tc.name}(${JSON.stringify(tc.arguments)})`);
           }
+        }
+        if (result.thinkingContent) {
+          const thinkingPreview = result.thinkingContent.length > 100
+            ? result.thinkingContent.substring(0, 100) + '...'
+            : result.thinkingContent;
+          console.log(`      💭 thinking: ${thinkingPreview}`);
         }
         if (contentPreview.trim()) {
           console.log(`      📝 ${contentPreview}`);
