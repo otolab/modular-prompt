@@ -65,6 +65,7 @@ export interface MlxMlModelOptions {
   topK?: number;
   repetitionPenalty?: number;
   repetitionContextSize?: number;
+  trustRemoteCode?: boolean;
 }
 
 // Re-export from model-spec
