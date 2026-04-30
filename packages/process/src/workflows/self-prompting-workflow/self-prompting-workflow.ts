@@ -274,6 +274,7 @@ async function executeIntegrationPhase(
 /**
  * Self-prompting workflow - AI generates complete prompts for each step
  *
+ * @deprecated agenticProcess に統合予定。新規利用は agenticProcess を使用してください。
  * @param driver - AI driver for executing prompts
  * @param module - User's prompt module (merged with phase modules internally)
  * @param context - Workflow context

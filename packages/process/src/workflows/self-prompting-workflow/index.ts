@@ -1,9 +1,7 @@
 /**
  * Self-prompting workflow - AI generates complete prompts for each execution step
  *
- * This workflow is an alternative to agentic-workflow where the AI generates
- * complete prompts (instructions + data arrays) during planning, and executes
- * them directly without moduler-prompt compilation during execution phase.
+ * @deprecated agenticProcess に統合予定。新規利用は agenticProcess を使用してください。
  */
 
 export { selfPromptingProcess } from './self-prompting-workflow.js';
