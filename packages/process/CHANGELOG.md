@@ -1,5 +1,39 @@
 # @modular-prompt/process
 
+## 0.5.0
+
+### Minor Changes
+
+- 05990fb: agentic ワークフローの planning タスク改善と experiment 安定性向上
+
+  - planning タスク後の dep ベーストポロジカルソートを追加（タスク登録順に依存しない正しい実行順序）
+  - planning プロンプトの分析出力指示を改善
+  - recall タスクの説明を内部知識検索として明確化
+  - experiment 結果の JSON 保存機能を追加
+  - DriverSet ドライバをモデルグループ完了時に都度 close するよう修正
+
+### Patch Changes
+
+- 4f709f7: thinkingContent 伝播と MLX trustRemoteCode オプション追加
+
+  - ドライバーが抽出した thinkingContent を全ワークフロー →WorkflowResult→RunResult まで伝播
+  - MlxMlModelOptions に trustRemoteCode を追加（apply_chat_template でリモートコード実行を許可）
+  - PARAMETER_CONSTRAINTS のホワイトリスト管理を明示化
+
+- 341caa8: tool call 形式検出・パーサー選択の一元化と`<think>`タグ抽出のドライバー統合
+
+  - tool call 形式検出を tool_call_format（Python 側検出結果）に一元化
+  - hasNativeToolSupport()を簡素化（5 シグナル → tool_call_format.call_start のみ）
+  - selectResponseProcessor を tool_parser_type ベースに変更
+  - parseToolCalls から Harmony/context-1 重複パスを削除
+  - Harmony レスポンスパーサーでストリーム出力（暗黙`<|start|>`省略）に対応
+  - `<think>`タグ抽出を content-utils.extractThinkingContent()に統合し、QueryResult.thinkingContent で一本化
+  - process/experiment の個別 stripThinkBlocks 処理を廃止
+
+- Updated dependencies [4f709f7]
+- Updated dependencies [341caa8]
+  - @modular-prompt/driver@0.12.0
+
 ## 0.4.18
 
 ### Patch Changes
