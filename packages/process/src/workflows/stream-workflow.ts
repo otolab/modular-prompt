@@ -105,6 +105,7 @@ export async function streamProcess(
   const allLogEntries: (LogEntry[] | undefined)[] = [];
   const allErrors: (LogEntry[] | undefined)[] = [];
   let lastUsage: QueryResult['usage'] | undefined;
+  let lastThinkingContent: string | undefined;
 
   // Calculate initial range
   let range = getNextRange(context.chunks, context.range, { tokenLimit, maxChunk });
@@ -149,6 +150,7 @@ export async function streamProcess(
       allLogEntries.push(result.logEntries);
       allErrors.push(result.errors);
       lastUsage = result.usage;
+      lastThinkingContent = result.thinkingContent;
     } catch (error) {
       // If it's already a WorkflowExecutionError, re-throw
       if (error instanceof WorkflowExecutionError) {
@@ -185,6 +187,7 @@ export async function streamProcess(
   return {
     output: state.content,
     context: finalContext,
+    thinkingContent: lastThinkingContent,
     consumedUsage: aggregateUsage(allUsages),
     responseUsage: lastUsage,
     logEntries: aggregateLogEntries(allLogEntries),

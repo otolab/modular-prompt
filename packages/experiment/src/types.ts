@@ -62,6 +62,7 @@ export interface RunResult {
   success: boolean;
   elapsed: number;
   content: string;
+  thinkingContent?: string;
   toolCalls?: ToolCall[];
   finishReason?: string;
   error?: string;

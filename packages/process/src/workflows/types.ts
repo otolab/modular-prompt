@@ -40,6 +40,7 @@ export interface ToolCallLog {
 export interface WorkflowResult<TContext> {
   output: string;
   context: TContext;  // 継続可能なコンテキスト
+  thinkingContent?: string;
   /** 全 query() 呼び出しの合計 usage（リトライ含む）= 実コスト */
   consumedUsage?: { promptTokens: number; completionTokens: number; totalTokens: number };
   /** 最終応答の usage = メッセージサイズの目安 */

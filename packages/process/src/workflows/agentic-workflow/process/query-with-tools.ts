@@ -68,6 +68,7 @@ export interface QueryWithToolsOptions {
 
 export interface QueryWithToolsResult {
   content: string;
+  thinkingContent?: string;
   toolCallLog: ToolCallLog[];
   /** External tool calls that the LLM requested (not executed) */
   pendingToolCalls?: ToolCall[];
@@ -114,6 +115,7 @@ export async function queryWithTools(
   };
 
   let retryCount = 0;
+  let lastThinkingContent: string | undefined;
   const allUsages: (QueryResult['usage'] | undefined)[] = [];
   const allLogEntries: (LogEntry[] | undefined)[] = [];
   const allErrors: (LogEntry[] | undefined)[] = [];
@@ -125,6 +127,7 @@ export async function queryWithTools(
     allErrors.push(lastResult.errors);
     return {
       content,
+      thinkingContent: lastThinkingContent,
       toolCallLog,
       consumedUsage: aggregateUsage(allUsages),
       responseUsage: lastResult.usage,
@@ -137,6 +140,7 @@ export async function queryWithTools(
 
   while (true) {
     const queryResult = await driver.query(prompt, queryOptions);
+    lastThinkingContent = queryResult.thinkingContent;
     qLogger.verbose('[output]', queryResult.content);
 
     const content = queryResult.content || '';

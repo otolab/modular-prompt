@@ -48,8 +48,10 @@ interface ParameterConstraint {
 }
 
 /**
- * MLXパラメータの制約定義
- * キャメルケース形式のみで定義（APIインターフェース用）
+ * MLXパラメータの制約定義（ホワイトリスト）
+ *
+ * MlxMlModelOptions に新しいフィールドを追加した場合は、ここにも登録が必要。
+ * 未登録のパラメータは strict モードで拒否される。
  */
 const PARAMETER_CONSTRAINTS: Record<string, ParameterConstraint> = {
   maxTokens: {
@@ -93,6 +95,11 @@ const PARAMETER_CONSTRAINTS: Record<string, ParameterConstraint> = {
     max: 10000,
     default: 20,
     description: '繰り返し検出のコンテキストサイズ'
+  },
+  trustRemoteCode: {
+    type: 'boolean',
+    default: false,
+    description: 'apply_chat_templateでリモートコードの実行を許可する'
   }
 };
 
@@ -122,7 +129,7 @@ export function validateOptions(
     // 不明なパラメータ
     if (!constraint) {
       // 利用可能なパラメータから重複を除く（camelCaseのみ表示）
-      const availableParams = ['maxTokens', 'temperature', 'topP', 'topK', 'repetitionPenalty', 'repetitionContextSize'];
+      const availableParams = Object.keys(PARAMETER_CONSTRAINTS);
 
       if (strict) {
         errors.push({

@@ -182,6 +182,7 @@ async function executeTask(
       taskType: task.taskType,
       instruction: task.instruction,
       result: result.content,
+      thinkingContent: result.thinkingContent,
       toolCallLog: result.toolCallLog.length > 0 ? result.toolCallLog : undefined,
       pendingToolCalls: result.pendingToolCalls,
       metadata: {
@@ -311,6 +312,12 @@ export async function agenticProcess<T>(
   const lastLog = executionLog[executionLog.length - 1];
   const finalResult = lastLog?.result || '';
 
+  const thinkingParts = executionLog
+    .filter(log => log.thinkingContent)
+    .map(log => `[${log.taskType}: ${log.instruction}]\n${log.thinkingContent}`);
+  const aggregatedThinkingContent = thinkingParts.length > 0
+    ? thinkingParts.join('\n\n') : undefined;
+
   let output: string;
   if (includeThinking && executionLog.length > 1) {
     const intermediateLog = executionLog.slice(0, -1);
@@ -334,6 +341,7 @@ export async function agenticProcess<T>(
 
   return {
     output,
+    thinkingContent: aggregatedThinkingContent,
     context: {
       taskList,
       executionLog,

@@ -41,6 +41,7 @@ export async function defaultProcess<TContext extends Record<string, any>>(
     return {
       output: result.content,
       context,
+      thinkingContent: result.thinkingContent,
       consumedUsage: result.usage,
       responseUsage: result.usage,
       logEntries: result.logEntries,

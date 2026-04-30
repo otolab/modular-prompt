@@ -139,6 +139,8 @@ def handle_chat(messages, primer=None, options=None, tools=None, reasoning_effor
     if options is None:
         options = {}
 
+    trust_remote_code = options.pop('trust_remote_code', None)
+
     # チャットテンプレートが利用可能かチェック
     if not supports_chat_template():
         # チャットテンプレートがない場合はcompletionフォーマットに変換
@@ -163,6 +165,8 @@ def handle_chat(messages, primer=None, options=None, tools=None, reasoning_effor
         extra_kwargs['tools'] = tools
     if reasoning_effort is not None:
         extra_kwargs['reasoning_effort'] = reasoning_effort
+    if trust_remote_code is not None:
+        extra_kwargs['trust_remote_code'] = trust_remote_code
 
     # テンプレート適用（対応していないkwargsはTypeErrorになるので段階的にフォールバック）
     try:
