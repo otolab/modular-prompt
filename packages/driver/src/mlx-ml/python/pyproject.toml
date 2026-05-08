@@ -16,9 +16,19 @@ dependencies = [
     "transformers==5.2.0",
 ]
 
+[dependency-groups]
+dev = ["pytest>=9.0"]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.setuptools]
-py-modules = ["__main__", "chat_template_constraints", "token_utils"]
+py-modules = ["__main__", "server"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backends*", "handlers*", "utils*"]
