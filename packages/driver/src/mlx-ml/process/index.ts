@@ -27,6 +27,7 @@ export type {
 
 export interface MlxProcessOptions {
   textOnly?: boolean;
+  drafterModel?: string;
 }
 
 export class MlxProcess {

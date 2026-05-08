@@ -32,6 +32,7 @@ export interface ProcessCommunicationCallbacks {
 
 export interface ProcessCommunicationOptions {
   textOnly?: boolean;
+  drafterModel?: string;
 }
 
 export class ProcessCommunication {
@@ -55,6 +56,9 @@ export class ProcessCommunication {
     ];
     if (options?.textOnly) {
       args.push('--text-only');
+    }
+    if (options?.drafterModel) {
+      args.push('--drafter', options.drafterModel);
     }
 
     this.process = spawn('uv', args, {

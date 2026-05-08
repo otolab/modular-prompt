@@ -126,6 +126,8 @@ export interface MlxDriverConfig {
   maxImageSize?: number;
   /** VLMモデルをtext-onlyモードで使用する（VLM判定を抑制） */
   textOnly?: boolean;
+  /** Speculative decoding用のdrafter model名 */
+  drafterModel?: string;
 }
 
 /**
@@ -190,7 +192,7 @@ export class MlxDriver implements AIDriver {
     this._defaultOptions = config.defaultOptions || {};
     this.formatterOptions = config.formatterOptions || {};
     this.maxImageSize = config.maxImageSize ?? 768;
-    this.process = new MlxProcess(config.model, { textOnly: config.textOnly });
+    this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
     this.modelProcessor = createModelSpecificProcessor(config.model);
   }
 
