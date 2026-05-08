@@ -96,7 +96,13 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   };
   registerFactories(registry, appConfig);
 
-  const metadata = profile.textOnly ? { textOnly: true } : undefined;
+  const metadata: Record<string, unknown> | undefined =
+    (profile.textOnly || profile.drafterModel)
+      ? {
+          ...(profile.textOnly && { textOnly: true }),
+          ...(profile.drafterModel && { drafterModel: profile.drafterModel }),
+        }
+      : undefined;
 
   // 1. workflow.models.default があればそれを使う
   const modelRef = profile.workflow?.models?.default;
