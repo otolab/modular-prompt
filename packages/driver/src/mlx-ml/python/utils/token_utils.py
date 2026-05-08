@@ -2,7 +2,7 @@
 トークン関連のユーティリティ関数
 """
 import sys
-from chat_template_constraints import detect_chat_restrictions
+from utils.chat_template_constraints import detect_chat_restrictions
 
 
 def is_eod_token(response, tokenizer):
