@@ -8,7 +8,7 @@ from backends.base import ModelBackend
 
 def handle_completion(
     backend: ModelBackend,
-    prompt: str,
+    prompt: str | list[int],
     options: dict | None = None,
     images: list | None = None,
     max_image_size: int = 768,

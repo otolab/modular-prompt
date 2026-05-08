@@ -6,6 +6,9 @@ from backends.base import ModelBackend
 from handlers import handle_capabilities, handle_chat, handle_completion, handle_format_test
 
 
+MAX_READ_LINES = 10000
+
+
 def read():
     lines = []
     while True:
@@ -13,6 +16,10 @@ def read():
         if not line:
             return None
         lines.append(line)
+        if len(lines) > MAX_READ_LINES:
+            sys.stderr.write(f"Error: read buffer exceeded {MAX_READ_LINES} lines, discarding\n")
+            lines.clear()
+            continue
         try:
             return json.loads(''.join(lines))
         except json.JSONDecodeError:

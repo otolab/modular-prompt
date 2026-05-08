@@ -24,7 +24,7 @@ class MlxLmBackend(ModelBackend):
         return self.tokenizer
 
     def stream_generate(
-        self, prompt: str, options: dict, images: list | None = None
+        self, prompt: str | list[int], options: dict, images: list | None = None
     ) -> Iterator[Any]:
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded")

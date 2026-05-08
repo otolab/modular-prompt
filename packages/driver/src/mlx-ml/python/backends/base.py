@@ -17,7 +17,7 @@ class ModelBackend(ABC):
 
     @abstractmethod
     def stream_generate(
-        self, prompt: str, options: dict, images: list | None = None
+        self, prompt: str | list[int], options: dict, images: list | None = None
     ) -> Iterator[Any]:
         """Stream generation results."""
         raise NotImplementedError

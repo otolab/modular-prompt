@@ -9,7 +9,7 @@ from utils.prompt_builder import generate_merged_prompt, supports_chat_template
 
 def _stream_to_stdout(
     backend: ModelBackend,
-    prompt: str,
+    prompt: str | list[int],
     options: dict,
     images: list | None = None,
     primer: str | None = None,
@@ -42,20 +42,21 @@ def handle_chat(
 
     if backend.supports_vision():
         add_generation_prompt = True
+        fmt_messages = list(messages)
         if primer is not None:
-            messages.append({"role": "assistant", "content": primer})
+            fmt_messages.append({"role": "assistant", "content": primer})
             add_generation_prompt = False
 
         try:
             prompt = tokenizer.apply_chat_template(
-                messages,
+                fmt_messages,
                 tools=tools,
                 add_generation_prompt=add_generation_prompt,
                 tokenize=False,
             )
         except TypeError:
             prompt = tokenizer.apply_chat_template(
-                messages,
+                fmt_messages,
                 add_generation_prompt=add_generation_prompt,
                 tokenize=False,
             )
@@ -83,8 +84,9 @@ def handle_chat(
         return
 
     add_generation_prompt = True
+    fmt_messages = list(messages)
     if primer is not None:
-        messages.append({"role": "assistant", "content": primer})
+        fmt_messages.append({"role": "assistant", "content": primer})
         add_generation_prompt = False
 
     extra_kwargs = {}
@@ -99,7 +101,7 @@ def handle_chat(
 
     try:
         prompt = tokenizer.apply_chat_template(
-            messages,
+            fmt_messages,
             add_generation_prompt=add_generation_prompt,
             tokenize=False,
             **extra_kwargs,
@@ -110,14 +112,14 @@ def handle_chat(
             if tools is not None:
                 fallback_kwargs["tools"] = tools
             prompt = tokenizer.apply_chat_template(
-                messages,
+                fmt_messages,
                 add_generation_prompt=add_generation_prompt,
                 tokenize=False,
                 **fallback_kwargs,
             )
         except TypeError:
             prompt = tokenizer.apply_chat_template(
-                messages,
+                fmt_messages,
                 add_generation_prompt=add_generation_prompt,
                 tokenize=False,
             )

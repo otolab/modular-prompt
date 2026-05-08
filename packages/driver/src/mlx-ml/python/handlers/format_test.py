@@ -29,21 +29,22 @@ def handle_format_test(
 
             primer = options.get("primer")
             add_generation_prompt = True
+            fmt_messages = list(messages)
 
             if primer is not None:
-                messages.append({"role": "assistant", "content": primer})
+                fmt_messages.append({"role": "assistant", "content": primer})
                 add_generation_prompt = False
 
             try:
                 formatted_prompt = tokenizer.apply_chat_template(
-                    messages,
+                    fmt_messages,
                     tools=tools,
                     add_generation_prompt=add_generation_prompt,
                     tokenize=False,
                 )
             except TypeError:
                 formatted_prompt = tokenizer.apply_chat_template(
-                    messages,
+                    fmt_messages,
                     add_generation_prompt=add_generation_prompt,
                     tokenize=False,
                 )
