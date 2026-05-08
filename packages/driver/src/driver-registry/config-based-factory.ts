@@ -107,6 +107,7 @@ export function registerFactories(
       defaultOptions: mergeDefaults(spec),
       textOnly: driverOpts?.textOnly,
       maxImageSize: driverOpts?.maxImageSize,
+      drafterModel: driverOpts?.drafterModel,
     });
   });
 

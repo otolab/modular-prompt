@@ -96,7 +96,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   };
   registerFactories(registry, appConfig);
 
-  const metadata: Record<string, unknown> | undefined =
+  const driverOptions =
     (profile.textOnly || profile.drafterModel)
       ? {
           ...(profile.textOnly && { textOnly: true }),
@@ -111,7 +111,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
       model: modelRef.model,
       provider: modelRef.provider as DriverProvider,
       capabilities: [],
-      metadata,
+      driverOptions,
     });
   }
 
@@ -121,7 +121,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
       model: profile.model,
       provider: inferProvider(profile.model),
       capabilities: [],
-      metadata,
+      driverOptions,
     });
   }
 
@@ -130,7 +130,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
     model: DEFAULT_MODEL,
     provider: 'mlx',
     capabilities: [],
-    metadata,
+    driverOptions,
   });
 }
 
