@@ -12,7 +12,7 @@ from utils.vlm_utils import load_and_resize_images
 
 
 @dataclass
-class BatchResponse:
+class _BatchChunk:
     """batch_generate の結果を stream_generate 互換にするラッパー"""
     text: str
 
@@ -80,23 +80,23 @@ class MlxVlmBackend(ModelBackend):
         top_p: float,
         top_k: int,
         images: Any | None,
-    ) -> Iterator[BatchResponse]:
+    ) -> Iterator[_BatchChunk]:
+        from mlx_lm.sample_utils import make_sampler
         from mlx_vlm.generate import batch_generate
 
-        results = batch_generate(
+        sampler = make_sampler(temp=temperature, top_p=top_p, top_k=top_k)
+        result = batch_generate(
             self.model,
             self.processor,
             prompts=[prompt],
+            max_tokens=max_tokens,
+            sampler=sampler,
             draft_model=self.drafter,
             draft_kind="mtp",
             draft_block_size=3,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
         )
-        if results:
-            yield BatchResponse(text=results[0])
+        if result and result.texts:
+            yield _BatchChunk(text=result.texts[0])
 
     def supports_vision(self) -> bool:
         return True
