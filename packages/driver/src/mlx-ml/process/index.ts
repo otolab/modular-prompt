@@ -6,6 +6,7 @@
  */
 
 import { Readable } from 'stream';
+import { Logger } from '@modular-prompt/utils';
 import type {
   MlxMlModelOptions,
   MlxMessage,
@@ -15,6 +16,8 @@ import type {
 } from './types.js';
 import { QueueManager, QueueManagerCallbacks } from './queue.js';
 import { ProcessCommunication, ProcessCommunicationCallbacks } from './process-communication.js';
+
+const logger = new Logger({ prefix: 'MLX', context: 'process' });
 
 // API v2.0 型をエクスポート
 export type {
@@ -42,7 +45,16 @@ export class MlxProcess {
     // コールバック設定
     const processCallbacks: ProcessCommunicationCallbacks = {
       onJsonResponse: (jsonData: string) => this.queueManager.handleJsonResponse(jsonData),
-      onRequestCompleted: () => this.queueManager.onRequestCompleted()
+      onRequestCompleted: () => this.queueManager.onRequestCompleted(),
+      onProcessExit: (code: number | null, signal: string | null) => {
+        if (code !== 0) {
+          const error = new Error(
+            `MLX process exited unexpectedly (code=${code}, signal=${signal})`
+          );
+          logger.error(error.message);
+          this.queueManager.rejectAll(error);
+        }
+      },
     };
 
     const queueCallbacks: QueueManagerCallbacks = {

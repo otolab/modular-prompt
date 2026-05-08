@@ -28,6 +28,7 @@ const mlxDriverDir = path.join(
 export interface ProcessCommunicationCallbacks {
   onJsonResponse: (jsonData: string) => void;
   onRequestCompleted: () => void;
+  onProcessExit: (code: number | null, signal: string | null) => void;
 }
 
 export interface ProcessCommunicationOptions {
@@ -79,6 +80,16 @@ export class ProcessCommunication {
 
     this.process.on('error', (err) => {
       logger.error('Child process error:', err);
+    });
+
+    this.process.on('exit', (code, signal) => {
+      if (this.currentStream) {
+        this.currentStream.destroy(
+          new Error(`MLX process exited unexpectedly (code=${code}, signal=${signal})`)
+        );
+        this.currentStream = null;
+      }
+      this.callbacks.onProcessExit(code, signal);
     });
   }
 
