@@ -112,7 +112,10 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.options.maxTokens = options.maxTokens;
   }
   if (options.textOnly) profile.textOnly = true;
-  if (options.drafterModel) profile.drafterModel = options.drafterModel;
+  if (options.drafterModel) {
+    profile.drafterModel = options.drafterModel;
+    logger.info(chalk.gray(`⚡ Drafter model: ${options.drafterModel}`));
+  }
 
   // Load or create chat log
   let chatLog: ChatLog;

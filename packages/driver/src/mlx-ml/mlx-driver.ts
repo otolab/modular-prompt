@@ -194,6 +194,9 @@ export class MlxDriver implements AIDriver {
     this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
     this.modelProcessor = createModelSpecificProcessor(config.model);
+    if (config.drafterModel) {
+      this.queryLogger.log.info(`Drafter model: ${config.drafterModel}`);
+    }
   }
 
   /**
