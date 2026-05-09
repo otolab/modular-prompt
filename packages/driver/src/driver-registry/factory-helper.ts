@@ -76,7 +76,8 @@ export function registerStandardDriverFactories(
           spec,
           spec.defaultOptions
         ) as Partial<import('../mlx-ml/types.js').MlxMlModelOptions>,
-        textOnly: spec.metadata?.textOnly as boolean | undefined
+        textOnly: spec.metadata?.textOnly as boolean | undefined,
+        drafterModel: spec.metadata?.drafterModel as string | undefined
       });
     });
   }

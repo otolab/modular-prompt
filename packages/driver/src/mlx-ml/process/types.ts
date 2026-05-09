@@ -159,23 +159,27 @@ export interface LegacyMlxRequest {
 export interface BaseQueueItem {
   request: MlxRequest | LegacyMlxRequest;
   expectJsonResponse?: boolean;
+  reject?: (reason: Error) => void;
 }
 
 export interface CapabilitiesQueueItem extends BaseQueueItem {
   request: MlxCapabilitiesRequest;
   resolve: (value: MlxRuntimeInfo) => void;
+  reject: (reason: Error) => void;
   expectJsonResponse: true;
 }
 
 export interface FormatTestQueueItem extends BaseQueueItem {
   request: MlxFormatTestRequest;
   resolve: (value: MlxFormatTestResult) => void;
+  reject: (reason: Error) => void;
   expectJsonResponse: true;
 }
 
 export interface StreamingQueueItem extends BaseQueueItem {
   request: MlxChatRequest | MlxCompletionRequest | LegacyMlxRequest;
   resolve: (value: Readable) => void;
+  reject: (reason: Error) => void;
   expectJsonResponse?: false;
 }
 

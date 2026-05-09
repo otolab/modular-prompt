@@ -24,6 +24,8 @@ export interface DialogProfile {
   resourceFiles?: string[];
   /** VLMモデルをtext-onlyモードで使用する */
   textOnly?: boolean;
+  /** Speculative decoding用のdrafter model名 */
+  drafterModel?: string;
   /** Options */
   options?: {
     /** Temperature (0.0-2.0) */
@@ -96,4 +98,6 @@ export interface SimpleChatOptions {
   images?: string[];
   /** VLMモデルをtext-onlyモードで使用する */
   textOnly?: boolean;
+  /** Speculative decoding用のdrafter model名 */
+  drafterModel?: string;
 }

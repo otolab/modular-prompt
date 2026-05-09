@@ -48,6 +48,8 @@ export interface MlxModelDriverOptions {
   textOnly?: boolean;
   /** VLM画像の最大辺ピクセル数 */
   maxImageSize?: number;
+  /** Speculative decoding用のdrafter model名 */
+  drafterModel?: string;
 }
 
 /** ドライバー固有オプションのunion（将来拡張） */

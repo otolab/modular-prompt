@@ -32,3 +32,13 @@ class ModelBackend(ABC):
     def model_kind(self) -> str:
         """Return "lm" or "vlm"."""
         raise NotImplementedError
+
+    def load_drafter(self, drafter_model: str) -> None:
+        """Load a drafter model for speculative decoding."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support drafter models"
+        )
+
+    def has_drafter(self) -> bool:
+        """Return whether a drafter model is loaded."""
+        return False

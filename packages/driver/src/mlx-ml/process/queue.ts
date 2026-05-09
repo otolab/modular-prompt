@@ -6,6 +6,7 @@
 
 import { Readable } from 'stream';
 import { mapOptionsToPython } from './parameter-mapper.js';
+import { Logger } from '@modular-prompt/utils';
 import type {
   QueueItem,
   CapabilitiesQueueItem,
@@ -22,6 +23,8 @@ import type {
   MlxToolDefinition
 } from './types.js';
 
+const logger = new Logger({ prefix: 'MLX', context: 'queue' });
+
 export interface QueueManagerCallbacks {
   sendToProcess: (data: string) => void;
   createNewStream: () => Readable;
@@ -37,28 +40,30 @@ export class QueueManager {
   }
 
   addCapabilitiesRequest(): Promise<MlxRuntimeInfo> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const request: MlxCapabilitiesRequest = { method: 'capabilities' };
-      this.queue.push({ 
-        request, 
-        resolve, 
-        expectJsonResponse: true 
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true
       } as CapabilitiesQueueItem);
       this.processNext();
     });
   }
 
   addFormatTestRequest(messages: MlxMessage[], options?: { primer?: string }): Promise<MlxFormatTestResult> {
-    return new Promise((resolve) => {
-      const request: MlxFormatTestRequest = { 
-        method: 'format_test', 
-        messages, 
-        options 
+    return new Promise((resolve, reject) => {
+      const request: MlxFormatTestRequest = {
+        method: 'format_test',
+        messages,
+        options
       };
-      this.queue.push({ 
-        request, 
-        resolve, 
-        expectJsonResponse: true 
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true
       } as FormatTestQueueItem);
       this.processNext();
     });
@@ -78,7 +83,8 @@ export class QueueManager {
         };
         this.queue.push({
           request,
-          resolve
+          resolve,
+          reject,
         } as StreamingQueueItem);
         this.processNext();
       } catch (error) {
@@ -98,7 +104,8 @@ export class QueueManager {
         };
         this.queue.push({
           request,
-          resolve
+          resolve,
+          reject,
         } as StreamingQueueItem);
         this.processNext();
       } catch (error) {
@@ -175,6 +182,14 @@ export class QueueManager {
 
   get isEmpty(): boolean {
     return this.queue.length === 0;
+  }
+
+  rejectAll(error: Error): void {
+    const pending = this.queue.splice(0);
+    for (const item of pending) {
+      item.reject?.(error);
+    }
+    this.isProcessing = false;
   }
 
   clear(): void {

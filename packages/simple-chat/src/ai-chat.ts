@@ -96,7 +96,13 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   };
   registerFactories(registry, appConfig);
 
-  const metadata = profile.textOnly ? { textOnly: true } : undefined;
+  const driverOptions =
+    (profile.textOnly || profile.drafterModel)
+      ? {
+          ...(profile.textOnly && { textOnly: true }),
+          ...(profile.drafterModel && { drafterModel: profile.drafterModel }),
+        }
+      : undefined;
 
   // 1. workflow.models.default があればそれを使う
   const modelRef = profile.workflow?.models?.default;
@@ -105,7 +111,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
       model: modelRef.model,
       provider: modelRef.provider as DriverProvider,
       capabilities: [],
-      metadata,
+      driverOptions,
     });
   }
 
@@ -115,7 +121,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
       model: profile.model,
       provider: inferProvider(profile.model),
       capabilities: [],
-      metadata,
+      driverOptions,
     });
   }
 
@@ -124,7 +130,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
     model: DEFAULT_MODEL,
     provider: 'mlx',
     capabilities: [],
-    metadata,
+    driverOptions,
   });
 }
 

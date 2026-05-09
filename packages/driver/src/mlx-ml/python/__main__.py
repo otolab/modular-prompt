@@ -8,6 +8,12 @@ from server import Server
 model_name = sys.argv[1] if len(sys.argv) > 1 else "mlx-community/gemma-3-270m-it-qat-4bit"
 text_only = "--text-only" in sys.argv
 
+drafter_model = None
+if "--drafter" in sys.argv:
+    idx = sys.argv.index("--drafter")
+    if idx + 1 < len(sys.argv):
+        drafter_model = sys.argv[idx + 1]
+
 
 def create_backend(model_name: str, text_only: bool = False):
     model_kind = "lm" if text_only else detect_model_kind(model_name)
@@ -27,6 +33,9 @@ def create_backend(model_name: str, text_only: bool = False):
 
 if __name__ == "__main__":
     backend, model_kind = create_backend(model_name, text_only)
+
+    if drafter_model:
+        backend.load_drafter(drafter_model)
 
     capabilities = get_capabilities(backend.get_tokenizer())
     capabilities["model_kind"] = model_kind
