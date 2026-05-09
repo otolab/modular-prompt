@@ -119,6 +119,8 @@ export interface AgenticWorkflowContext {
   executionLog?: AgenticTaskExecutionLog[];
   /** Index of the currently executing task */
   currentTaskIndex?: number;
+  /** Tools available to execution tasks (for planning prompt visibility) */
+  availableTools?: Array<{ name: string; description: string }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -58,7 +58,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '2. **Design & Refine**',
     '  - Design the sequence of Tasks and deliverables that leads from the input to the final deliverable. See "Task Type Guide" and "Planning Theory".',
     '  - Adjust each Task\'s input so it can work correctly and efficiently. Exclude Original Data when deliverables are sufficient. See "What Each Task Can See".',
-    '3. **Register** — Call the task type tool once per Task (e.g. `think({...})`, `output({...})`).',
+    '3. **Register** — Execute the task type tool once per Task. Do not write code — use the tool calling mechanism directly.',
     '  - Each Task\'s `reason` should explain why it is needed. Each Task\'s `instruction` should describe the deliverable to produce.',
   ],
   guidelines: [
@@ -118,6 +118,16 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
         '  - **withoutMessages**: Exclude messages. Use when the Task instruction captures the intent sufficiently.',
         '  - **withoutInputs**: Exclude inputs. Use when `extractContext` has already extracted what is needed, or when inputs are not relevant to the Task.',
         '  - **withoutMaterials**: Exclude materials. Use when the Task requires focused reasoning on deliverables alone.',
+        '- Each Task can call the following tools:',
+        (ctx: AgenticWorkflowContext) => {
+          const builtinTools = [
+            { name: '__time', description: 'Get the current date and time' },
+            { name: '__replan', description: 'Request re-planning of the workflow' },
+          ];
+          const externalTools = ctx.availableTools ?? [];
+          const allTools = [...builtinTools, ...externalTools];
+          return allTools.map(t => `  - ${t.name}: ${t.description}`).join('\n');
+        },
       ],
     },
   ],
@@ -176,6 +186,6 @@ export const replanningModule: PromptModule<AgenticWorkflowContext> = {
 
 export const config: TaskTypeConfig = {
   module: planningModule,
-  builtinToolNames: [...TASK_TYPE_TOOL_NAMES, '__time'],
+  builtinToolNames: [...TASK_TYPE_TOOL_NAMES],
   maxTokensTier: 'high',
 };

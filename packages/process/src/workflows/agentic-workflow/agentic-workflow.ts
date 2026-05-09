@@ -229,6 +229,7 @@ export async function agenticProcess<T>(
     taskList: resumeState?.taskList ?? bootstrap(userModule, enablePlanning),
     executionLog: resumeState?.executionLog ? [...resumeState.executionLog] : [],
     currentTaskIndex: 0,
+    availableTools: tools.map(t => ({ name: t.name, description: t.description ?? '' })),
   };
 
   const { taskList, executionLog } = internalContext as Required<Pick<AgenticWorkflowContext, 'taskList' | 'executionLog'>>;
