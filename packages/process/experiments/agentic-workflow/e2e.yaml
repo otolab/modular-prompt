@@ -34,10 +34,8 @@ models:
       topP: 0.95
       topK: 64
       maxTokens: 1024
-    driverOptions:
-      textOnly: true
-  gemma4-e4b-mxfp8:
-    model: "mlx-community/gemma-4-e4b-it-mxfp8"
+  gemma4-26b-a4b:
+    model: "mlx-community/gemma-4-26B-a4b-it-OptiQ-4bit"
     provider: "mlx"
     defaultOptions:
       temperature: 1.0
@@ -59,7 +57,9 @@ drivers:
 
 _shared:
   models: &models
-    - llm-jp-4-8b-thinking
+    - default: gemma4-e4b
+      plan: gemma4-26b-a4b
+      thinking: gemma4-26b-a4b
 
 modules:
   - name: agentic-time-check
@@ -143,25 +143,25 @@ testCases:
     processOptions:
       maxTasks: 5
 
-  - name: "agenticProcess: TS型推定（簡単）"
-    description: "ジェネリクスの追跡 - think/verifyパターンの生成を観察"
-    modules: [ts-type-inference-easy]
-    models: *models
-    input: {}
-    process: agenticProcess
-    processOptions:
-      maxTasks: 5
-      includeThinking: true
+  # - name: "agenticProcess: TS型推定（簡単）"
+  #   description: "ジェネリクスの追跡 - think/verifyパターンの生成を観察"
+  #   modules: [ts-type-inference-easy]
+  #   models: *models
+  #   input: {}
+  #   process: agenticProcess
+  #   processOptions:
+  #     maxTasks: 5
+  #     includeThinking: true
 
-  - name: "agenticProcess: TS型推定（難しい）"
-    description: "条件型+Mapped Type - 複数段階の型変換追跡でのタスク分解を観察"
-    modules: [ts-type-inference-hard]
-    models: *models
-    input: {}
-    process: agenticProcess
-    processOptions:
-      maxTasks: 8
-      includeThinking: true
+  # - name: "agenticProcess: TS型推定（難しい）"
+  #   description: "条件型+Mapped Type - 複数段階の型変換追跡でのタスク分解を観察"
+  #   modules: [ts-type-inference-hard]
+  #   models: *models
+  #   input: {}
+  #   process: agenticProcess
+  #   processOptions:
+  #     maxTasks: 8
+  #     includeThinking: true
 
 evaluators:
   - name: structured-output-presence

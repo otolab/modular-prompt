@@ -132,6 +132,7 @@ npm run lint
   - マルチモデル・マルチモジュールテスト
   - コード/AI評価器サポート
   - インライン DriverSet 定義（testCase.models）
+  - 詳細は [packages/experiment/README.md](./packages/experiment/README.md) を参照
 
 ## ドライバーアーキテクチャ
 

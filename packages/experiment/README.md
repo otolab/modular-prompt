@@ -69,7 +69,55 @@ npx modular-experiment experiment.yaml --evaluate   # 評価付き
 npx modular-experiment experiment.yaml --repeat 10  # 複数回実行
 ```
 
-設定ファイルの詳細、評価器の書き方、プログラマティックAPIについては `skills/experiment/SKILL.md` を参照。
+## 設定ファイルの詳細
+
+### モデル指定: DriverSet記法
+
+テストケースの `models` フィールドでは、単一のモデル名（文字列）または役割別モデルのマッピング（オブジェクト）を指定できます。
+
+#### 単一モデル（文字列）
+
+すべての役割で同じモデルを使用します。
+
+```yaml
+testCases:
+  - name: 基本テスト
+    input:
+      query: "質問内容"
+    models:
+      - gpt4o  # すべての役割でgpt4oを使用
+```
+
+#### DriverSet（役割別モデル）
+
+役割ごとに異なるモデルを指定できます。`default` は必須で、他の役割（`thinking`、`instruct`、`chat`、`plan`）はオプションです。未指定の役割は自動的に `default` にフォールバックします。
+
+```yaml
+models:
+  gemma4:
+    provider: mlx
+    model: gemma4-26b-a4b
+  qwen:
+    provider: mlx
+    model: qwen3.5-9b
+
+testCases:
+  - name: 役割別モデルテスト
+    input:
+      query: "質問内容"
+    models:
+      - default: gemma4     # 通常のタスクはgemma4
+        thinking: qwen      # thinking役割はqwen
+```
+
+**利用可能なModelRole:**
+- `default`: 必須。メインのモデル
+- `thinking`: 推論タスク用（オプション）
+- `instruct`: 指示実行用（オプション）
+- `chat`: 対話用（オプション）
+- `plan`: 計画立案用（オプション）
+
+**注記:** 値には設定ファイルのトップレベル `models:` セクションで定義されたモデル名を指定します。
 
 ## Skills (for Claude Code)
 
