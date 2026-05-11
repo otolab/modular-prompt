@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { createModelSpecificProcessor } from './model-specific.js';
-import { processLlmJpCompletion } from './model-handlers.js';
+import { selectCompletionProcessor } from './model-handlers.js';
 import { formatCompletionPrompt, defaultFormatterTexts } from '../../formatter/converter.js';
 
 describe('Completion API - Prompt Formatting with Section Headers', () => {
@@ -63,7 +63,9 @@ describe('Completion API - Prompt Formatting with Section Headers', () => {
     });
   });
 
-  describe('processLlmJpCompletion - model-specific processing', () => {
+  describe('llm-jp-3.1 completion processor - model-specific processing', () => {
+    const processLlmJpCompletion = selectCompletionProcessor('mlx-community/llm-jp-3.1-8x13b-instruct4-4bit')!;
+
     it('should wrap prompt with llm-jp template markers', () => {
       const inputPrompt = '# Instructions\n\nFollow these steps\n\n# Data\n\nCurrent state\n\n# Output\n\nWrite response';
       const result = processLlmJpCompletion(inputPrompt);

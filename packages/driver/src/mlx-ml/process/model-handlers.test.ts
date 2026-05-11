@@ -55,7 +55,7 @@ describe('selectResponseProcessor', () => {
     expect(result).toBe(parseHarmonyResponse);
   });
 
-  it('should return null for unknown models without tool_parser_type', () => {
+  it('should return default processor for unknown models without tool_parser_type', () => {
     const runtimeInfo = {
       methods: ['chat'],
       special_tokens: {},
@@ -67,15 +67,17 @@ describe('selectResponseProcessor', () => {
     } as MlxRuntimeInfo;
 
     const result = selectResponseProcessor('generic-model', runtimeInfo);
-    expect(result).toBeNull();
+    expect(result).toBeTypeOf('function');
+    expect(result).not.toBe(parseHarmonyResponse);
   });
 
-  it('should return null when runtimeInfo is null and model name is unknown', () => {
+  it('should return default processor when runtimeInfo is null and model name is unknown', () => {
     const result = selectResponseProcessor('generic-model', null);
-    expect(result).toBeNull();
+    expect(result).toBeTypeOf('function');
+    expect(result).not.toBe(parseHarmonyResponse);
   });
 
-  it('should return null for json_tools parser type', () => {
+  it('should return default processor for json_tools parser type', () => {
     const runtimeInfo = {
       methods: ['chat'],
       special_tokens: {},
@@ -95,6 +97,54 @@ describe('selectResponseProcessor', () => {
     } as MlxRuntimeInfo;
 
     const result = selectResponseProcessor('some-model', runtimeInfo);
-    expect(result).toBeNull();
+    expect(result).toBeTypeOf('function');
+    expect(result).not.toBe(parseHarmonyResponse);
+  });
+
+  describe('default processor behavior', () => {
+    it('should extract <think> blocks', () => {
+      const processor = selectResponseProcessor('generic-model', null);
+      const result = processor('<think>分析中</think>回答です。');
+      expect(result.content).toBe('回答です。');
+      expect(result.thinkingContent).toBe('分析中');
+    });
+
+    it('should extract Gemma-4 channel thinking blocks', () => {
+      const processor = selectResponseProcessor('generic-model', null);
+      const result = processor('<|channel>thought\n分析中<channel|>回答です。');
+      expect(result.content).toBe('回答です。');
+      expect(result.thinkingContent).toBe('分析中');
+    });
+
+    it('should parse tool calls with delimiters', () => {
+      const runtimeInfo = {
+        methods: ['chat'],
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant'],
+            tool_call_format: {
+              tool_parser_type: 'json_tools',
+              call_start: '<tool_call>',
+              call_end: '</tool_call>',
+            }
+          }
+        }
+      } as MlxRuntimeInfo;
+
+      const processor = selectResponseProcessor('some-model', runtimeInfo);
+      const result = processor('<tool_call>{"name":"test","arguments":{"a":1}}</tool_call>');
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls![0].name).toBe('test');
+    });
+
+    it('should return plain content when no thinking or tools', () => {
+      const processor = selectResponseProcessor('generic-model', null);
+      const result = processor('普通のテキストです。');
+      expect(result.content).toBe('普通のテキストです。');
+      expect(result.thinkingContent).toBeUndefined();
+      expect(result.toolCalls).toBeUndefined();
+    });
   });
 });

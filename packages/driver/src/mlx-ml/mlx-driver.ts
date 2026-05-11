@@ -11,8 +11,8 @@ import { createModelSpecificProcessor, selectApi } from './process/model-specifi
 import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
-import { parseToolCalls, formatToolDefinitionsAsText } from './tool-call-parser.js';
-import { contentToString, extractImagePaths, extractThinkingContent } from '../content-utils.js';
+import { formatToolDefinitionsAsText } from './tool-call-parser.js';
+import { contentToString, extractImagePaths } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
 
 // ========================================================================
@@ -364,33 +364,15 @@ export class MlxDriver implements AIDriver {
         throw error;
       }
 
-      // Response post-processing via model-specific processor
+      // Response post-processing: thinking抽出 + tool call解析
       const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo);
-      let finalContent = content;
-      let thinkingContent: string | undefined;
-      let toolCalls: ToolCall[] | undefined;
+      const parsed = responseProcessor(content);
+      let finalContent = parsed.content;
+      const thinkingContent = parsed.thinkingContent;
+      const toolCalls = parsed.toolCalls;
 
-      if (responseProcessor) {
-        const parsed = responseProcessor(content);
-        finalContent = parsed.content;
-        thinkingContent = parsed.thinkingContent;
-        toolCalls = parsed.toolCalls;
-      } else {
-        // Legacy flow: tool call detection only
-        if (options?.tools && options.tools.length > 0) {
-          const parseResult = parseToolCalls(content, this.runtimeInfo);
-          if (parseResult.toolCalls.length > 0) {
-            toolCalls = parseResult.toolCalls;
-            finalContent = parseResult.content;
-          }
-        }
-      }
-
-      // Extract <think> tags if not already handled by responseProcessor
-      if (!thinkingContent) {
-        const extracted = extractThinkingContent(finalContent);
-        finalContent = extracted.content;
-        thinkingContent = extracted.thinkingContent;
+      if (thinkingContent) {
+        this.queryLogger.log.verbose('Thinking content:', thinkingContent);
       }
 
       // Handle structured output if schema is provided

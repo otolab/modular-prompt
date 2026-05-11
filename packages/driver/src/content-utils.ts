@@ -12,6 +12,7 @@ export interface ThinkingExtractResult {
 export function extractThinkingContent(text: string): ThinkingExtractResult {
   const thinkingParts: string[] = [];
 
+  // 1. <think>...</think> blocks
   const fullBlockRegex = /<think>([\s\S]*?)<\/think>\s*/g;
   let match;
   while ((match = fullBlockRegex.exec(text)) !== null) {
@@ -20,12 +21,31 @@ export function extractThinkingContent(text: string): ThinkingExtractResult {
   }
   let cleaned = text.replace(fullBlockRegex, '');
 
+  // 1b. Stream truncation: ...content</think> (missing opening tag)
   const headRegex = /^[\s\S]*?<\/think>\s*/;
   const headMatch = cleaned.match(headRegex);
   if (headMatch) {
     const inner = headMatch[0].replace(/<\/think>\s*$/, '').trim();
     if (inner) thinkingParts.push(inner);
     cleaned = cleaned.replace(headRegex, '');
+  }
+
+  // 2. <|channel>thought...<channel|> blocks (Gemma-4)
+  const gemma4Regex = /<\|channel>thought([\s\S]*?)<channel\|>\s*/g;
+  let gemma4Match;
+  while ((gemma4Match = gemma4Regex.exec(cleaned)) !== null) {
+    const inner = gemma4Match[1].trim();
+    if (inner) thinkingParts.push(inner);
+  }
+  cleaned = cleaned.replace(gemma4Regex, '');
+
+  // 2b. Stream truncation: ...content<channel|> (missing opening tag)
+  const gemma4HeadRegex = /^[\s\S]*?<channel\|>\s*/;
+  const gemma4HeadMatch = cleaned.match(gemma4HeadRegex);
+  if (gemma4HeadMatch) {
+    const inner = gemma4HeadMatch[0].replace(/<channel\|>\s*$/, '').trim();
+    if (inner) thinkingParts.push(inner);
+    cleaned = cleaned.replace(gemma4HeadRegex, '');
   }
 
   return {
