@@ -9,10 +9,10 @@ models:
   qwen3.5-9b:
     model: mlx-community/Qwen3.5-9B-OptiQ-4bit
     provider: "mlx"
-  qwen3.5-4b-optiq:
+  qwen3.5-4b:
     model: mlx-community/Qwen3.5-4B-OptiQ-4bit
     provider: "mlx"
-  quen3.5-2b-optiq:
+  quen3.5-2b:
     model: mlx-community/Qwen3.5-2B-OptiQ-4bit
     provider: "mlx"
 
@@ -35,7 +35,8 @@ models:
       topK: 64
       maxTokens: 1024
   gemma4-26b-a4b:
-    model: "mlx-community/gemma-4-26B-a4b-it-OptiQ-4bit"
+    model: "mlx-community/gemma-4-26B-A4B-it-heretic-msq-2.6bit"
+    # model: "mlx-community/gemma-4-26B-a4b-it-OptiQ-4bit"
     provider: "mlx"
     defaultOptions:
       temperature: 1.0
@@ -57,9 +58,11 @@ drivers:
 
 _shared:
   models: &models
-    - default: gemma4-e4b
-      plan: gemma4-26b-a4b
-      thinking: gemma4-26b-a4b
+    - qwen3.5-9b
+
+    # - default: gemma4-e4b
+    #   plan: qwen3.5-9b
+    #   thinking: gemma4-26b-a4b
 
 modules:
   - name: agentic-time-check
