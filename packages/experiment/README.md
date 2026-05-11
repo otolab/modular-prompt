@@ -69,6 +69,27 @@ npx modular-experiment experiment.yaml --evaluate   # 評価付き
 npx modular-experiment experiment.yaml --repeat 10  # 複数回実行
 ```
 
+#### CLIオプション
+
+| オプション | 説明 | デフォルト |
+|-----------|------|-----------|
+| `--test-case <name>` | テストケース名フィルター（指定した名前のみ実行） | all |
+| `--model <provider>` | モデルプロバイダーフィルター（例: `mlx`, `vertexai`, `googlegenai`） | すべての有効なモデル |
+| `--modules <names>` | カンマ区切りのモジュール名（指定したモジュールのみテスト） | all |
+| `--repeat <count>` | 実行回数（統計的な評価に有用） | 1 |
+| `--evaluate` | AI評価器を有効化（評価フェーズを実行） | false |
+| `--evaluators <names>` | カンマ区切りの評価器名（指定した評価器のみ使用） | all |
+| `--dry-run` | 実行計画の表示のみ（実験を実行しない） | false |
+| `--verbose` | 詳細なログ出力（内部処理の表示） | false |
+| `--log-file <path>` | 詳細ログのJSONL出力先ファイルパス | なし |
+| `--trace-dir <dir>` | 構造化された実行ログの出力ディレクトリ（prefix/contextごとにファイル分割、summary.json付き） | なし |
+| `--output <path>` | 実験結果のJSON出力先ファイルパス（メタデータと結果を含む） | なし |
+
+**ログ・トレースオプション詳細:**
+- `--log-file`: 全実行ログをJSONL形式で1ファイルに出力。各行が1ログエントリ。
+- `--trace-dir`: ログをprefix/context別にファイル分割して出力。summary.jsonに全体統計を含む。読みやすい形式（タイムスタンプ + レベル + メッセージ）。
+- `--output`: 実験結果を構造化JSON形式で保存。タイムスタンプ、使用モデル、繰り返し回数などのメタデータを含む。
+
 ## 設定ファイルの詳細
 
 ### モデル指定: DriverSet記法

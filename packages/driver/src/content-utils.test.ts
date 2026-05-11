@@ -106,6 +106,36 @@ describe('extractThinkingContent', () => {
     expect(result.content).toBe('');
     expect(result.thinkingContent).toBeUndefined();
   });
+
+  it('should extract Gemma-4 channel thinking block', () => {
+    const result = extractThinkingContent('<|channel>thought\n分析中...\nステップ1を実行<channel|>回答です。');
+    expect(result.content).toBe('回答です。');
+    expect(result.thinkingContent).toBe('分析中...\nステップ1を実行');
+  });
+
+  it('should extract multiple Gemma-4 channel thinking blocks', () => {
+    const result = extractThinkingContent('<|channel>thought\n最初の思考<channel|>中間<|channel>thought\n追加の思考<channel|>最終回答');
+    expect(result.content).toBe('中間最終回答');
+    expect(result.thinkingContent).toBe('最初の思考\n追加の思考');
+  });
+
+  it('should handle Gemma-4 stream truncation (closing tag only)', () => {
+    const result = extractThinkingContent('途中の思考<channel|>回答です。');
+    expect(result.content).toBe('回答です。');
+    expect(result.thinkingContent).toBe('途中の思考');
+  });
+
+  it('should handle empty Gemma-4 thinking block', () => {
+    const result = extractThinkingContent('<|channel>thought<channel|>回答');
+    expect(result.content).toBe('回答');
+    expect(result.thinkingContent).toBeUndefined();
+  });
+
+  it('should handle mixed <think> and Gemma-4 blocks', () => {
+    const result = extractThinkingContent('<think>思考1</think>中間<|channel>thought\n思考2<channel|>最終');
+    expect(result.content).toBe('中間最終');
+    expect(result.thinkingContent).toBe('思考1\n思考2');
+  });
 });
 
 describe('extractImagePaths', () => {

@@ -1,16 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
-  processTanukiChat,
-  processCodeLlamaChat,
-  processGemmaChat,
-  processTanukiCompletion,
-  processLlmJpCompletion,
-  processGemmaCompletion
+  selectChatProcessor,
+  selectCompletionProcessor
 } from '../../src/mlx-ml/process/model-handlers.js';
 import type { MlxMessage } from '../../src/mlx-ml/process/types.js';
 
 describe('MLX Model Handlers', () => {
-  describe('processTanukiChat', () => {
+  describe('Tanuki chat processor', () => {
+    const processTanukiChat = selectChatProcessor('Tanuki-8B-dpo-v1')!;
+
     it('should add exact prefix and suffix to system message', () => {
       const messages: MlxMessage[] = [
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -69,7 +67,9 @@ describe('MLX Model Handlers', () => {
     });
   });
 
-  describe('processCodeLlamaChat', () => {
+  describe('CodeLlama chat processor', () => {
+    const processCodeLlamaChat = selectChatProcessor('mlx-community/CodeLlama-7b')!;
+
     it('should merge system messages', () => {
       const messages: MlxMessage[] = [
         { role: 'system', content: 'System prompt' },
@@ -85,7 +85,9 @@ describe('MLX Model Handlers', () => {
     });
   });
 
-  describe('processGemmaChat', () => {
+  describe('Gemma chat processor', () => {
+    const processGemmaChat = selectChatProcessor('gemma-3-4b')!;
+
     it('should merge system messages', () => {
       const messages: MlxMessage[] = [
         { role: 'system', content: 'System' },
@@ -105,15 +107,15 @@ describe('MLX Model Handlers', () => {
 
   describe('Completion processors', () => {
     it('should format Tanuki completion with exact markers', () => {
-      const prompt = 'Generate content';
-      const result = processTanukiCompletion(prompt);
+      const processor = selectCompletionProcessor('Tanuki-8B')!;
+      const result = processor('Generate content');
 
       expect(result).toBe('### システム:\nGenerate content\n\n### 応答:\n');
     });
 
     it('should format LLM-JP completion with exact template', () => {
-      const prompt = 'Task description';
-      const result = processLlmJpCompletion(prompt);
+      const processor = selectCompletionProcessor('llm-jp-3.1-8b')!;
+      const result = processor('Task description');
 
       expect(result).toBe(
         '<s>以下は、タスクを説明する指示です。要求を適切に満たす応答を書きなさい。' +
@@ -126,8 +128,8 @@ describe('MLX Model Handlers', () => {
     });
 
     it('should format Gemma completion with turn markers', () => {
-      const prompt = 'User input';
-      const result = processGemmaCompletion(prompt);
+      const processor = selectCompletionProcessor('gemma-3-4b')!;
+      const result = processor('User input');
 
       expect(result).toBe('<start_of_turn>user\nUser input<end_of_turn>\n<start_of_turn>model\n');
     });

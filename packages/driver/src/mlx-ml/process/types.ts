@@ -99,7 +99,9 @@ export type KnownToolParserType =
   | 'longcat'
   | 'glm47'
   | 'qwen3_coder'
-  | 'minimax_m2';
+  | 'minimax_m2'
+  | 'gemma4'
+  | 'harmony';
 
 export interface ToolCallFormat {
   tool_parser_type?: string;

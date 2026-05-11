@@ -6,6 +6,7 @@
 
 import type { MlxMessage, MlxRuntimeInfo } from './types.js';
 import type { ResponseProcessor } from './response-processor.js';
+import { createDefaultProcessor } from './response-processor.js';
 import { parseHarmonyResponse } from './harmony-parser.js';
 
 /**
@@ -65,7 +66,7 @@ function mergeSystemMessagesRaw(msgs: MlxMessage[]): MlxMessage[] {
 /**
  * Tanuki-8B-dpo-v1用のChat処理
  */
-export function processTanukiChat(messages: MlxMessage[]): MlxMessage[] {
+function processTanukiChat(messages: MlxMessage[]): MlxMessage[] {
   // まずsystemメッセージをマージ（改行を保持）
   const mergedMessages = mergeSystemMessagesRaw(messages);
 
@@ -100,7 +101,7 @@ export function processTanukiChat(messages: MlxMessage[]): MlxMessage[] {
  * CodeLlama用のChat処理
  * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
-export function processCodeLlamaChat(messages: MlxMessage[]): MlxMessage[] {
+function processCodeLlamaChat(messages: MlxMessage[]): MlxMessage[] {
   return mergeSystemMessages(messages);
 }
 
@@ -108,7 +109,7 @@ export function processCodeLlamaChat(messages: MlxMessage[]): MlxMessage[] {
  * Gemma-3用のChat処理
  * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
-export function processGemmaChat(messages: MlxMessage[]): MlxMessage[] {
+function processGemmaChat(messages: MlxMessage[]): MlxMessage[] {
   return mergeSystemMessages(messages);
 }
 
@@ -116,7 +117,7 @@ export function processGemmaChat(messages: MlxMessage[]): MlxMessage[] {
  * Gemma-4用のChat処理
  * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
-export function processGemma4Chat(messages: MlxMessage[]): MlxMessage[] {
+function processGemma4Chat(messages: MlxMessage[]): MlxMessage[] {
   const msgs: MlxMessage[] = [
     {
       role: 'system',
@@ -127,7 +128,7 @@ export function processGemma4Chat(messages: MlxMessage[]): MlxMessage[] {
   return msgs;
 }
 
-export function processGemma4Completion(prompt: string): string {
+function processGemma4Completion(prompt: string): string {
   return [
     'You are a helpful assistant.',
     prompt,
@@ -139,7 +140,7 @@ export function processGemma4Completion(prompt: string): string {
  * chat_templateに厳密に準拠した形式
  * Note: llm-jp-3.1はforce-completion設定のため、chat APIは使用されない
  */
-export function processLlmJpCompletion(prompt: string): string {
+function processLlmJpCompletion(prompt: string): string {
   // llm-jpは複数言語の混ぜ書きに弱い傾向があるため、特定の言語を優先しないよう明示的に指示
   const llmJpSpecificInstruction = '指示は英語・日本語の混ぜ書きになっているが、どちらの言語も同等の指示として十分に理解すること。\n出力は与えられたタスクに対してふさわしい言語を選択する。\n\n';
 
@@ -154,7 +155,7 @@ export function processLlmJpCompletion(prompt: string): string {
 /**
  * Tanuki-8B用のCompletion処理
  */
-export function processTanukiCompletion(prompt: string): string {
+function processTanukiCompletion(prompt: string): string {
   // completion APIではブロック化トークンを使用可能
   return `### システム:\n${prompt}\n\n### 応答:\n`;
 }
@@ -162,7 +163,7 @@ export function processTanukiCompletion(prompt: string): string {
 /**
  * Gemma-3用のCompletion処理
  */
-export function processGemmaCompletion(prompt: string): string {
+function processGemmaCompletion(prompt: string): string {
   // Gemma-3はchat形式に依存しないcompletion処理が可能
   return `<start_of_turn>user\n${prompt}<end_of_turn>\n<start_of_turn>model\n`;
 }
@@ -179,7 +180,7 @@ export function processGemmaCompletion(prompt: string): string {
  *
  * Note: <<SYS>>, [INST]などはspecial tokensではなく、複数トークンに分割される
  */
-export function processElyzaCompletion(prompt: string): string {
+function processElyzaCompletion(prompt: string): string {
   const B_INST = '[INST]';
   const E_INST = '[/INST]';
   const B_SYS = '<<SYS>>\n';
@@ -195,7 +196,7 @@ export function processElyzaCompletion(prompt: string): string {
  * LFM用のChat処理
  * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
-export function processLfmChat(messages: MlxMessage[]): MlxMessage[] {
+function processLfmChat(messages: MlxMessage[]): MlxMessage[] {
   return mergeSystemMessages(messages);
 }
 
@@ -203,7 +204,7 @@ export function processLfmChat(messages: MlxMessage[]): MlxMessage[] {
  * Qwen用のChat処理
  * userメッセージ補完は applyChatSpecificProcessing で汎用的に処理
  */
-export function processQwenChat(messages: MlxMessage[]): MlxMessage[] {
+function processQwenChat(messages: MlxMessage[]): MlxMessage[] {
   return mergeSystemMessages(messages);
 }
 
@@ -262,20 +263,21 @@ export function selectCompletionProcessor(modelName: string): ((prompt: string) 
  * レスポンス後処理を選択
  *
  * tool_parser_type ベースの判定を優先し、モデル名はフォールバック。
- * null を返す場合は既存の tool-call-parser のみで処理する。
+ * 常にResponseProcessorを返す（nullは返さない）。
  */
 export function selectResponseProcessor(
   modelName: string,
-  runtimeInfo: MlxRuntimeInfo | null
-): ResponseProcessor | null {
+  runtimeInfo: MlxRuntimeInfo | null,
+  options?: { enableToolParsing?: boolean },
+): ResponseProcessor {
   const parserType = runtimeInfo?.features?.chat_template?.tool_call_format?.tool_parser_type;
+
   if (parserType === 'harmony') {
     return parseHarmonyResponse;
   }
-
   if (modelName.includes('llm-jp-4')) {
     return parseHarmonyResponse;
   }
 
-  return null;
+  return createDefaultProcessor(runtimeInfo, options);
 }
