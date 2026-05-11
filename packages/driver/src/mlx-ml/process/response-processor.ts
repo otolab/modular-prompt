@@ -17,14 +17,21 @@ export type ResponseProcessor = (rawText: string) => ResponseParseResult;
  * thinking抽出（<think>, <|channel>thought等）とツールコール解析を合成する。
  * 専用パーサ（harmony等）を持たないモデル向けの汎用プロセッサ。
  */
-export function createDefaultProcessor(runtimeInfo: MlxRuntimeInfo | null): ResponseProcessor {
+export function createDefaultProcessor(
+  runtimeInfo: MlxRuntimeInfo | null,
+  options?: { enableToolParsing?: boolean },
+): ResponseProcessor {
+  const enableToolParsing = options?.enableToolParsing ?? false;
   return (rawText: string): ResponseParseResult => {
     const { content: afterThinking, thinkingContent } = extractThinkingContent(rawText);
-    const { content, toolCalls } = parseToolCalls(afterThinking, runtimeInfo);
-    return {
-      content,
-      thinkingContent,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
+    if (enableToolParsing) {
+      const { content, toolCalls } = parseToolCalls(afterThinking, runtimeInfo);
+      return {
+        content,
+        thinkingContent,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      };
+    }
+    return { content: afterThinking, thinkingContent };
   };
 }

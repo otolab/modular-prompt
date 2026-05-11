@@ -267,7 +267,8 @@ export function selectCompletionProcessor(modelName: string): ((prompt: string) 
  */
 export function selectResponseProcessor(
   modelName: string,
-  runtimeInfo: MlxRuntimeInfo | null
+  runtimeInfo: MlxRuntimeInfo | null,
+  options?: { enableToolParsing?: boolean },
 ): ResponseProcessor {
   const parserType = runtimeInfo?.features?.chat_template?.tool_call_format?.tool_parser_type;
 
@@ -278,5 +279,5 @@ export function selectResponseProcessor(
     return parseHarmonyResponse;
   }
 
-  return createDefaultProcessor(runtimeInfo);
+  return createDefaultProcessor(runtimeInfo, options);
 }

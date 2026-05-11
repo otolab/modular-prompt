@@ -116,7 +116,7 @@ describe('selectResponseProcessor', () => {
       expect(result.thinkingContent).toBe('分析中');
     });
 
-    it('should parse tool calls with delimiters', () => {
+    it('should parse tool calls with delimiters when enableToolParsing is true', () => {
       const runtimeInfo = {
         methods: ['chat'],
         special_tokens: {},
@@ -133,10 +133,17 @@ describe('selectResponseProcessor', () => {
         }
       } as MlxRuntimeInfo;
 
-      const processor = selectResponseProcessor('some-model', runtimeInfo);
+      const processor = selectResponseProcessor('some-model', runtimeInfo, { enableToolParsing: true });
       const result = processor('<tool_call>{"name":"test","arguments":{"a":1}}</tool_call>');
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls![0].name).toBe('test');
+    });
+
+    it('should not parse tool calls when enableToolParsing is false', () => {
+      const processor = selectResponseProcessor('generic-model', null);
+      const result = processor('{"name":"test","arguments":{"a":1}}');
+      expect(result.content).toBe('{"name":"test","arguments":{"a":1}}');
+      expect(result.toolCalls).toBeUndefined();
     });
 
     it('should return plain content when no thinking or tools', () => {

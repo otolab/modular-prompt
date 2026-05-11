@@ -365,7 +365,8 @@ export class MlxDriver implements AIDriver {
       }
 
       // Response post-processing: thinking抽出 + tool call解析
-      const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo);
+      const hasTools = options?.tools && options.tools.length > 0;
+      const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo, { enableToolParsing: !!hasTools });
       const parsed = responseProcessor(content);
       let finalContent = parsed.content;
       const thinkingContent = parsed.thinkingContent;
