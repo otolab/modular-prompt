@@ -1,5 +1,5 @@
 import { Readable } from 'stream';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolCall, FinishReason } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, FinishReason } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
 import type { FormatterOptions, ChatMessage } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
