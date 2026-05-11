@@ -38,7 +38,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     '- **Deliverable**: The concrete output a Task produces. It becomes input for subsequent Tasks.',
     '- **Task**: A unit of work that produces a specific deliverable. Each Task is executed by a separate AI instance.',
     '- **Task Type**: Defines the role and prompt structure of a Task.',
-    '- **Tool**: A function available to Tasks for performing external actions or retrieving information. Used primarily in act and recall Tasks.',
+    '- **Tool**: A function available to Tasks for performing external actions or retrieving information.',
   ],
   methodology: [
     '- A **Workflow** is a sequence of Tasks that begins with this planning Task and ends with an output Task.',
@@ -154,7 +154,7 @@ const planningModule: PromptModule<AgenticWorkflowContext> = {
     {
       type: 'message' as const,
       role: 'user' as const,
-      content: 'Output your analysis in a user-readable format, then register tasks.',
+      content: 'Output your analysis in a user-readable format, then call the task type tools to register each task.',
     },
   ],
 };
