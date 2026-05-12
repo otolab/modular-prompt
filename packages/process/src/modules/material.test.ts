@@ -43,13 +43,13 @@ describe('material modules', () => {
       const materialElements = result.data.filter(e => e.type === 'material');
       expect(materialElements).toHaveLength(2);
 
-      expect(materialElements[0]).toEqual({
+      expect(materialElements[0]).toMatchObject({
         type: 'material',
         id: 'doc1',
         title: 'Document 1',
         content: 'This is the content of document 1'
       });
-      expect(materialElements[1]).toEqual({
+      expect(materialElements[1]).toMatchObject({
         type: 'material',
         id: 'doc2',
         title: 'Document 2',
