@@ -185,8 +185,8 @@ export class GoogleGenAIDriver implements AIDriver {
         if (content) parts.push({ text: content });
         for (const tc of element.toolCalls) {
           const part: Part = { functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } };
-          if (tc.metadata?.thoughtSignature) {
-            part.thoughtSignature = tc.metadata.thoughtSignature as string;
+          if (typeof tc.metadata?.thoughtSignature === 'string') {
+            part.thoughtSignature = tc.metadata.thoughtSignature;
           }
           parts.push(part);
         }
@@ -226,8 +226,8 @@ export class GoogleGenAIDriver implements AIDriver {
         const part: Part = {
           functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> }
         };
-        if (tc.metadata?.thoughtSignature) {
-          part.thoughtSignature = tc.metadata.thoughtSignature as string;
+        if (typeof tc.metadata?.thoughtSignature === 'string') {
+          part.thoughtSignature = tc.metadata.thoughtSignature;
         }
         parts.push(part);
       }
@@ -333,7 +333,7 @@ export class GoogleGenAIDriver implements AIDriver {
           name: fc.name || '',
           arguments: fc.args ?? {},
         };
-        if (part.thoughtSignature) {
+        if (typeof part.thoughtSignature === 'string') {
           toolCall.metadata = { thoughtSignature: part.thoughtSignature };
         }
         toolCalls.push(toolCall);
