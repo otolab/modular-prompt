@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { compile, createContext } from './compile';
-import type { 
-  PromptModule, 
+import { compile, createContext, distribute } from './compile';
+import type {
+  PromptModule,
   SubSectionElement,
   TextElement,
   MessageElement,
@@ -36,13 +36,15 @@ describe('compile', () => {
         type: 'section',
         category: 'instructions',
         title: 'Objective and Role',
-        items: ['AIアシスタントとして動作する']
+        items: ['AIアシスタントとして動作する'],
+        cacheHint: 'static'
       });
       expect(result.instructions[1]).toEqual({
         type: 'section',
         category: 'instructions',
         title: 'Processing Methodology',
-        items: ['データを分析', '結果を生成']
+        items: ['データを分析', '結果を生成'],
+        cacheHint: 'static'
       });
     });
 
@@ -74,7 +76,8 @@ describe('compile', () => {
                 title: '変換処理',
             items: ['正規化', '特徴抽出']
           }
-        ]
+        ],
+        cacheHint: 'static'
       });
     });
   });
@@ -98,12 +101,14 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Current State',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にTextElement
       expect(result.data[1]).toEqual({
         type: 'text',
-        content: 'Value: test123'
+        content: 'Value: test123',
+        cacheHint: 'contextual'
       });
     });
 
@@ -126,13 +131,15 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Messages',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にMessageElement
       expect(result.data[1]).toEqual({
         type: 'message',
         role: 'user',
-        content: 'Hello, AI!'
+        content: 'Hello, AI!',
+        cacheHint: 'contextual'
       });
     });
 
@@ -162,14 +169,16 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Prepared Materials',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にMaterialElement
       expect(result.data[1]).toEqual({
         type: 'material',
         id: 'doc1',
         title: 'API Guide',
-        content: 'API documentation content'
+        content: 'API documentation content',
+        cacheHint: 'contextual'
       });
     });
 
@@ -197,18 +206,21 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Input Chunks',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にChunkElement
       expect(result.data[1]).toEqual({
         type: 'chunk',
         partOf: 'document.txt',
-        content: 'Part 1 content'
+        content: 'Part 1 content',
+        cacheHint: 'contextual'
       });
       expect(result.data[2]).toEqual({
         type: 'chunk',
         partOf: 'document.txt',
-        content: 'Part 2 content'
+        content: 'Part 2 content',
+        cacheHint: 'contextual'
       });
     });
 
@@ -228,20 +240,23 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Current State',
-        items: ['固定の状態']
+        items: ['固定の状態'],
+        cacheHint: 'static'
       });
       expect(result1.data[1]).toEqual({
         type: 'text',
-        content: '動的な状態'
+        content: '動的な状態',
+        cacheHint: 'contextual'
       });
-      
+
       const result2 = compile(module, { includeState: false });
       expect(result2.data).toHaveLength(1);
       expect(result2.data[0]).toEqual({
         type: 'section',
         category: 'data',
         title: 'Current State',
-        items: ['固定の状態']
+        items: ['固定の状態'],
+        cacheHint: 'static'
       });
     });
   });
@@ -334,22 +349,26 @@ describe('compile', () => {
                 title: '詳細手順',
             items: ['初期化', '検証', '実行']
           }
-        ]
+        ],
+        cacheHint: 'static'
       });
       // TextElement（ステップ情報）
       expect(result.instructions[1]).toEqual({
         type: 'text',
-        content: 'ステップ 3/5 を実行中'
+        content: 'ステップ 3/5 を実行中',
+        cacheHint: 'contextual'
       });
       // TextElement（詳細1）
       expect(result.instructions[2]).toEqual({
         type: 'text',
-        content: '詳細1'
+        content: '詳細1',
+        cacheHint: 'contextual'
       });
       // TextElement（詳細2）
       expect(result.instructions[3]).toEqual({
         type: 'text',
-        content: '詳細2'
+        content: '詳細2',
+        cacheHint: 'contextual'
       });
     });
   });
@@ -574,11 +593,13 @@ describe('compile', () => {
         type: 'section',
         category: 'instructions',
         title: 'Processing Methodology',
-        items: ['プロセス開始', '合計: 5件']
+        items: ['プロセス開始', '合計: 5件'],
+        cacheHint: 'contextual'
       });
       expect(result.instructions[1]).toEqual({
         type: 'text',
-        content: '詳細情報'
+        content: '詳細情報',
+        cacheHint: 'contextual'
       });
     });
     
@@ -640,18 +661,21 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Messages',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にMessageElement
       expect(result.data[1]).toEqual({
         type: 'message',
         role: 'user',
-        content: 'Hello'
+        content: 'Hello',
+        cacheHint: 'static'
       });
       expect(result.data[2]).toEqual({
         type: 'message',
         role: 'assistant',
-        content: 'Hi there!'
+        content: 'Hi there!',
+        cacheHint: 'static'
       });
     });
 
@@ -670,14 +694,16 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Prepared Materials',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にMaterialElement
       expect(result.data[1]).toEqual({
         type: 'material',
         id: 'doc1',
         title: 'Document 1',
-        content: 'Content 1'
+        content: 'Content 1',
+        cacheHint: 'static'
       });
     });
 
@@ -697,7 +723,8 @@ describe('compile', () => {
         type: 'section',
         category: 'data',
         title: 'Input Chunks',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       // 次にChunkElement
       expect(result.data[1]).toEqual({
@@ -705,14 +732,209 @@ describe('compile', () => {
         partOf: 'dataset',
         index: 0,
         total: 2,
-        content: 'Chunk 1'
+        content: 'Chunk 1',
+        cacheHint: 'static'
       });
       expect(result.data[2]).toEqual({
         type: 'chunk',
         partOf: 'dataset',
         index: 1,
         total: 2,
-        content: 'Chunk 2'
+        content: 'Chunk 2',
+        cacheHint: 'static'
+      });
+    });
+  });
+
+  describe('cacheHint', () => {
+    it('should mark all-static section elements as static', () => {
+      const module: PromptModule = {
+        objective: ['Be helpful'],
+        persona: ['A friendly assistant']
+      };
+      const result = compile(module);
+
+      expect(result.instructions[0]).toMatchObject({
+        type: 'section',
+        title: 'Objective and Role',
+        cacheHint: 'static'
+      });
+      expect(result.instructions[1]).toMatchObject({
+        type: 'section',
+        title: 'Persona and Character',
+        cacheHint: 'static'
+      });
+    });
+
+    it('should mark section with DynamicContent as contextual', () => {
+      const module: PromptModule<{ user: string }> = {
+        createContext: () => ({ user: 'Alice' }),
+        objective: [
+          'Be helpful',
+          (ctx) => `Current user: ${ctx.user}`
+        ]
+      };
+      const result = compile(module);
+
+      expect(result.instructions[0]).toMatchObject({
+        type: 'section',
+        title: 'Objective and Role',
+        cacheHint: 'contextual'
+      });
+    });
+
+    it('should mark standalone DynamicElement from static source as static', () => {
+      const staticChunk: ChunkElement = {
+        type: 'chunk',
+        partOf: 'dataset',
+        index: 0,
+        total: 1,
+        content: 'Chunk data'
+      };
+      const module: PromptModule = {
+        chunks: [staticChunk]
+      };
+      const result = compile(module);
+
+      // SectionElement (index 0) is static
+      expect(result.data[0]).toMatchObject({
+        type: 'section',
+        cacheHint: 'static'
+      });
+      // ChunkElement (index 1) is static
+      expect(result.data[1]).toMatchObject({
+        type: 'chunk',
+        cacheHint: 'static'
+      });
+    });
+
+    it('should mark standalone DynamicElement from DynamicContent as contextual', () => {
+      const module: PromptModule<{ data: string }> = {
+        createContext: () => ({ data: 'test' }),
+        materials: [
+          (ctx): MaterialElement => ({
+            type: 'material',
+            id: 'mat1',
+            title: 'Dynamic Material',
+            content: ctx.data
+          })
+        ]
+      };
+      const result = compile(module);
+
+      // SectionElement should be static (no plain items from dynamic)
+      expect(result.data[0]).toMatchObject({
+        type: 'section',
+        cacheHint: 'static'
+      });
+      // MaterialElement should be contextual
+      expect(result.data[1]).toMatchObject({
+        type: 'material',
+        cacheHint: 'contextual'
+      });
+    });
+
+    it('should mark section with dynamic SubSection content as contextual', () => {
+      const module: PromptModule<{ level: string }> = {
+        createContext: () => ({ level: 'expert' }),
+        instructions: [
+          {
+            type: 'subsection',
+            title: 'Behavior',
+            items: [
+              'Always be polite',
+              (ctx: { level: string }) => `Expertise level: ${ctx.level}`
+            ]
+          } as SubSectionElement<{ level: string }>
+        ]
+      };
+      const result = compile(module);
+
+      expect(result.instructions[0]).toMatchObject({
+        type: 'section',
+        title: 'Instructions',
+        cacheHint: 'contextual'
+      });
+    });
+
+    it('should mark mixed static/dynamic standalone elements correctly', () => {
+      const staticText: TextElement = { type: 'text', content: 'Static note' };
+      const module: PromptModule<{ info: string }> = {
+        createContext: () => ({ info: 'dynamic' }),
+        state: [
+          staticText,
+          (ctx): TextElement => ({ type: 'text', content: ctx.info })
+        ]
+      };
+      const result = compile(module);
+
+      // SectionElement (empty items since both are DynamicElements)
+      expect(result.data[0]).toMatchObject({
+        type: 'section',
+        cacheHint: 'static'
+      });
+      // Static TextElement
+      expect(result.data[1]).toMatchObject({
+        type: 'text',
+        content: 'Static note',
+        cacheHint: 'static'
+      });
+      // Dynamic TextElement
+      expect(result.data[2]).toMatchObject({
+        type: 'text',
+        content: 'dynamic',
+        cacheHint: 'contextual'
+      });
+    });
+
+    it('should not add cacheHint when distribute is called without resolve', () => {
+      // distribute() without resolve() should not add cacheHint (backward compat)
+      const resolved = {
+        objective: ['Be helpful']
+      };
+      const result = distribute(resolved);
+
+      expect(result.instructions[0]).toEqual({
+        type: 'section',
+        category: 'instructions',
+        title: 'Objective and Role',
+        items: ['Be helpful']
+      });
+      expect((result.instructions[0] as any).cacheHint).toBeUndefined();
+    });
+
+    it('should handle DynamicContent returning string arrays correctly', () => {
+      const module: PromptModule<{ items: string[] }> = {
+        createContext: () => ({ items: ['a', 'b'] }),
+        guidelines: [
+          'Static guideline',
+          (ctx) => ctx.items
+        ]
+      };
+      const result = compile(module);
+
+      expect(result.instructions[0]).toMatchObject({
+        type: 'section',
+        title: 'Guidelines',
+        cacheHint: 'contextual'
+      });
+    });
+
+    it('should independently determine cacheHint per section', () => {
+      const module: PromptModule<{ name: string }> = {
+        createContext: () => ({ name: 'test' }),
+        objective: ['Static objective'],
+        persona: [(ctx) => `I am ${ctx.name}`]
+      };
+      const result = compile(module);
+
+      expect(result.instructions[0]).toMatchObject({
+        title: 'Objective and Role',
+        cacheHint: 'static'
+      });
+      expect(result.instructions[1]).toMatchObject({
+        title: 'Persona and Character',
+        cacheHint: 'contextual'
       });
     });
   });

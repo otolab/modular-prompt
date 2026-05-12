@@ -77,7 +77,8 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'data',
         title: 'Prepared Materials',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
 
       // 次にMaterialElementが追加される
@@ -85,7 +86,8 @@ describe('compile with static Elements', () => {
         type: 'material',
         id: 'api-doc',
         title: 'API Documentation',
-        content: 'This is the API documentation content'
+        content: 'This is the API documentation content',
+        cacheHint: 'static'
       });
     });
 
@@ -115,7 +117,8 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'data',
         title: 'Prepared Materials',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       expect(result.data[1].type).toBe('material');
       expect(result.data[2].type).toBe('material');
@@ -144,14 +147,16 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'data',
         title: 'Input Chunks',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       expect(result.data[1]).toEqual({
         type: 'chunk',
         content: 'Chunk content',
         partOf: 'document',
         index: 0,
-        total: 3
+        total: 3,
+        cacheHint: 'static'
       });
     });
   });
@@ -181,17 +186,20 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'data',
         title: 'Messages',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
       expect(result.data[1]).toEqual({
         type: 'message',
         role: 'user',
-        content: 'What is the weather?'
+        content: 'What is the weather?',
+        cacheHint: 'static'
       });
       expect(result.data[2]).toEqual({
         type: 'message',
         role: 'assistant',
-        content: 'I can help you check the weather.'
+        content: 'I can help you check the weather.',
+        cacheHint: 'static'
       });
     });
   });
@@ -216,13 +224,15 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'instructions',
         title: 'Instructions',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
 
       // 次にTextElement
       expect(result.instructions[1]).toEqual({
         type: 'text',
-        content: 'This is a text element'
+        content: 'This is a text element',
+        cacheHint: 'static'
       });
     });
   });
@@ -251,7 +261,8 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'data',
         title: 'Prepared Materials',
-        items: ['String content', 'Another string']
+        items: ['String content', 'Another string'],
+        cacheHint: 'static'
       });
 
       // MaterialElement
@@ -259,7 +270,8 @@ describe('compile with static Elements', () => {
         type: 'material',
         id: 'doc',
         title: 'Document',
-        content: 'Document content'
+        content: 'Document content',
+        cacheHint: 'static'
       });
     });
 
@@ -295,13 +307,15 @@ describe('compile with static Elements', () => {
             title: 'Steps',
             items: ['Step 1', 'Step 2']
           }
-        ]
+        ],
+        cacheHint: 'static'
       });
 
       // TextElement
       expect(result.instructions[1]).toEqual({
         type: 'text',
-        content: 'Text element content'
+        content: 'Text element content',
+        cacheHint: 'static'
       });
     });
 
@@ -344,7 +358,8 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'data',
         title: 'Prepared Materials',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
 
       // Both static and dynamic MaterialElements should be present
@@ -352,14 +367,16 @@ describe('compile with static Elements', () => {
         type: 'material',
         id: 'static-doc',
         title: 'Static Document',
-        content: 'Static content'
+        content: 'Static content',
+        cacheHint: 'static'
       });
 
       expect(result.data[2]).toEqual({
         type: 'material',
         id: 'dynamic-doc',
         title: 'Dynamic Document',
-        content: 'Dynamic content'
+        content: 'Dynamic content',
+        cacheHint: 'contextual'
       });
     });
   });
@@ -387,7 +404,8 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'instructions',
         title: 'Instructions',
-        items: ['Outer instruction']
+        items: ['Outer instruction'],
+        cacheHint: 'static'
       });
 
       // Nested SectionElement (直接追加される)
@@ -395,7 +413,8 @@ describe('compile with static Elements', () => {
         type: 'section',
         category: 'instructions',
         title: 'Nested Section',
-        items: ['Nested item 1', 'Nested item 2']
+        items: ['Nested item 1', 'Nested item 2'],
+        cacheHint: 'static'
       });
     });
   });

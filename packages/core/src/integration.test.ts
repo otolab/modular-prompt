@@ -158,7 +158,8 @@ describe('Core Integration Tests', () => {
         type: 'section',
         category: 'data',
         title: 'Current State',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
 
       expect(compiled.data[1]).toEqual({
@@ -166,19 +167,22 @@ describe('Core Integration Tests', () => {
         id: 'doc-1',
         title: 'Documentation',
         content: 'API documentation content',
-        usage: 100
+        usage: 100,
+        cacheHint: 'contextual'
       });
       expect(compiled.data[2]).toEqual({
         type: 'message',
         role: 'user',
-        content: 'What is the weather?'
+        content: 'What is the weather?',
+        cacheHint: 'contextual'
       });
       expect(compiled.data[3]).toEqual({
         type: 'message',
         role: 'assistant',
-        content: 'I can help with weather information.'
+        content: 'I can help with weather information.',
+        cacheHint: 'contextual'
       });
-      
+
       // Check output - should have 2 elements (SectionElement, ChunkElement)
       expect(compiled.output).toHaveLength(2);
 
@@ -187,7 +191,8 @@ describe('Core Integration Tests', () => {
         type: 'section',
         category: 'output',
         title: 'Output',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
 
       expect(compiled.output[1]).toEqual({
@@ -195,7 +200,8 @@ describe('Core Integration Tests', () => {
         partOf: 'response.txt',
         index: 1,
         total: 3,
-        content: 'First part of response'
+        content: 'First part of response',
+        cacheHint: 'contextual'
       });
     });
   });
@@ -591,7 +597,8 @@ function processData(data: any[]) {
         type: 'section',
         category: 'data',
         title: 'Current State',
-        items: []
+        items: [],
+        cacheHint: 'static'
       });
 
       const dataElement = compiled.data[1];

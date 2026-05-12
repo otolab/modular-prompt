@@ -29,12 +29,12 @@ describe('dialogue modules', () => {
       // messagesセクションの確認
       const messageElements = result.data.filter(e => e.type === 'message');
       expect(messageElements).toHaveLength(2);
-      expect(messageElements[0]).toEqual({
+      expect(messageElements[0]).toMatchObject({
         type: 'message',
         role: 'user',
         content: 'Hello'
       });
-      expect(messageElements[1]).toEqual({
+      expect(messageElements[1]).toMatchObject({
         type: 'message',
         role: 'assistant',
         content: 'Hi there!'
@@ -57,12 +57,12 @@ describe('dialogue modules', () => {
       // MessageElementを直接チェック（SectionElement.itemsではなく）
       const messageElements = result.data.filter(e => e.type === 'message');
       expect(messageElements).toHaveLength(2);
-      expect(messageElements[0]).toEqual({
+      expect(messageElements[0]).toMatchObject({
         type: 'message',
         role: 'assistant',
         content: 'Response 1'
       });
-      expect(messageElements[1]).toEqual({
+      expect(messageElements[1]).toMatchObject({
         type: 'message',
         role: 'user',
         content: 'Message 2'

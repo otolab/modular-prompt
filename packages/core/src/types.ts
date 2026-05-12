@@ -1,5 +1,7 @@
 // 基本型定義
 
+export type CacheHint = 'static' | 'contextual';
+
 // Attachment定義
 export interface Attachment {
   type: 'text' | 'image_url' | 'file';
@@ -12,6 +14,7 @@ export interface Attachment {
 export interface TextElement {
   type: 'text';
   content: string;
+  cacheHint?: CacheHint;
 }
 
 // 標準メッセージ要素
@@ -22,6 +25,7 @@ export interface StandardMessageElement {
   name?: string;
   /** tool call付きassistantメッセージ用 */
   toolCalls?: ToolCall[];
+  cacheHint?: CacheHint;
 }
 
 // ツール実行結果の種類
@@ -39,6 +43,7 @@ export interface ToolResultMessageElement {
   kind: ToolResultKind;
   /** ツール実行結果の値そのもの */
   value: unknown;
+  cacheHint?: CacheHint;
 }
 
 // メッセージ要素（Union型）
@@ -51,6 +56,7 @@ export interface MaterialElement {
   id: string;
   title: string;
   usage?: number;
+  cacheHint?: CacheHint;
 }
 
 // 分割テキスト要素
@@ -61,6 +67,7 @@ export interface ChunkElement {
   index?: number;
   total?: number;  // Total number of chunks
   usage?: number;
+  cacheHint?: CacheHint;
 }
 
 // セクション要素（第1階層）
@@ -69,6 +76,7 @@ export interface SectionElement<TContext = any> {
   category: SectionType;  // 配置先の大セクション（instructions/data/output）
   title: string;
   items: (string | SubSectionElement<TContext> | DynamicContent<TContext>)[];
+  cacheHint?: CacheHint;
 }
 
 // サブセクション要素（第2階層）
@@ -77,6 +85,7 @@ export interface SubSectionElement<TContext = any> {
   type: 'subsection';
   title: string;
   items: (string | SimpleDynamicContent<TContext>)[];
+  cacheHint?: CacheHint;
 }
 
 // ツール呼び出し（モデル → アプリ）
@@ -95,6 +104,7 @@ export interface ToolCall {
 export interface JSONElement {
   type: 'json';
   content: object | string;  // JSONSchemaオブジェクトまたはJSON文字列
+  cacheHint?: CacheHint;
 }
 
 // 統合型

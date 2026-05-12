@@ -36,7 +36,7 @@ describe('stream-processing modules', () => {
       const result = compile(streamProcessing, context);
       const chunkElements = result.data.filter(e => e.type === 'chunk');
       expect(chunkElements).toHaveLength(1);
-      expect(chunkElements[0]).toEqual({
+      expect(chunkElements[0]).toMatchObject({
         type: 'chunk',
         partOf: 'state',
         content: 'Previous iteration result',
@@ -64,14 +64,14 @@ describe('stream-processing modules', () => {
       const result = compile(streamProcessing, context);
       const chunkElements = result.data.filter(e => e.type === 'chunk');
       expect(chunkElements).toHaveLength(2);
-      expect(chunkElements[0]).toEqual({
+      expect(chunkElements[0]).toMatchObject({
         type: 'chunk',
         partOf: 'Document A',
         index: 0,
         content: 'Chunk 1 content',
         usage: 50
       });
-      expect(chunkElements[1]).toEqual({
+      expect(chunkElements[1]).toMatchObject({
         type: 'chunk',
         partOf: 'Document B',
         index: 1,

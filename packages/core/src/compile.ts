@@ -11,9 +11,12 @@ import type {
   Element,
   JSONElement,
   ResolvedSectionContent,
-  ResolvedModule
+  ResolvedModule,
+  CacheHint
 } from './types.js';
 import { STANDARD_SECTIONS } from './types.js';
+
+const dynamicOriginsStore = new WeakMap<ResolvedModule, Map<StandardSectionName, Set<number>>>();
 
 // ========================================================================
 // resolve: DynamicContent を解決して静的な ResolvedModule を返す
@@ -31,11 +34,16 @@ export function resolve<TContext = any>(
 ): ResolvedModule {
   const actualContext = context ?? (module.createContext ? module.createContext() : {} as TContext);
   const result: Partial<Record<StandardSectionName, ResolvedSectionContent>> = {};
+  const originsMap = new Map<StandardSectionName, Set<number>>();
 
   for (const sectionName of Object.keys(STANDARD_SECTIONS) as StandardSectionName[]) {
     const content = module[sectionName];
     if (!content) continue;
-    result[sectionName] = resolveSectionContent(content, actualContext);
+    const { items, dynamicIndices } = resolveSectionContent(content, actualContext);
+    result[sectionName] = items;
+    if (dynamicIndices.size > 0) {
+      originsMap.set(sectionName, dynamicIndices);
+    }
   }
 
   const resolved = result as ResolvedModule;
@@ -43,6 +51,8 @@ export function resolve<TContext = any>(
   if (module.sections) {
     resolved.sections = module.sections as SectionElement[];
   }
+
+  dynamicOriginsStore.set(resolved, originsMap);
 
   return resolved;
 }
@@ -53,8 +63,9 @@ export function resolve<TContext = any>(
 function resolveSectionContent<TContext>(
   content: SectionContent<TContext>,
   context: TContext
-): ResolvedSectionContent {
+): { items: ResolvedSectionContent; dynamicIndices: Set<number> } {
   const items: ResolvedSectionContent = [];
+  const dynamicIndices = new Set<number>();
   const contentItems = typeof content === 'string' ? [content] : Array.isArray(content) ? content : [];
 
   for (const item of contentItems) {
@@ -62,6 +73,7 @@ function resolveSectionContent<TContext>(
       const dynamicResult = item(context);
       const resolved = processDynamicContentToElements(dynamicResult);
       for (const elem of resolved) {
+        dynamicIndices.add(items.length);
         items.push(elem);
       }
     } else if (typeof item === 'string') {
@@ -70,13 +82,18 @@ function resolveSectionContent<TContext>(
       if (item.type === 'subsection') {
         // SubSection 内の SimpleDynamicContent を解決
         const resolvedItems: string[] = [];
+        let hasDynamicSubContent = false;
         for (const subItem of item.items) {
           if (typeof subItem === 'function') {
+            hasDynamicSubContent = true;
             const result = processSimpleDynamicContent(subItem as SimpleDynamicContent<any>, context);
             resolvedItems.push(...result);
           } else if (typeof subItem === 'string') {
             resolvedItems.push(subItem);
           }
+        }
+        if (hasDynamicSubContent) {
+          dynamicIndices.add(items.length);
         }
         items.push({ ...item, items: resolvedItems } as SubSectionElement);
       } else {
@@ -85,7 +102,7 @@ function resolveSectionContent<TContext>(
     }
   }
 
-  return items;
+  return { items, dynamicIndices };
 }
 
 // ========================================================================
@@ -102,12 +119,14 @@ export function distribute(resolved: ResolvedModule): CompiledPrompt {
     data: [],
     output: []
   };
+  const originsMap = dynamicOriginsStore.get(resolved);
 
   for (const sectionName of Object.keys(STANDARD_SECTIONS) as StandardSectionName[]) {
     let content = resolved[sectionName];
     if (!content || content.length === 0) continue;
 
     const sectionDef = STANDARD_SECTIONS[sectionName];
+    const dynamicIndices = originsMap ? (originsMap.get(sectionName) ?? new Set<number>()) : undefined;
 
     // schema セクション: JSONElement を metadata に抽出
     if (sectionName === 'schema') {
@@ -129,7 +148,7 @@ export function distribute(resolved: ResolvedModule): CompiledPrompt {
       if (content.length === 0) continue;
     }
 
-    const elements = wrapInSection(content, sectionDef.title, sectionDef.type);
+    const elements = wrapInSection(content, sectionDef.title, sectionDef.type, dynamicIndices);
     compiled[sectionDef.type].push(...elements);
   }
 
@@ -142,21 +161,32 @@ export function distribute(resolved: ResolvedModule): CompiledPrompt {
 function wrapInSection(
   content: ResolvedSectionContent,
   title: string,
-  category: SectionType
+  category: SectionType,
+  dynamicIndices?: Set<number>
 ): Element[] {
   const elements: Element[] = [];
   const plainItems: string[] = [];
   const subsections: SubSectionElement[] = [];
+  let hasDynamicSectionContent = false;
 
-  for (const item of content) {
+  for (let i = 0; i < content.length; i++) {
+    const item = content[i];
+    const isDynamic = dynamicIndices?.has(i) ?? false;
+
     if (typeof item === 'string') {
       plainItems.push(item);
+      if (isDynamic) hasDynamicSectionContent = true;
     } else if (item && typeof item === 'object' && 'type' in item) {
       if (item.type === 'subsection') {
         subsections.push(item as SubSectionElement);
+        if (isDynamic) hasDynamicSectionContent = true;
       } else {
         // DynamicElement (message, material, text, chunk, json) を直接追加
-        elements.push(item);
+        if (dynamicIndices) {
+          elements.push({ ...item, cacheHint: (isDynamic ? 'contextual' : 'static') as CacheHint });
+        } else {
+          elements.push(item);
+        }
       }
     }
   }
@@ -168,7 +198,8 @@ function wrapInSection(
       type: 'section',
       category,
       title,
-      items: [...plainItems, ...subsections]
+      items: [...plainItems, ...subsections],
+      ...(dynamicIndices ? { cacheHint: (hasDynamicSectionContent ? 'contextual' : 'static') as CacheHint } : {})
     };
     elements.unshift(sectionElement);
   }
