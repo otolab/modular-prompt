@@ -66,7 +66,7 @@ importers:
         specifier: 1.10.0
         version: 1.10.0
       '@google/genai':
-        specifier: ^2.0.1
+        specifier: 2.0.1
         version: 2.0.1
       '@modular-prompt/core':
         specifier: workspace:*
