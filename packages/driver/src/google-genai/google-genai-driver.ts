@@ -1,10 +1,13 @@
 import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
-import type { Part, Content, FunctionDeclaration, FunctionCallingConfig } from '@google/genai';
-import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, ToolChoice, ToolCall, ChatMessage } from '../types.js';
+import type { Part, Content, FunctionCallingConfig } from '@google/genai';
+import type { CompiledPrompt } from '@modular-prompt/core';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolChoice, ToolCall, ChatMessage } from '../types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
+import type { PromptCacheController, CacheHandle } from '../cache-controller.js';
+import { partitionPrompt } from '../cache-utils.js';
+import { elementToPart, elementToContent, toFunctionResponsePayload, convertTools, mergeToolResultContents } from './element-converter.js';
 
 /**
  * GoogleGenAI driver configuration
@@ -14,6 +17,7 @@ export interface GoogleGenAIDriverConfig {
   model?: string;
   temperature?: number;
   defaultOptions?: Partial<GoogleGenAIQueryOptions>;
+  cacheController?: PromptCacheController;
 }
 
 /**
@@ -58,6 +62,7 @@ export class GoogleGenAIDriver implements AIDriver {
   private defaultTemperature: number;
   private _defaultOptions: Partial<GoogleGenAIQueryOptions>;
   private queryLogger = new QueryLogger('GoogleGenAI');
+  private cacheController?: PromptCacheController;
 
   get defaultOptions(): Partial<GoogleGenAIQueryOptions> {
     return this._defaultOptions;
@@ -78,145 +83,43 @@ export class GoogleGenAIDriver implements AIDriver {
     this.defaultModel = config.model || 'gemma-3-27b';
     this.defaultTemperature = config.temperature ?? 0.7;
     this._defaultOptions = config.defaultOptions || {};
+    this.cacheController = config.cacheController;
   }
 
-  /**
-   * Convert Element to Part (flat text conversion)
-   * Used for systemInstruction and simple data
-   */
-  private elementToPart(element: Element | string): Part {
-    if (typeof element === 'string') {
-      return { text: element };
+  private async buildPromptPayload(
+    prompt: CompiledPrompt,
+    mergedOptions: GoogleGenAIQueryOptions,
+    model: string
+  ): Promise<{
+    systemInstructionParts: ReturnType<typeof elementToPart>[] | undefined;
+    contents: Content[];
+    cacheHandle: CacheHandle | null;
+  }> {
+    if (this.cacheController) {
+      const partition = partitionPrompt(prompt);
+      const handle = await this.cacheController.prepare({
+        model,
+        instructions: partition.cacheable.instructions,
+        data: partition.cacheable.data,
+        tools: mergedOptions.tools,
+      });
+      const volatileElements = [...partition.volatile.data, ...partition.volatile.output];
+      const contents = volatileElements.length > 0
+        ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
+        : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+      return { systemInstructionParts: undefined, contents, cacheHandle: handle };
     }
 
-    switch (element.type) {
-      case 'text':
-        return { text: element.content };
-
-      case 'message': {
-        // Flatten message as text
-        if (element.role === 'tool') {
-          // ToolResultMessageElement doesn't have content property
-          const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
-          const textValue = toolResultEl.kind === 'text' ? String(toolResultEl.value) : JSON.stringify(toolResultEl.value);
-          return { text: `${element.role}: ${textValue}` };
-        }
-        const messageContent = contentToString(element.content);
-        return { text: `${element.role}: ${messageContent}` };
-      }
-
-      case 'material': {
-        const materialContent = contentToString(element.content);
-        return { text: `# ${element.title}\n${materialContent}` };
-      }
-
-      case 'chunk': {
-        const chunkContent = contentToString(element.content);
-        const chunkHeader = element.index !== undefined && element.total !== undefined
-          ? `[Chunk ${element.index + 1}/${element.total} of ${element.partOf}]`
-          : `[Chunk of ${element.partOf}]`;
-        return { text: `${chunkHeader}\n${chunkContent}` };
-      }
-
-      case 'section':
-      case 'subsection': {
-        // Section/SubSection elements should be compiled before reaching here
-        // If they do reach here, flatten their items recursively
-        const flattenItems = (items: unknown[]): string => {
-          return items.map(item => {
-            if (typeof item === 'string') return item;
-            if (typeof item === 'function') return ''; // DynamicContent should be resolved before this point
-            return this.elementToPart(item as Element).text || '';
-          }).filter(Boolean).join('\n');
-        };
-        return { text: flattenItems(element.items) };
-      }
-
-      case 'json':
-        return { text: typeof element.content === 'string' ? element.content : JSON.stringify(element.content, null, 2) };
-
-      default:
-        return { text: JSON.stringify(element) };
-    }
+    const systemInstructionParts = prompt.instructions?.map(el => elementToPart(el));
+    const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
+    const contents = allDataElements.length > 0
+      ? mergeToolResultContents(allDataElements.map(el => elementToContent(el)))
+      : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+    return { systemInstructionParts, contents, cacheHandle: null };
   }
 
-  /**
-   * Convert kind+value to GoogleGenAI functionResponse
-   */
-  private toFunctionResponsePayload(kind: string, value: unknown): Record<string, unknown> {
-    if (kind === 'text') {
-      return { output: String(value) };
-    } else if (kind === 'data') {
-      // Check if value is a plain object
-      if (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype) {
-        return value as Record<string, unknown>;
-      }
-      return { output: value };
-    } else { // 'error'
-      return { error: value };
-    }
-  }
-
-  /**
-   * Convert Element to Content (structure-preserving conversion)
-   * Used for conversation history where role matters
-   */
-  private elementToContent(element: Element | string): Content {
-    if (typeof element === 'string') {
-      return { parts: [{ text: element }] };
-    }
-
-    if (element.type === 'message') {
-      if (element.role === 'tool') {
-        // ToolResultMessageElement
-        const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
-        return {
-          role: 'user',
-          parts: [{
-            functionResponse: {
-              name: toolResultEl.name,
-              response: this.toFunctionResponsePayload(toolResultEl.kind, toolResultEl.value)
-            }
-          }]
-        };
-      } else if ('toolCalls' in element && element.toolCalls) {
-        const parts: Part[] = [];
-        const content = contentToString(element.content);
-        if (content) parts.push({ text: content });
-        for (const tc of element.toolCalls) {
-          const part: Part = { functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } };
-          if (typeof tc.metadata?.thoughtSignature === 'string') {
-            part.thoughtSignature = tc.metadata.thoughtSignature;
-          }
-          parts.push(part);
-        }
-        return { role: 'model', parts };
-      } else {
-        // Role conversion:
-        // - assistant → model
-        // - system → user (Gemini API doesn't support system role in contents)
-        // - user → user
-        const role = element.role === 'assistant' ? 'model' : 'user';
-        const messageContent = contentToString(element.content);
-        return {
-          role,
-          parts: [{ text: messageContent }]
-        };
-      }
-    }
-
-    // Non-message elements: convert to Part and wrap in Content without role
-    return {
-      parts: [this.elementToPart(element)]
-    };
-  }
-
-  /**
-   * Convert ChatMessage to GoogleGenAI Content format
-   */
   private chatMessageToContent(message: ChatMessage): Content {
     if (hasToolCalls(message)) {
-      // AssistantToolCallMessage
       const parts: Part[] = [];
       const textContent = contentToString(message.content);
       if (textContent) {
@@ -233,18 +136,16 @@ export class GoogleGenAIDriver implements AIDriver {
       }
       return { role: 'model', parts };
     } else if (isToolResult(message)) {
-      // ToolResultMessage
       return {
         role: 'user',
         parts: [{
           functionResponse: {
             name: message.name,
-            response: this.toFunctionResponsePayload(message.kind, message.value)
+            response: toFunctionResponsePayload(message.kind, message.value)
           }
         }]
       };
     } else {
-      // StandardChatMessage
       return {
         role: message.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: contentToString(message.content) }]
@@ -252,51 +153,9 @@ export class GoogleGenAIDriver implements AIDriver {
     }
   }
 
-
-  /**
-   * Merge consecutive tool result Contents into a single user message.
-   * Gemini API requires multiple functionResponses in one user message.
-   */
-  private mergeToolResultContents(contents: Content[]): Content[] {
-    const merged: Content[] = [];
-    for (const c of contents) {
-      const prev = merged[merged.length - 1];
-      if (
-        prev &&
-        c.role === 'user' &&
-        prev.role === 'user' &&
-        c.parts?.length === 1 && c.parts[0].functionResponse &&
-        prev.parts && prev.parts.length > 0 && prev.parts[0].functionResponse
-      ) {
-        prev.parts!.push(c.parts[0]);
-      } else {
-        merged.push(c);
-      }
-    }
-    return merged;
-  }
-
-  /**
-   * Convert JSON Schema to GoogleGenAI Schema format
-   */
   private convertJsonSchema(schema: unknown): unknown {
     if (!schema || typeof schema !== 'object') return undefined;
-
-    // GoogleGenAI uses a specific schema format
-    // For now, we'll pass it through and let the API handle it
     return schema;
-  }
-
-  /**
-   * Convert ToolDefinition[] to GoogleGenAI tools format
-   */
-  private convertTools(tools: ToolDefinition[]): { functionDeclarations: FunctionDeclaration[] }[] {
-    const functionDeclarations: FunctionDeclaration[] = tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      parametersJsonSchema: tool.parameters,
-    }));
-    return [{ functionDeclarations }];
   }
 
   /**
@@ -353,16 +212,10 @@ export class GoogleGenAIDriver implements AIDriver {
       // Merge options with defaults
       const mergedOptions = { ...this.defaultOptions, ...options };
       this.queryLogger.mark(mergedOptions);
+      const model = mergedOptions.model || this.defaultModel;
 
-      // Convert prompt to GoogleGenAI format
-      // Instructions → systemInstruction (Part[])
-      const systemInstructionParts = prompt.instructions?.map(el => this.elementToPart(el));
-
-      // Data + Output → contents (Content[])
-      const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
-      const contents = allDataElements.length > 0
-        ? this.mergeToolResultContents(allDataElements.map(el => this.elementToContent(el)))
-        : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+      const { systemInstructionParts, contents, cacheHandle } =
+        await this.buildPromptPayload(prompt, mergedOptions, model);
 
       // Create generation config
       const config: Record<string, unknown> = {
@@ -376,9 +229,21 @@ export class GoogleGenAIDriver implements AIDriver {
           (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
       };
 
-      // Add system instruction if present
-      if (systemInstructionParts && systemInstructionParts.length > 0) {
-        config.systemInstruction = systemInstructionParts;
+      if (cacheHandle) {
+        config.cachedContent = cacheHandle.ref;
+        if (!cacheHandle.includes.instructions && systemInstructionParts && systemInstructionParts.length > 0) {
+          config.systemInstruction = systemInstructionParts;
+        }
+        if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
+          config.tools = convertTools(mergedOptions.tools);
+        }
+      } else {
+        if (systemInstructionParts && systemInstructionParts.length > 0) {
+          config.systemInstruction = systemInstructionParts;
+        }
+        if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+          config.tools = convertTools(mergedOptions.tools);
+        }
       }
 
       // Handle structured outputs
@@ -387,10 +252,6 @@ export class GoogleGenAIDriver implements AIDriver {
         config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
       }
 
-      // Add tools configuration
-      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
-        config.tools = this.convertTools(mergedOptions.tools);
-      }
       if (mergedOptions.toolChoice) {
         config.toolConfig = {
           functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
@@ -403,9 +264,6 @@ export class GoogleGenAIDriver implements AIDriver {
           delete config[key];
         }
       });
-
-      // Get model name
-      const model = mergedOptions.model || this.defaultModel;
 
       // Generate content
       const response = await this.client.models.generateContent({
@@ -473,16 +331,10 @@ export class GoogleGenAIDriver implements AIDriver {
   ): Promise<StreamResult> {
     const mergedOptions = { ...this.defaultOptions, ...options };
     this.queryLogger.mark(mergedOptions);
+    const model = mergedOptions.model || this.defaultModel;
 
-    // Convert prompt to GoogleGenAI format
-    // Instructions → systemInstruction (Part[])
-    const systemInstructionParts = prompt.instructions?.map(el => this.elementToPart(el));
-
-    // Data + Output → contents (Content[])
-    const allDataElements = [...(prompt.data || []), ...(prompt.output || [])];
-    const contents = allDataElements.length > 0
-      ? allDataElements.map(el => this.elementToContent(el))
-      : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+    const { systemInstructionParts, contents, cacheHandle } =
+      await this.buildPromptPayload(prompt, mergedOptions, model);
 
     // Create generation config
     const config: Record<string, unknown> = {
@@ -496,9 +348,21 @@ export class GoogleGenAIDriver implements AIDriver {
         (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
     };
 
-    // Add system instruction if present
-    if (systemInstructionParts && systemInstructionParts.length > 0) {
-      config.systemInstruction = systemInstructionParts;
+    if (cacheHandle) {
+      config.cachedContent = cacheHandle.ref;
+      if (!cacheHandle.includes.instructions && systemInstructionParts && systemInstructionParts.length > 0) {
+        config.systemInstruction = systemInstructionParts;
+      }
+      if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
+        config.tools = convertTools(mergedOptions.tools);
+      }
+    } else {
+      if (systemInstructionParts && systemInstructionParts.length > 0) {
+        config.systemInstruction = systemInstructionParts;
+      }
+      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+        config.tools = convertTools(mergedOptions.tools);
+      }
     }
 
     // Handle structured outputs
@@ -507,10 +371,6 @@ export class GoogleGenAIDriver implements AIDriver {
       config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
     }
 
-    // Add tools configuration
-    if (mergedOptions.tools && mergedOptions.tools.length > 0) {
-      config.tools = this.convertTools(mergedOptions.tools);
-    }
     if (mergedOptions.toolChoice) {
       config.toolConfig = {
         functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
@@ -523,9 +383,6 @@ export class GoogleGenAIDriver implements AIDriver {
         delete config[key];
       }
     });
-
-    // Get model name
-    const model = mergedOptions.model || this.defaultModel;
 
     // Generate content stream
     const streamResponse = await this.client.models.generateContentStream({

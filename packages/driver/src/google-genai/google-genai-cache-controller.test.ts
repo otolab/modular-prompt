@@ -1,0 +1,242 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { GoogleGenAICacheController } from './google-genai-cache-controller.js';
+import { GoogleGenAIDriver } from './google-genai-driver.js';
+import type { CompiledPrompt } from '@modular-prompt/core';
+import type { PromptCacheController } from '../cache-controller.js';
+
+vi.mock('@google/genai', () => {
+  return {
+    GoogleGenAI: vi.fn().mockImplementation(() => {
+      return {
+        models: {
+          generateContent: vi.fn().mockResolvedValue({
+            text: 'Test response',
+            candidates: [{ finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 }
+          }),
+          generateContentStream: vi.fn().mockResolvedValue({
+            [Symbol.asyncIterator]: async function* () {
+              yield { text: 'Streamed', candidates: [{ finishReason: 'STOP' }] };
+            },
+          })
+        },
+        caches: {
+          create: vi.fn().mockResolvedValue({ name: 'cachedContents/test-cache-123' }),
+          delete: vi.fn().mockResolvedValue({}),
+        }
+      };
+    }),
+    FunctionCallingConfigMode: {
+      MODE_UNSPECIFIED: 'MODE_UNSPECIFIED',
+      AUTO: 'AUTO',
+      ANY: 'ANY',
+      NONE: 'NONE',
+      VALIDATED: 'VALIDATED',
+    }
+  };
+});
+
+describe('GoogleGenAICacheController', () => {
+  let mockClient: { caches: { create: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> } };
+  let controller: GoogleGenAICacheController;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockClient = {
+      caches: {
+        create: vi.fn().mockResolvedValue({ name: 'cachedContents/test-cache-123' }),
+        delete: vi.fn().mockResolvedValue({}),
+      }
+    };
+    controller = new GoogleGenAICacheController(mockClient as any);
+  });
+
+  describe('prepare', () => {
+    it('should create cache with instructions and data', async () => {
+      const handle = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text', content: 'Be helpful' }],
+        data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'reference text' }],
+      });
+
+      expect(handle.ref).toBe('cachedContents/test-cache-123');
+      expect(handle.includes.instructions).toBe(true);
+      expect(handle.includes.dataElementCount).toBe(1);
+      expect(handle.includes.tools).toBe(false);
+
+      expect(mockClient.caches.create).toHaveBeenCalledWith({
+        model: 'gemini-2.5-flash',
+        config: expect.objectContaining({
+          systemInstruction: expect.any(Array),
+          contents: expect.any(Array),
+          ttl: '3600s',
+        }),
+      });
+    });
+
+    it('should include tools when provided', async () => {
+      const handle = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+        tools: [{ name: 'get_weather', description: 'Get weather', parameters: { type: 'object' } }],
+      });
+
+      expect(handle.includes.tools).toBe(true);
+      const createCall = mockClient.caches.create.mock.calls[0][0];
+      expect(createCall.config.tools).toBeDefined();
+    });
+
+    it('should use custom TTL from config', async () => {
+      const customController = new GoogleGenAICacheController(mockClient as any, { ttl: '7200s' });
+      await customController.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text', content: 'prompt' }],
+      });
+
+      const createCall = mockClient.caches.create.mock.calls[0][0];
+      expect(createCall.config.ttl).toBe('7200s');
+    });
+
+    it('should handle empty instructions and data', async () => {
+      const handle = await controller.prepare({
+        model: 'gemini-2.5-flash',
+      });
+
+      expect(handle.includes.instructions).toBe(false);
+      expect(handle.includes.dataElementCount).toBe(0);
+    });
+  });
+
+  describe('invalidate', () => {
+    it('should delete the cached content', async () => {
+      const handle = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text', content: 'prompt' }],
+      });
+
+      await controller.invalidate(handle);
+      expect(mockClient.caches.delete).toHaveBeenCalledWith({ name: 'cachedContents/test-cache-123' });
+    });
+  });
+
+  describe('close', () => {
+    it('should delete all managed caches', async () => {
+      await controller.prepare({ model: 'gemini-2.5-flash', instructions: [{ type: 'text', content: 'a' }] });
+      await controller.prepare({ model: 'gemini-2.5-flash', instructions: [{ type: 'text', content: 'b' }] });
+
+      await controller.close();
+      expect(mockClient.caches.delete).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
+describe('GoogleGenAIDriver with CacheController', () => {
+  let driver: GoogleGenAIDriver;
+  let mockController: PromptCacheController;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockController = {
+      prepare: vi.fn().mockResolvedValue({
+        ref: 'cachedContents/abc',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      }),
+      invalidate: vi.fn(),
+      close: vi.fn(),
+    };
+    driver = new GoogleGenAIDriver({
+      apiKey: 'test-api-key',
+      model: 'gemini-2.5-flash',
+      cacheController: mockController,
+    });
+  });
+
+  it('should use cacheController when present', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'Be helpful' }],
+      data: [
+        { type: 'material', id: 'm1', title: 'Doc', content: 'stable content' },
+        { type: 'chunk', partOf: 'doc', content: 'volatile part' },
+      ],
+      output: [{ type: 'text', content: 'respond' }],
+    };
+
+    await driver.query(prompt);
+
+    expect(mockController.prepare).toHaveBeenCalledWith({
+      model: 'gemini-2.5-flash',
+      instructions: [{ type: 'text', content: 'Be helpful' }],
+      data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'stable content' }],
+      tools: undefined,
+    });
+
+    const generateContent = (driver as any).client.models.generateContent;
+    const callArgs = generateContent.mock.calls[0][0];
+    expect(callArgs.config.cachedContent).toBe('cachedContents/abc');
+    expect(callArgs.config.systemInstruction).toBeUndefined();
+  });
+
+  it('should not include systemInstruction when cached', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'system' }],
+      data: [],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await driver.query(prompt);
+
+    const generateContent = (driver as any).client.models.generateContent;
+    const config = generateContent.mock.calls[0][0].config;
+    expect(config.cachedContent).toBe('cachedContents/abc');
+    expect(config.systemInstruction).toBeUndefined();
+  });
+
+  it('should include tools in API call when not cached', async () => {
+    const tools = [{ name: 'search', description: 'Search' }];
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'system' }],
+      data: [],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await driver.query(prompt, { tools });
+
+    const generateContent = (driver as any).client.models.generateContent;
+    const config = generateContent.mock.calls[0][0].config;
+    expect(config.tools).toBeDefined();
+  });
+
+  it('should pass volatile data and output as contents', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'system' }],
+      data: [
+        { type: 'chunk', partOf: 'doc', content: 'volatile chunk' },
+      ],
+      output: [{ type: 'text', content: 'respond now' }],
+    };
+
+    await driver.query(prompt);
+
+    const generateContent = (driver as any).client.models.generateContent;
+    const contents = generateContent.mock.calls[0][0].contents;
+    expect(contents).toHaveLength(2);
+  });
+
+  it('should work with streamQuery', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'system' }],
+      data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'stable' }],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    const { result } = await driver.streamQuery(prompt);
+    const queryResult = await result;
+
+    expect(mockController.prepare).toHaveBeenCalled();
+    expect(queryResult.content).toBe('Streamed');
+
+    const generateContentStream = (driver as any).client.models.generateContentStream;
+    const config = generateContentStream.mock.calls[0][0].config;
+    expect(config.cachedContent).toBe('cachedContents/abc');
+  });
+});
