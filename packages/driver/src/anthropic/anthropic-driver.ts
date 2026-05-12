@@ -1,11 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
-import type { MessageCreateParamsStreaming } from '@anthropic-ai/sdk/resources/messages';
-import type { CompiledPrompt, Element } from '@modular-prompt/core';
+import type { MessageCreateParamsStreaming, TextBlockParam, CacheControlEphemeral } from '@anthropic-ai/sdk/resources/messages';
+import type { CompiledPrompt, Element, SectionElement, SubSectionElement, MessageElement } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
 import { contentToString } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
+
+type AnthropicContentBlock =
+  | { type: 'text'; text: string; cache_control?: CacheControlEphemeral }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
+
+type AnthropicMessageContent = string | AnthropicContentBlock[];
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: AnthropicMessageContent;
+}
+
+type AnthropicSystem = string | TextBlockParam[];
 
 /**
  * VertexAI経由でのClaude利用設定
@@ -108,48 +122,41 @@ export class AnthropicDriver implements AIDriver {
     this._defaultOptions = config.defaultOptions || {};
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private static formatSectionElement(el: Element & { type: 'section' | 'subsection' }): string {
+  private static formatSectionElement(el: SectionElement<unknown> | SubSectionElement<unknown>): string {
     const parts: string[] = [];
     const prefix = el.type === 'section' ? '##' : '###';
     if (el.title) parts.push(`${prefix} ${el.title}`);
-    if (el.items) {
-      for (const item of el.items) {
-        if (typeof item === 'string') {
-          parts.push(item);
-        } else if (typeof item === 'object' && item !== null && 'type' in item && item.type === 'subsection') {
-          if (item.title) parts.push(`### ${item.title}`);
-          if ('items' in item && item.items) {
-            parts.push(...item.items.filter((i: unknown) => typeof i === 'string') as string[]);
-          }
+    for (const item of el.items) {
+      if (typeof item === 'string') {
+        parts.push(item);
+      } else if (typeof item === 'object' && item !== null && 'type' in item) {
+        const sub = item as SubSectionElement<unknown>;
+        if (sub.type === 'subsection') {
+          if (sub.title) parts.push(`### ${sub.title}`);
+          parts.push(...sub.items.filter((i): i is string => typeof i === 'string'));
         }
       }
     }
     return parts.join('\n');
   }
 
-  /**
-   * Push a MessageElement into the messages array, handling tool results and tool calls
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pushMessageElement(el: Element & { type: 'message' }, messages: Array<{ role: 'user' | 'assistant'; content: any }>, systemParts: string[]): void {
+  private pushMessageElement(el: MessageElement, messages: AnthropicMessage[], systemParts: string[]): void {
     if (el.role === 'tool') {
-      const toolResultEl = el as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
       let toolContent: string;
-      if (toolResultEl.kind === 'text') {
-        toolContent = String(toolResultEl.value);
-      } else if (toolResultEl.kind === 'data') {
-        toolContent = JSON.stringify(toolResultEl.value);
+      if (el.kind === 'text') {
+        toolContent = String(el.value);
+      } else if (el.kind === 'data') {
+        toolContent = JSON.stringify(el.value);
       } else {
-        toolContent = String(toolResultEl.value);
+        toolContent = String(el.value);
       }
       messages.push({
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: toolResultEl.toolCallId, content: toolContent, is_error: toolResultEl.kind === 'error' }]
+        content: [{ type: 'tool_result', tool_use_id: el.toolCallId, content: toolContent, is_error: el.kind === 'error' }]
       });
-    } else if ('toolCalls' in el && el.toolCalls) {
+    } else if (el.toolCalls && el.toolCalls.length > 0) {
       const messageContent = contentToString(el.content);
-      const blocks: unknown[] = [];
+      const blocks: AnthropicContentBlock[] = [];
       if (messageContent) blocks.push({ type: 'text', text: messageContent });
       for (const tc of el.toolCalls) {
         blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments });
@@ -166,14 +173,10 @@ export class AnthropicDriver implements AIDriver {
     }
   }
 
-  /**
-   * Process elements into messages/system, flushing accumulated text content
-   */
   private processElements(
-    elements: unknown[],
+    elements: Element[],
     target: 'system' | 'user',
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messages: Array<{ role: 'user' | 'assistant'; content: any }>,
+    messages: AnthropicMessage[],
     systemParts: string[]
   ): void {
     const content: string[] = [];
@@ -190,31 +193,22 @@ export class AnthropicDriver implements AIDriver {
       }
     };
 
-    for (const element of elements) {
-      if (typeof element === 'string') {
-        content.push(element);
-      } else if (typeof element === 'object' && element !== null && 'type' in element) {
-        const el = element as Element;
-        if (el.type === 'text') {
-          content.push(el.content);
-        } else if (el.type === 'message') {
-          flushContent();
-          this.pushMessageElement(el, messages, systemParts);
-        } else if (el.type === 'section' || el.type === 'subsection') {
-          content.push(AnthropicDriver.formatSectionElement(el));
-        } else {
-          content.push(JSON.stringify(el));
-        }
+    for (const el of elements) {
+      if (el.type === 'text') {
+        content.push(el.content);
+      } else if (el.type === 'message') {
+        flushContent();
+        this.pushMessageElement(el, messages, systemParts);
+      } else if (el.type === 'section' || el.type === 'subsection') {
+        content.push(AnthropicDriver.formatSectionElement(el));
+      } else {
+        content.push(JSON.stringify(el));
       }
     }
     flushContent();
   }
 
-  /**
-   * Ensure messages alternate between user and assistant
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private static ensureAlternation(messages: Array<{ role: 'user' | 'assistant'; content: any }>): void {
+  private static ensureAlternation(messages: AnthropicMessage[]): void {
     if (messages.length > 0 && messages[0].role !== 'user') {
       messages.unshift({ role: 'user', content: 'Continue.' });
     }
@@ -241,139 +235,117 @@ export class AnthropicDriver implements AIDriver {
     return true;
   }
 
-  /**
-   * Convert CompiledPrompt to Anthropic messages
-   */
   compiledPromptToAnthropic(prompt: CompiledPrompt, options?: { cache?: boolean }): {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    system?: string | Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messages: Array<{ role: 'user' | 'assistant'; content: any }>;
+    system?: AnthropicSystem;
+    messages: AnthropicMessage[];
   } {
-    if (options?.cache) {
-      return this.compiledPromptToAnthropicCached(prompt);
-    }
-
+    const cache = options?.cache ?? false;
     const systemParts: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [];
+    const messages: AnthropicMessage[] = [];
 
+    // 1. instructions → system
     if (prompt.instructions?.length) {
       this.processElements(prompt.instructions, 'system', messages, systemParts);
     }
 
-    const system = systemParts.length > 0 ? systemParts.join('\n\n') : undefined;
-
+    // 2. outputSchema → JSON指示をsystemに追加（Anthropicにはformat APIがないため）
     if (prompt.metadata?.outputSchema) {
-      const jsonInstruction = '\n\nYou must respond with valid JSON that matches the provided schema. Output only the JSON object, no additional text or markdown formatting.';
-      const finalSystem = system ? `${system}${jsonInstruction}` : jsonInstruction;
-      if (prompt.data?.length) this.processElements(prompt.data, 'user', messages, []);
-      if (prompt.output?.length) this.processElements(prompt.output, 'user', messages, []);
-      AnthropicDriver.ensureAlternation(messages);
-      return { system: finalSystem, messages };
+      systemParts.push('You must respond with valid JSON that matches the provided schema. Output only the JSON object, no additional text or markdown formatting.');
     }
 
-    if (prompt.data?.length) this.processElements(prompt.data, 'user', messages, systemParts);
-    if (prompt.output?.length) this.processElements(prompt.output, 'user', messages, systemParts);
+    // 3. data処理
+    let recentMessage: MessageElement | null = null;
+    if (cache && prompt.data?.length) {
+      const partition = AnthropicDriver.partitionDataElements(prompt.data);
+      recentMessage = partition.recentMessage;
+      if (partition.cacheable.length > 0) this.processElements(partition.cacheable, 'user', messages, []);
+      AnthropicDriver.applyCacheBreakpoint(messages);
+      if (partition.nonCacheable.length > 0) this.processElements(partition.nonCacheable, 'user', messages, []);
+    } else if (prompt.data?.length) {
+      this.processElements(prompt.data, 'user', messages, systemParts);
+    }
+
+    // 4. output処理
+    if (cache) {
+      AnthropicDriver.buildCue(prompt.output, recentMessage, messages);
+    } else if (prompt.output?.length) {
+      this.processElements(prompt.output, 'user', messages, systemParts);
+    }
+
+    // 5. system構築
+    const system = AnthropicDriver.buildSystem(systemParts, cache);
 
     AnthropicDriver.ensureAlternation(messages);
     return { system, messages };
   }
 
-  /**
-   * Convert CompiledPrompt to Anthropic messages with prompt caching
-   */
-  private compiledPromptToAnthropicCached(prompt: CompiledPrompt): {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    system?: Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messages: Array<{ role: 'user' | 'assistant'; content: any }>;
+  private static partitionDataElements(data: Element[]): {
+    cacheable: Element[];
+    nonCacheable: Element[];
+    recentMessage: MessageElement | null;
   } {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [];
+    const cacheable: Element[] = [];
+    const nonCacheable: Element[] = [];
+    let recentMessage: MessageElement | null = null;
 
-    // 1. System: instructions → TextBlockParam[] with cache_control
-    const systemParts: string[] = [];
-    if (prompt.instructions?.length) {
-      this.processElements(prompt.instructions, 'system', [], systemParts);
-    }
-    if (prompt.metadata?.outputSchema) {
-      systemParts.push('You must respond with valid JSON that matches the provided schema. Output only the JSON object, no additional text or markdown formatting.');
-    }
-
-    const system: Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }> | undefined =
-      systemParts.length > 0
-        ? [{ type: 'text' as const, text: systemParts.join('\n\n'), cache_control: { type: 'ephemeral' as const } }]
-        : undefined;
-
-    // 2. Partition data into cacheable / non-cacheable
-    const cacheableData: Element[] = [];
-    const nonCacheableData: Element[] = [];
-    let recentMessage: (Element & { type: 'message' }) | null = null;
-
-    if (prompt.data) {
-      for (const el of prompt.data) {
-        if (AnthropicDriver.isDataElementCacheable(el)) {
-          cacheableData.push(el);
-          if (el.type === 'message' && el.role !== 'tool') {
-            recentMessage = el;
-          }
-        } else {
-          nonCacheableData.push(el);
+    for (const el of data) {
+      if (AnthropicDriver.isDataElementCacheable(el)) {
+        cacheable.push(el);
+        if (el.type === 'message' && el.role !== 'tool') {
+          recentMessage = el;
         }
+      } else {
+        nonCacheable.push(el);
       }
     }
+    return { cacheable, nonCacheable, recentMessage };
+  }
 
-    // 3. Process cacheable data → messages
-    if (cacheableData.length > 0) {
-      this.processElements(cacheableData, 'user', messages, []);
-    }
-
-    // 4. Apply cache_control to last user message in cacheable section
-    if (messages.length > 0) {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
-          const content = messages[i].content;
-          if (typeof content === 'string') {
-            messages[i].content = [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }];
-          } else if (Array.isArray(content) && content.length > 0) {
-            content[content.length - 1] = { ...content[content.length - 1], cache_control: { type: 'ephemeral' } };
+  private static applyCacheBreakpoint(messages: AnthropicMessage[]): void {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        const content = messages[i].content;
+        if (typeof content === 'string') {
+          messages[i].content = [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }];
+        } else if (Array.isArray(content) && content.length > 0) {
+          const last = content[content.length - 1];
+          if (last.type === 'text') {
+            content[content.length - 1] = { ...last, cache_control: { type: 'ephemeral' } };
+          } else {
+            content.push({ type: 'text', text: '', cache_control: { type: 'ephemeral' } });
           }
-          break;
         }
+        break;
       }
     }
+  }
 
-    // 5. Process non-cacheable data (state, chunks)
-    if (nonCacheableData.length > 0) {
-      this.processElements(nonCacheableData, 'user', messages, []);
-    }
-
-    // 6. Process output (cue) + recentMessage as cue
+  private static buildCue(output: Element[] | undefined, recentMessage: MessageElement | null, messages: AnthropicMessage[]): void {
     const cueParts: string[] = [];
-    if (prompt.output?.length) {
-      for (const el of prompt.output) {
-        if (typeof el === 'string') {
-          cueParts.push(el);
-        } else if (typeof el === 'object' && el !== null && 'type' in el) {
-          const element = el as Element;
-          if (element.type === 'section' || element.type === 'subsection') {
-            cueParts.push(AnthropicDriver.formatSectionElement(element));
-          } else if (element.type === 'text') {
-            cueParts.push(element.content);
-          }
+    if (output?.length) {
+      for (const el of output) {
+        if (el.type === 'section' || el.type === 'subsection') {
+          cueParts.push(AnthropicDriver.formatSectionElement(el));
+        } else if (el.type === 'text') {
+          cueParts.push(el.content);
         }
       }
     }
-    if (recentMessage) {
+    if (recentMessage && recentMessage.role !== 'tool') {
       cueParts.push(contentToString(recentMessage.content));
     }
     if (cueParts.length > 0) {
       messages.push({ role: 'user', content: cueParts.join('\n') });
     }
+  }
 
-    AnthropicDriver.ensureAlternation(messages);
-    return { system, messages };
+  private static buildSystem(parts: string[], cache: boolean): AnthropicSystem | undefined {
+    if (parts.length === 0) return undefined;
+    const text = parts.join('\n\n');
+    if (cache) {
+      return [{ type: 'text' as const, text, cache_control: { type: 'ephemeral' as const } }];
+    }
+    return text;
   }
 
   /**
