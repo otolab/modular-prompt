@@ -184,7 +184,11 @@ export class GoogleGenAIDriver implements AIDriver {
         const content = contentToString(element.content);
         if (content) parts.push({ text: content });
         for (const tc of element.toolCalls) {
-          parts.push({ functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } });
+          const part: Part = { functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> } };
+          if (tc.metadata?.thoughtSignature) {
+            part.thoughtSignature = tc.metadata.thoughtSignature as string;
+          }
+          parts.push(part);
         }
         return { role: 'model', parts };
       } else {
@@ -219,12 +223,13 @@ export class GoogleGenAIDriver implements AIDriver {
         parts.push({ text: textContent });
       }
       for (const tc of message.toolCalls) {
-        parts.push({
-          functionCall: {
-            name: tc.name,
-            args: tc.arguments as Record<string, unknown>
-          }
-        });
+        const part: Part = {
+          functionCall: { name: tc.name, args: tc.arguments as Record<string, unknown> }
+        };
+        if (tc.metadata?.thoughtSignature) {
+          part.thoughtSignature = tc.metadata.thoughtSignature as string;
+        }
+        parts.push(part);
       }
       return { role: 'model', parts };
     } else if (isToolResult(message)) {
@@ -323,11 +328,15 @@ export class GoogleGenAIDriver implements AIDriver {
     for (const part of parts) {
       if (part.functionCall) {
         const fc = part.functionCall;
-        toolCalls.push({
+        const toolCall: ToolCall = {
           id: fc.id || `call_${toolCalls.length}`,
           name: fc.name || '',
           arguments: fc.args ?? {},
-        });
+        };
+        if (part.thoughtSignature) {
+          toolCall.metadata = { thoughtSignature: part.thoughtSignature };
+        }
+        toolCalls.push(toolCall);
       }
     }
     return toolCalls;

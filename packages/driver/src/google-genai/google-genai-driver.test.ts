@@ -543,6 +543,159 @@ describe('GoogleGenAIDriver', () => {
     });
   });
 
+  describe('thought signature support', () => {
+    const toolDefs: ToolDefinition[] = [
+      {
+        name: 'get_weather',
+        description: 'Get the weather',
+        parameters: { type: 'object', properties: { location: { type: 'string' } } }
+      }
+    ];
+
+    const basicPrompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'You are helpful' }],
+      data: [{ type: 'text', content: 'What is the weather?' }],
+      output: []
+    };
+
+    it('should preserve thoughtSignature in ToolCall.metadata', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        get text() { throw new Error('no text'); },
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [{
+              functionCall: {
+                id: 'call_1',
+                name: 'get_weather',
+                args: { location: 'Tokyo' }
+              },
+              thoughtSignature: 'sig_abc123'
+            }]
+          }
+        }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls![0].metadata).toEqual({ thoughtSignature: 'sig_abc123' });
+    });
+
+    it('should not set metadata when no thoughtSignature', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        get text() { throw new Error('no text'); },
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [{
+              functionCall: {
+                id: 'call_1',
+                name: 'get_weather',
+                args: { location: 'Tokyo' }
+              }
+            }]
+          }
+        }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.toolCalls![0].metadata).toBeUndefined();
+    });
+
+    it('should handle parallel tool calls where only first has thoughtSignature', async () => {
+      vi.spyOn(driver['client'].models, 'generateContent').mockResolvedValue({
+        get text() { throw new Error('no text'); },
+        candidates: [{
+          finishReason: 'STOP',
+          content: {
+            parts: [
+              {
+                functionCall: { id: 'call_1', name: 'get_weather', args: { location: 'Tokyo' } },
+                thoughtSignature: 'sig_parallel'
+              },
+              {
+                functionCall: { id: 'call_2', name: 'get_weather', args: { location: 'Osaka' } }
+              }
+            ]
+          }
+        }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 }
+      });
+
+      const result = await driver.query(basicPrompt, { tools: toolDefs });
+
+      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls![0].metadata).toEqual({ thoughtSignature: 'sig_parallel' });
+      expect(result.toolCalls![1].metadata).toBeUndefined();
+    });
+
+    it('should restore thoughtSignature in elementToContent', async () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful' }],
+        data: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: '',
+            toolCalls: [{
+              id: 'call_1',
+              name: 'get_weather',
+              arguments: { location: 'Tokyo' },
+              metadata: { thoughtSignature: 'sig_restore' }
+            }]
+          },
+          {
+            type: 'message',
+            role: 'tool',
+            toolCallId: 'call_1',
+            name: 'get_weather',
+            kind: 'data',
+            value: { temp: 25 }
+          }
+        ],
+        output: []
+      };
+
+      const mockGenerateContent = driver['client'].models.generateContent as ReturnType<typeof vi.fn>;
+      await driver.query(prompt);
+
+      const callArgs = mockGenerateContent.mock.calls[mockGenerateContent.mock.calls.length - 1][0];
+      const modelMsg = callArgs.contents.find((c: { role: string }) => c.role === 'model');
+      const fcPart = modelMsg.parts.find((p: { functionCall?: unknown }) => p.functionCall);
+      expect(fcPart.thoughtSignature).toBe('sig_restore');
+    });
+
+    it('should preserve thoughtSignature in stream response', async () => {
+      vi.spyOn(driver['client'].models, 'generateContentStream').mockResolvedValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            get text() { throw new Error('no text'); },
+            candidates: [{
+              finishReason: 'STOP',
+              content: {
+                parts: [{
+                  functionCall: { id: 'call_stream', name: 'get_weather', args: { location: 'Tokyo' } },
+                  thoughtSignature: 'sig_stream'
+                }]
+              }
+            }]
+          };
+        }
+      } as unknown as ReturnType<typeof driver['client']['models']['generateContentStream']>);
+
+      const { stream, result } = await driver.streamQuery(basicPrompt, { tools: toolDefs });
+      for await (const _chunk of stream) { /* consume */ }
+
+      const finalResult = await result;
+      expect(finalResult.toolCalls).toHaveLength(1);
+      expect(finalResult.toolCalls![0].metadata).toEqual({ thoughtSignature: 'sig_stream' });
+    });
+  });
+
   describe('finish reason mapping', () => {
     it('should map finish reasons correctly', async () => {
       const testCases = [
