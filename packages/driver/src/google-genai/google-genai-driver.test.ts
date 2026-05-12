@@ -688,6 +688,7 @@ describe('GoogleGenAIDriver', () => {
       } as unknown as ReturnType<typeof driver['client']['models']['generateContentStream']>);
 
       const { stream, result } = await driver.streamQuery(basicPrompt, { tools: toolDefs });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       for await (const _chunk of stream) { /* consume */ }
 
       const finalResult = await result;
