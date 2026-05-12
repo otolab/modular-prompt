@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import type { MessageCreateParamsStreaming, TextBlockParam, CacheControlEphemeral } from '@anthropic-ai/sdk/resources/messages';
-import type { CompiledPrompt, Element, SectionElement, SubSectionElement, MessageElement } from '@modular-prompt/core';
+import type { CompiledPrompt, Element, SectionElement, SubSectionElement, StandardMessageElement } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
 import { contentToString } from '../content-utils.js';
@@ -140,7 +140,7 @@ export class AnthropicDriver implements AIDriver {
     return parts.join('\n');
   }
 
-  private pushMessageElement(el: MessageElement, messages: AnthropicMessage[], systemParts: string[]): void {
+  private pushMessageElement(el: Element & { type: 'message' }, messages: AnthropicMessage[], systemParts: string[]): void {
     if (el.role === 'tool') {
       let toolContent: string;
       if (el.kind === 'text') {
@@ -254,20 +254,20 @@ export class AnthropicDriver implements AIDriver {
     }
 
     // 3. data処理
-    let recentMessage: MessageElement | null = null;
+    let recentMessage: StandardMessageElement | null = null;
     if (cache && prompt.data?.length) {
       const partition = AnthropicDriver.partitionDataElements(prompt.data);
       recentMessage = partition.recentMessage;
-      if (partition.cacheable.length > 0) this.processElements(partition.cacheable, 'user', messages, []);
+      if (partition.cacheable.length > 0) this.processElements(partition.cacheable, 'user', messages, systemParts);
       AnthropicDriver.applyCacheBreakpoint(messages);
-      if (partition.nonCacheable.length > 0) this.processElements(partition.nonCacheable, 'user', messages, []);
+      if (partition.nonCacheable.length > 0) this.processElements(partition.nonCacheable, 'user', messages, systemParts);
     } else if (prompt.data?.length) {
       this.processElements(prompt.data, 'user', messages, systemParts);
     }
 
     // 4. output処理
     if (cache) {
-      AnthropicDriver.buildCue(prompt.output, recentMessage, messages);
+      this.buildCue(prompt.output, recentMessage, messages);
     } else if (prompt.output?.length) {
       this.processElements(prompt.output, 'user', messages, systemParts);
     }
@@ -282,16 +282,16 @@ export class AnthropicDriver implements AIDriver {
   private static partitionDataElements(data: Element[]): {
     cacheable: Element[];
     nonCacheable: Element[];
-    recentMessage: MessageElement | null;
+    recentMessage: StandardMessageElement | null;
   } {
     const cacheable: Element[] = [];
     const nonCacheable: Element[] = [];
-    let recentMessage: MessageElement | null = null;
+    let recentMessage: StandardMessageElement | null = null;
 
     for (const el of data) {
       if (AnthropicDriver.isDataElementCacheable(el)) {
         cacheable.push(el);
-        if (el.type === 'message' && el.role !== 'tool') {
+        if (el.type === 'message' && el.role === 'user') {
           recentMessage = el;
         }
       } else {
@@ -320,22 +320,12 @@ export class AnthropicDriver implements AIDriver {
     }
   }
 
-  private static buildCue(output: Element[] | undefined, recentMessage: MessageElement | null, messages: AnthropicMessage[]): void {
-    const cueParts: string[] = [];
+  private buildCue(output: Element[] | undefined, recentMessage: StandardMessageElement | null, messages: AnthropicMessage[]): void {
     if (output?.length) {
-      for (const el of output) {
-        if (el.type === 'section' || el.type === 'subsection') {
-          cueParts.push(AnthropicDriver.formatSectionElement(el));
-        } else if (el.type === 'text') {
-          cueParts.push(el.content);
-        }
-      }
+      this.processElements(output, 'user', messages, []);
     }
-    if (recentMessage && recentMessage.role !== 'tool') {
-      cueParts.push(contentToString(recentMessage.content));
-    }
-    if (cueParts.length > 0) {
-      messages.push({ role: 'user', content: cueParts.join('\n') });
+    if (recentMessage) {
+      messages.push({ role: 'user', content: contentToString(recentMessage.content) });
     }
   }
 

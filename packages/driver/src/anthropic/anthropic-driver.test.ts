@@ -823,11 +823,32 @@ describe('AnthropicDriver', () => {
       };
 
       const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
-      // 最後のメッセージにoutput指示 + recentMessage が含まれる
-      const lastMsg = result.messages[result.messages.length - 1];
-      expect(lastMsg.role).toBe('user');
-      expect(lastMsg.content).toContain('Follow-up');
-      expect(lastMsg.content).toContain('Output');
+      // output指示とrecentMessageがmessagesに含まれる
+      const allContent = result.messages
+        .filter(m => m.role === 'user')
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .join(' ');
+      expect(allContent).toContain('Follow-up');
+      expect(allContent).toContain('Output');
+    });
+
+    it('cache=true: recentMessageはuserメッセージのみ追跡される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'Question' },
+          { type: 'message', role: 'assistant', content: 'Last assistant message' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // assistantメッセージはcueとして再掲されない
+      const userMessages = result.messages.filter(m => m.role === 'user');
+      const hasAssistantAsCue = userMessages.some(m =>
+        typeof m.content === 'string' && m.content.includes('Last assistant message')
+      );
+      expect(hasAssistantAsCue).toBe(false);
     });
 
     it('cache=true: メッセージ交互制約が維持される', () => {
@@ -856,6 +877,39 @@ describe('AnthropicDriver', () => {
       const systemBlocks = result.system as Array<{ type: string; text: string; cache_control?: { type: string } }>;
       expect(systemBlocks[0].cache_control).toEqual({ type: 'ephemeral' });
       expect(systemBlocks[0].text).toContain('JSON');
+    });
+
+    it('cache=true: dataにsystem roleのMessageElementがある場合もsystemに反映される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Base instructions' }],
+        data: [
+          { type: 'message', role: 'system', content: 'Additional system context from dialogue' },
+          { type: 'message', role: 'user', content: 'Hello' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const systemText = Array.isArray(result.system)
+        ? result.system.map(b => b.text).join('\n')
+        : result.system;
+      expect(systemText).toContain('Additional system context from dialogue');
+    });
+
+    it('cache=true: outputにMessageElementが含まれる場合もmessagesに変換される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: [
+          { type: 'message', role: 'user', content: 'Please respond to this specific task' },
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const allContent = result.messages
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .join(' ');
+      expect(allContent).toContain('Please respond to this specific task');
     });
   });
 
