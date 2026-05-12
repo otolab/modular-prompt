@@ -1,12 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
-import type { MessageCreateParamsStreaming } from '@anthropic-ai/sdk/resources/messages';
-import type { CompiledPrompt, Element } from '@modular-prompt/core';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition, ChatMessage } from '../types.js';
+import type { MessageCreateParamsStreaming, TextBlockParam, CacheControlEphemeral } from '@anthropic-ai/sdk/resources/messages';
+import type { CompiledPrompt, Element, SectionElement, SubSectionElement, StandardMessageElement } from '@modular-prompt/core';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolCall, ToolChoice, ToolDefinition } from '../types.js';
 import { extractJSON } from '@modular-prompt/utils';
-import { hasToolCalls, isToolResult } from '../types.js';
 import { contentToString } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
+
+type AnthropicContentBlock =
+  | { type: 'text'; text: string; cache_control?: CacheControlEphemeral }
+  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
+
+type AnthropicMessageContent = string | AnthropicContentBlock[];
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: AnthropicMessageContent;
+}
+
+type AnthropicSystem = string | TextBlockParam[];
 
 /**
  * VertexAI経由でのClaude利用設定
@@ -109,195 +122,217 @@ export class AnthropicDriver implements AIDriver {
     this._defaultOptions = config.defaultOptions || {};
   }
 
-  /**
-   * Convert ChatMessage to Anthropic message format
-   */
-  private chatMessageToAnthropic(message: ChatMessage): { role: 'user' | 'assistant'; content: unknown } {
-    if (hasToolCalls(message)) {
-      // AssistantToolCallMessage
-      const blocks: unknown[] = [];
-      if (message.content) {
-        blocks.push({ type: 'text', text: contentToString(message.content) });
+  private static formatSectionElement(el: SectionElement<unknown> | SubSectionElement<unknown>): string {
+    const parts: string[] = [];
+    const prefix = el.type === 'section' ? '##' : '###';
+    if (el.title) parts.push(`${prefix} ${el.title}`);
+    for (const item of el.items) {
+      if (typeof item === 'string') {
+        parts.push(item);
+      } else if (typeof item === 'object' && item !== null && 'type' in item) {
+        const sub = item as SubSectionElement<unknown>;
+        if (sub.type === 'subsection') {
+          if (sub.title) parts.push(`### ${sub.title}`);
+          parts.push(...sub.items.filter((i): i is string => typeof i === 'string'));
+        }
       }
-      for (const tc of message.toolCalls) {
-        blocks.push({
-          type: 'tool_use',
-          id: tc.id,
-          name: tc.name,
-          input: tc.arguments
-        });
+    }
+    return parts.join('\n');
+  }
+
+  private pushMessageElement(el: Element & { type: 'message' }, messages: AnthropicMessage[], systemParts: string[]): void {
+    if (el.role === 'tool') {
+      let toolContent: string;
+      if (el.kind === 'text') {
+        toolContent = String(el.value);
+      } else if (el.kind === 'data') {
+        toolContent = JSON.stringify(el.value);
+      } else {
+        toolContent = String(el.value);
       }
-      return { role: 'assistant', content: blocks };
-    } else if (isToolResult(message)) {
-      // ToolResultMessage - convert kind+value to Anthropic content format
-      let content: string;
-      if (message.kind === 'text') {
-        content = String(message.value);
-      } else if (message.kind === 'data') {
-        content = JSON.stringify(message.value);
-      } else { // 'error'
-        content = String(message.value);
-      }
-      return {
+      messages.push({
         role: 'user',
-        content: [{
-          type: 'tool_result',
-          tool_use_id: message.toolCallId,
-          content,
-          is_error: message.kind === 'error'
-        }]
-      };
+        content: [{ type: 'tool_result', tool_use_id: el.toolCallId, content: toolContent, is_error: el.kind === 'error' }]
+      });
+    } else if (el.toolCalls && el.toolCalls.length > 0) {
+      const messageContent = contentToString(el.content);
+      const blocks: AnthropicContentBlock[] = [];
+      if (messageContent) blocks.push({ type: 'text', text: messageContent });
+      for (const tc of el.toolCalls) {
+        blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments });
+      }
+      messages.push({ role: 'assistant', content: blocks });
     } else {
-      // StandardChatMessage (system role is not expected in options.messages)
-      return {
-        role: message.role as 'user' | 'assistant',
-        content: contentToString(message.content)
-      };
+      const messageContent = contentToString(el.content);
+      const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
+      if (role === 'system') {
+        systemParts.push(messageContent);
+      } else {
+        messages.push({ role: role as 'user' | 'assistant', content: messageContent });
+      }
     }
   }
 
-  /**
-   * Convert CompiledPrompt to Anthropic messages
-   */
-  private compiledPromptToAnthropic(prompt: CompiledPrompt): {
-    system?: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    messages: Array<{ role: 'user' | 'assistant'; content: any }>;
-  } {
-    let system: string | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const messages: Array<{ role: 'user' | 'assistant'; content: any }> = [];
+  private processElements(
+    elements: Element[],
+    target: 'system' | 'user',
+    messages: AnthropicMessage[],
+    systemParts: string[]
+  ): void {
+    const content: string[] = [];
 
-    // Helper to process elements
-    const processElements = (elements: unknown[], target: 'system' | 'user'): void => {
-      const content: string[] = [];
-
-      const flushContent = () => {
-        if (content.length > 0) {
-          const text = content.join('\n');
-          if (target === 'system') {
-            system = system ? `${system}\n\n${text}` : text;
-          } else {
-            messages.push({ role: 'user', content: text });
-          }
-          content.length = 0;
+    const flushContent = () => {
+      if (content.length > 0) {
+        const text = content.join('\n');
+        if (target === 'system') {
+          systemParts.push(text);
+        } else {
+          messages.push({ role: 'user', content: text });
         }
-      };
-
-      for (const element of elements) {
-        if (typeof element === 'string') {
-          content.push(element);
-        } else if (typeof element === 'object' && element !== null && 'type' in element) {
-          const el = element as Element;
-
-          if (el.type === 'text') {
-            content.push(el.content);
-          } else if (el.type === 'message') {
-            // Flush accumulated content before processing MessageElement
-            flushContent();
-
-            // Handle message elements separately
-            if (el.role === 'tool') {
-              // ToolResultMessageElement - convert kind+value to Anthropic content format
-              const toolResultEl = el as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
-              let toolContent: string;
-              if (toolResultEl.kind === 'text') {
-                toolContent = String(toolResultEl.value);
-              } else if (toolResultEl.kind === 'data') {
-                toolContent = JSON.stringify(toolResultEl.value);
-              } else { // 'error'
-                toolContent = String(toolResultEl.value);
-              }
-              messages.push({
-                role: 'user',
-                content: [{
-                  type: 'tool_result',
-                  tool_use_id: toolResultEl.toolCallId,
-                  content: toolContent,
-                  is_error: toolResultEl.kind === 'error'
-                }]
-              });
-            } else if ('toolCalls' in el && el.toolCalls) {
-              const messageContent = contentToString(el.content);
-              const blocks: unknown[] = [];
-              if (messageContent) blocks.push({ type: 'text', text: messageContent });
-              for (const tc of el.toolCalls) {
-                blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments });
-              }
-              messages.push({ role: 'assistant', content: blocks });
-            } else {
-              const messageContent = contentToString(el.content);
-              const role = el.role === 'system' ? 'system' : el.role === 'user' ? 'user' : 'assistant';
-              if (role === 'system') {
-                system = system ? `${system}\n\n${messageContent}` : messageContent;
-              } else {
-                messages.push({ role: role as 'user' | 'assistant', content: messageContent });
-              }
-            }
-          } else if (el.type === 'section' || el.type === 'subsection') {
-            // Process section content
-            if (el.title) content.push(`## ${el.title}`);
-            if (el.items) {
-              for (const item of el.items) {
-                if (typeof item === 'string') {
-                  content.push(item);
-                } else if (typeof item === 'object' && item !== null && 'type' in item && item.type === 'subsection') {
-                  if (item.title) content.push(`### ${item.title}`);
-                  if ('items' in item && item.items) {
-                    content.push(...item.items.filter((i) => typeof i === 'string'));
-                  }
-                }
-              }
-            }
-          } else {
-            // Default formatting for other elements
-            content.push(JSON.stringify(el));
-          }
-        }
+        content.length = 0;
       }
-
-      // Flush remaining content after processing all elements
-      flushContent();
     };
 
-    // Process instructions as system message
-    if (prompt.instructions && prompt.instructions.length > 0) {
-      processElements(prompt.instructions, 'system');
+    for (const el of elements) {
+      if (el.type === 'text') {
+        content.push(el.content);
+      } else if (el.type === 'message') {
+        flushContent();
+        this.pushMessageElement(el, messages, systemParts);
+      } else if (el.type === 'section' || el.type === 'subsection') {
+        content.push(AnthropicDriver.formatSectionElement(el));
+      } else {
+        content.push(JSON.stringify(el));
+      }
     }
+    flushContent();
+  }
 
-    // Add JSON instruction if schema is provided
-    if (prompt.metadata?.outputSchema) {
-      const jsonInstruction = '\n\nYou must respond with valid JSON that matches the provided schema. Output only the JSON object, no additional text or markdown formatting.';
-      system = system ? `${system}${jsonInstruction}` : jsonInstruction;
-    }
-
-    // Process data as user message
-    if (prompt.data && prompt.data.length > 0) {
-      processElements(prompt.data, 'user');
-    }
-
-    // Process output as user message
-    if (prompt.output && prompt.output.length > 0) {
-      processElements(prompt.output, 'user');
-    }
-
-    // Ensure messages alternate between user and assistant
-    // If first message is not user, add a dummy user message
+  private static ensureAlternation(messages: AnthropicMessage[]): void {
     if (messages.length > 0 && messages[0].role !== 'user') {
       messages.unshift({ role: 'user', content: 'Continue.' });
     }
-
-    // If last message is assistant, add a dummy user message
     if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
       messages.push({ role: 'user', content: 'Continue.' });
     }
-
-    // If no messages, add a default
     if (messages.length === 0) {
       messages.push({ role: 'user', content: 'Please respond according to the instructions.' });
     }
+  }
 
+  private static isDataElementCacheable(el: Element): boolean {
+    if (el.type === 'message') return true;
+    if (el.type === 'chunk') return false;
+    if ('cacheHint' in el && el.cacheHint != null) return el.cacheHint === 'static';
+    return true;
+  }
+
+  compiledPromptToAnthropic(prompt: CompiledPrompt, options?: { cache?: boolean }): {
+    system?: AnthropicSystem;
+    messages: AnthropicMessage[];
+  } {
+    const cache = options?.cache ?? false;
+    const systemParts: string[] = [];
+    const messages: AnthropicMessage[] = [];
+
+    // 1. instructions → system
+    if (prompt.instructions?.length) {
+      this.processElements(prompt.instructions, 'system', messages, systemParts);
+    }
+
+    // 2. outputSchema → JSON指示をsystemに追加（Anthropicにはformat APIがないため）
+    if (prompt.metadata?.outputSchema) {
+      systemParts.push('You must respond with valid JSON that matches the provided schema. Output only the JSON object, no additional text or markdown formatting.');
+    }
+
+    // 3. data処理
+    let recentMessage: StandardMessageElement | null = null;
+    if (cache && prompt.data?.length) {
+      const partition = AnthropicDriver.partitionDataElements(prompt.data);
+      recentMessage = partition.recentMessage;
+      if (partition.cacheable.length > 0) this.processElements(partition.cacheable, 'user', messages, systemParts);
+      AnthropicDriver.applyCacheBreakpoint(messages);
+      if (partition.nonCacheable.length > 0) this.processElements(partition.nonCacheable, 'user', messages, systemParts);
+    } else if (prompt.data?.length) {
+      this.processElements(prompt.data, 'user', messages, systemParts);
+    }
+
+    // 4. output処理
+    if (cache) {
+      this.buildCue(prompt.output, recentMessage, messages, systemParts);
+    } else if (prompt.output?.length) {
+      this.processElements(prompt.output, 'user', messages, systemParts);
+    }
+
+    // 5. system構築
+    const system = AnthropicDriver.buildSystem(systemParts, cache);
+
+    AnthropicDriver.ensureAlternation(messages);
     return { system, messages };
+  }
+
+  private static partitionDataElements(data: Element[]): {
+    cacheable: Element[];
+    nonCacheable: Element[];
+    recentMessage: StandardMessageElement | null;
+  } {
+    const cacheable: Element[] = [];
+    const nonCacheable: Element[] = [];
+    let recentMessage: StandardMessageElement | null = null;
+
+    for (const el of data) {
+      if (AnthropicDriver.isDataElementCacheable(el)) {
+        cacheable.push(el);
+        if (el.type === 'message' && el.role === 'user') {
+          recentMessage = el;
+        }
+      } else {
+        nonCacheable.push(el);
+      }
+    }
+    if (recentMessage) {
+      const idx = cacheable.indexOf(recentMessage);
+      if (idx >= 0) cacheable.splice(idx, 1);
+    }
+
+    return { cacheable, nonCacheable, recentMessage };
+  }
+
+  private static applyCacheBreakpoint(messages: AnthropicMessage[]): void {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        const content = messages[i].content;
+        if (typeof content === 'string') {
+          messages[i].content = [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }];
+        } else if (Array.isArray(content) && content.length > 0) {
+          const last = content[content.length - 1];
+          if (last.type === 'text') {
+            content[content.length - 1] = { ...last, cache_control: { type: 'ephemeral' } };
+          } else {
+            content.push({ type: 'text', text: '', cache_control: { type: 'ephemeral' } });
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  private buildCue(output: Element[] | undefined, recentMessage: StandardMessageElement | null, messages: AnthropicMessage[], systemParts: string[]): void {
+    if (output?.length) {
+      this.processElements(output, 'user', messages, systemParts);
+    }
+    if (recentMessage) {
+      messages.push({ role: 'user', content: contentToString(recentMessage.content) });
+    }
+  }
+
+  private static buildSystem(parts: string[], cache: boolean): AnthropicSystem | undefined {
+    if (parts.length === 0) return undefined;
+    const text = parts.join('\n\n');
+    if (cache) {
+      return [{ type: 'text' as const, text, cache_control: { type: 'ephemeral' as const } }];
+    }
+    return text;
   }
 
   /**
@@ -319,7 +354,7 @@ export class AnthropicDriver implements AIDriver {
     this.queryLogger.mark(mergedOptions);
 
     // Convert prompt
-    const { system, messages } = this.compiledPromptToAnthropic(prompt);
+    const { system, messages } = this.compiledPromptToAnthropic(prompt, { cache: mergedOptions.cache });
 
     // Extended Thinking: mode === 'thinking' with thinking config
     const useThinking = mergedOptions.mode === 'thinking' && mergedOptions.thinking;

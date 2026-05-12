@@ -696,6 +696,302 @@ describe('AnthropicDriver', () => {
     });
   });
 
+  describe('prompt caching (cache option)', () => {
+    it('cache=false: systemは文字列、cache_controlなし', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful.' }],
+        data: [{ type: 'text', content: 'Some data' }],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: false });
+      expect(typeof result.system).toBe('string');
+      expect(result.system).toBe('You are helpful.');
+    });
+
+    it('cache=true: systemがTextBlockParam[]になりcache_controlが付与される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'You are helpful.' }],
+        data: [{ type: 'text', content: 'Some data' }],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      expect(Array.isArray(result.system)).toBe(true);
+      const systemBlocks = result.system as Array<{ type: string; text: string; cache_control?: { type: string } }>;
+      expect(systemBlocks[0].type).toBe('text');
+      expect(systemBlocks[0].text).toBe('You are helpful.');
+      expect(systemBlocks[0].cache_control).toEqual({ type: 'ephemeral' });
+    });
+
+    it('cache=true: MessageElementは常にキャッシュ対象として扱われる', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'Hello', cacheHint: 'contextual' },
+          { type: 'message', role: 'assistant', content: 'Hi!' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // messages配列にMessageが含まれる（キャッシュ対象部分）
+      const userMsg = result.messages.find(m => m.content === 'Hello' || (Array.isArray(m.content) && m.content.some((c: { text?: string }) => c.text === 'Hello')));
+      expect(userMsg).toBeDefined();
+    });
+
+    it('cache=true: キャッシュ対象の最後のuserメッセージにcache_controlが付き、recentMessageはcueに配置される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'First question' },
+          { type: 'message', role: 'assistant', content: 'First answer' },
+          { type: 'message', role: 'user', content: 'Second question' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // recentMessage（Second question）はcacheableから除外され、cueに配置される
+      // cache_controlはcacheable部分の最後のuserメッセージ（First question）に付く
+      const cachedMsg = result.messages.find(m =>
+        Array.isArray(m.content) &&
+        m.content.some((c: { text?: string; cache_control?: unknown }) => c.text === 'First question' && c.cache_control)
+      );
+      expect(cachedMsg).toBeDefined();
+
+      // Second questionはcueとして末尾に存在する（cache_controlなし）
+      const lastUserMsg = [...result.messages].reverse().find(m => m.role === 'user');
+      expect(typeof lastUserMsg?.content).toBe('string');
+      expect(lastUserMsg?.content).toBe('Second question');
+    });
+
+    it('cache=true: cacheHint=contextualなセクションはキャッシュ対象外', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'Hello' },
+          {
+            type: 'section',
+            category: 'data',
+            title: 'Current State',
+            items: ['state data here'],
+            cacheHint: 'contextual'
+          },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // 'Hello'が唯一のuserメッセージかつrecentMessageなので、cueに配置される
+      // cacheableは空のため、userメッセージにcache_controlは付かない
+      // stateはcacheHint=contextualのため非キャッシュ領域に配置される
+      const stateMsg = result.messages.find(m =>
+        typeof m.content === 'string' && m.content.includes('Current State')
+      );
+      expect(stateMsg).toBeDefined();
+
+      // Helloはcueとして存在する
+      const helloMsg = result.messages.find(m =>
+        typeof m.content === 'string' && m.content === 'Hello'
+      );
+      expect(helloMsg).toBeDefined();
+
+      // systemにはcache_controlが付いている
+      expect(Array.isArray(result.system)).toBe(true);
+      const systemBlocks = result.system as Array<{ cache_control?: unknown }>;
+      expect(systemBlocks[0].cache_control).toEqual({ type: 'ephemeral' });
+    });
+
+    it('cache=true: chunksはキャッシュ対象外', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'material', id: 'doc1', title: 'Doc', content: 'content', cacheHint: 'static' },
+          { type: 'chunk', partOf: 'input', content: 'chunk data', cacheHint: 'contextual' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // materialはキャッシュ対象、chunkはキャッシュ対象外
+      // messagesの中にmaterialとchunkが別々に配置される
+      expect(result.messages.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('cache=true: recentMessageがcueとして再掲される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'Question' },
+          { type: 'message', role: 'assistant', content: 'Answer' },
+          { type: 'message', role: 'user', content: 'Follow-up' },
+        ],
+        output: [
+          { type: 'section', category: 'output', title: 'Output', items: ['Respond concisely.'] }
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // output指示とrecentMessageがmessagesに含まれる
+      const allContent = result.messages
+        .filter(m => m.role === 'user')
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .join(' ');
+      expect(allContent).toContain('Follow-up');
+      expect(allContent).toContain('Output');
+    });
+
+    it('cache=true: recentMessageがcacheableとcueで重複しない', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'First' },
+          { type: 'message', role: 'assistant', content: 'Reply' },
+          { type: 'message', role: 'user', content: 'Second' },
+        ],
+        output: [
+          { type: 'section', category: 'output', title: 'Output', items: ['Respond.'] }
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const userContents = result.messages
+        .filter(m => m.role === 'user')
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+      const secondCount = userContents.filter(c => c === 'Second').length;
+      expect(secondCount).toBe(1);
+    });
+
+    it('cache=true: cacheHint=contextualな動的セクション（非state/chunks）もキャッシュ対象外', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'material', id: 'doc1', title: 'Doc', content: 'static doc', cacheHint: 'static' },
+          {
+            type: 'section',
+            category: 'data',
+            title: 'Dynamic Guide',
+            items: ['dynamically generated content'],
+            cacheHint: 'contextual'
+          },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // materialはキャッシュ対象（cache_control付き）
+      const cachedMsg = result.messages.find(m =>
+        Array.isArray(m.content) &&
+        m.content.some((c: { cache_control?: unknown }) => c.cache_control)
+      );
+      expect(cachedMsg).toBeDefined();
+
+      // Dynamic Guideセクションはキャッシュブレークポイントの後に配置される
+      const dynamicMsg = result.messages.find(m =>
+        typeof m.content === 'string' && m.content.includes('Dynamic Guide')
+      );
+      expect(dynamicMsg).toBeDefined();
+    });
+
+    it('cache=true: output内のsystem roleメッセージがsystemに反映される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Base' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: [
+          { type: 'message', role: 'system', content: 'System context from output' },
+          { type: 'text', content: 'Respond now.' },
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const systemText = Array.isArray(result.system)
+        ? result.system.map(b => b.text).join('\n')
+        : result.system;
+      expect(systemText).toContain('System context from output');
+    });
+
+    it('cache=true: recentMessageはuserメッセージのみ追跡される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'Question' },
+          { type: 'message', role: 'assistant', content: 'Last assistant message' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // assistantメッセージはcueとして再掲されない
+      const userMessages = result.messages.filter(m => m.role === 'user');
+      const hasAssistantAsCue = userMessages.some(m =>
+        typeof m.content === 'string' && m.content.includes('Last assistant message')
+      );
+      expect(hasAssistantAsCue).toBe(false);
+    });
+
+    it('cache=true: メッセージ交互制約が維持される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'assistant', content: 'Proactive message' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // 最初のメッセージがassistantの場合、先頭にuserが追加される
+      expect(result.messages[0].role).toBe('user');
+    });
+
+    it('cache=true: outputSchemaがある場合もsystemにcache_controlが付く', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Analyze.' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: [],
+        metadata: { outputSchema: { type: 'object', properties: { result: { type: 'string' } } } }
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const systemBlocks = result.system as Array<{ type: string; text: string; cache_control?: { type: string } }>;
+      expect(systemBlocks[0].cache_control).toEqual({ type: 'ephemeral' });
+      expect(systemBlocks[0].text).toContain('JSON');
+    });
+
+    it('cache=true: dataにsystem roleのMessageElementがある場合もsystemに反映される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Base instructions' }],
+        data: [
+          { type: 'message', role: 'system', content: 'Additional system context from dialogue' },
+          { type: 'message', role: 'user', content: 'Hello' },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const systemText = Array.isArray(result.system)
+        ? result.system.map(b => b.text).join('\n')
+        : result.system;
+      expect(systemText).toContain('Additional system context from dialogue');
+    });
+
+    it('cache=true: outputにMessageElementが含まれる場合もmessagesに変換される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: [
+          { type: 'message', role: 'user', content: 'Please respond to this specific task' },
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const allContent = result.messages
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+        .join(' ');
+      expect(allContent).toContain('Please respond to this specific task');
+    });
+  });
+
   describe('element order preservation', () => {
     it('should preserve element order when SectionElement precedes MessageElements', async () => {
       mockCreate.mockResolvedValueOnce({
