@@ -162,6 +162,8 @@ export interface QueryOptions {
   toolChoice?: ToolChoice;
   /** Reasoning effort level for thinking models (e.g., o-series, llm-jp-4-thinking) */
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** Enable prompt caching (driver-specific optimization) */
+  cache?: boolean;
 }
 
 /**
