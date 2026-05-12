@@ -220,18 +220,10 @@ export class AnthropicDriver implements AIDriver {
     }
   }
 
-  /**
-   * Determine if a data element is cacheable
-   */
   private static isDataElementCacheable(el: Element): boolean {
     if (el.type === 'message') return true;
     if (el.type === 'chunk') return false;
-    if (el.type === 'section') {
-      if (el.title === 'Current State' || el.title === 'Input Chunks') return false;
-      return true;
-    }
-    if (el.type === 'material') return true;
-    if ('cacheHint' in el) return el.cacheHint === 'static';
+    if ('cacheHint' in el && el.cacheHint != null) return el.cacheHint === 'static';
     return true;
   }
 
@@ -267,7 +259,7 @@ export class AnthropicDriver implements AIDriver {
 
     // 4. output処理
     if (cache) {
-      this.buildCue(prompt.output, recentMessage, messages);
+      this.buildCue(prompt.output, recentMessage, messages, systemParts);
     } else if (prompt.output?.length) {
       this.processElements(prompt.output, 'user', messages, systemParts);
     }
@@ -298,6 +290,11 @@ export class AnthropicDriver implements AIDriver {
         nonCacheable.push(el);
       }
     }
+    if (recentMessage) {
+      const idx = cacheable.indexOf(recentMessage);
+      if (idx >= 0) cacheable.splice(idx, 1);
+    }
+
     return { cacheable, nonCacheable, recentMessage };
   }
 
@@ -320,9 +317,9 @@ export class AnthropicDriver implements AIDriver {
     }
   }
 
-  private buildCue(output: Element[] | undefined, recentMessage: StandardMessageElement | null, messages: AnthropicMessage[]): void {
+  private buildCue(output: Element[] | undefined, recentMessage: StandardMessageElement | null, messages: AnthropicMessage[], systemParts: string[]): void {
     if (output?.length) {
-      this.processElements(output, 'user', messages, []);
+      this.processElements(output, 'user', messages, systemParts);
     }
     if (recentMessage) {
       messages.push({ role: 'user', content: contentToString(recentMessage.content) });

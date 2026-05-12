@@ -740,7 +740,7 @@ describe('AnthropicDriver', () => {
       expect(userMsg).toBeDefined();
     });
 
-    it('cache=true: messages全体がキャッシュ対象、最後のuserメッセージにcache_controlが付く', () => {
+    it('cache=true: キャッシュ対象の最後のuserメッセージにcache_controlが付き、recentMessageはcueに配置される', () => {
       const prompt: CompiledPrompt = {
         instructions: [{ type: 'text', content: 'System' }],
         data: [
@@ -752,16 +752,21 @@ describe('AnthropicDriver', () => {
       };
 
       const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
-      // 最後のuserメッセージ（キャッシュ対象の最後）にcache_controlが付く
-      // "Second question"がcache_control付きのTextBlockParamになっているはず
+      // recentMessage（Second question）はcacheableから除外され、cueに配置される
+      // cache_controlはcacheable部分の最後のuserメッセージ（First question）に付く
       const cachedMsg = result.messages.find(m =>
         Array.isArray(m.content) &&
-        m.content.some((c: { text?: string; cache_control?: unknown }) => c.text === 'Second question' && c.cache_control)
+        m.content.some((c: { text?: string; cache_control?: unknown }) => c.text === 'First question' && c.cache_control)
       );
       expect(cachedMsg).toBeDefined();
+
+      // Second questionはcueとして末尾に存在する（cache_controlなし）
+      const lastUserMsg = [...result.messages].reverse().find(m => m.role === 'user');
+      expect(typeof lastUserMsg?.content).toBe('string');
+      expect(lastUserMsg?.content).toBe('Second question');
     });
 
-    it('cache=true: stateはキャッシュ対象外', () => {
+    it('cache=true: cacheHint=contextualなセクションはキャッシュ対象外', () => {
       const prompt: CompiledPrompt = {
         instructions: [{ type: 'text', content: 'System' }],
         data: [
@@ -778,19 +783,24 @@ describe('AnthropicDriver', () => {
       };
 
       const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
-      // stateはmessagesのキャッシュブレークポイントの後にある
-      // "Hello"メッセージにcache_controlがある（キャッシュ対象の最後）
-      const cachedMsg = result.messages.find(m =>
-        Array.isArray(m.content) &&
-        m.content.some((c: { text?: string; cache_control?: unknown }) => c.text === 'Hello' && c.cache_control)
-      );
-      expect(cachedMsg).toBeDefined();
-
-      // stateのテキストにはcache_controlがない
+      // 'Hello'が唯一のuserメッセージかつrecentMessageなので、cueに配置される
+      // cacheableは空のため、userメッセージにcache_controlは付かない
+      // stateはcacheHint=contextualのため非キャッシュ領域に配置される
       const stateMsg = result.messages.find(m =>
         typeof m.content === 'string' && m.content.includes('Current State')
       );
       expect(stateMsg).toBeDefined();
+
+      // Helloはcueとして存在する
+      const helloMsg = result.messages.find(m =>
+        typeof m.content === 'string' && m.content === 'Hello'
+      );
+      expect(helloMsg).toBeDefined();
+
+      // systemにはcache_controlが付いている
+      expect(Array.isArray(result.system)).toBe(true);
+      const systemBlocks = result.system as Array<{ cache_control?: unknown }>;
+      expect(systemBlocks[0].cache_control).toEqual({ type: 'ephemeral' });
     });
 
     it('cache=true: chunksはキャッシュ対象外', () => {
@@ -830,6 +840,75 @@ describe('AnthropicDriver', () => {
         .join(' ');
       expect(allContent).toContain('Follow-up');
       expect(allContent).toContain('Output');
+    });
+
+    it('cache=true: recentMessageがcacheableとcueで重複しない', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'message', role: 'user', content: 'First' },
+          { type: 'message', role: 'assistant', content: 'Reply' },
+          { type: 'message', role: 'user', content: 'Second' },
+        ],
+        output: [
+          { type: 'section', category: 'output', title: 'Output', items: ['Respond.'] }
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const userContents = result.messages
+        .filter(m => m.role === 'user')
+        .map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+      const secondCount = userContents.filter(c => c === 'Second').length;
+      expect(secondCount).toBe(1);
+    });
+
+    it('cache=true: cacheHint=contextualな動的セクション（非state/chunks）もキャッシュ対象外', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'System' }],
+        data: [
+          { type: 'material', id: 'doc1', title: 'Doc', content: 'static doc', cacheHint: 'static' },
+          {
+            type: 'section',
+            category: 'data',
+            title: 'Dynamic Guide',
+            items: ['dynamically generated content'],
+            cacheHint: 'contextual'
+          },
+        ],
+        output: []
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      // materialはキャッシュ対象（cache_control付き）
+      const cachedMsg = result.messages.find(m =>
+        Array.isArray(m.content) &&
+        m.content.some((c: { cache_control?: unknown }) => c.cache_control)
+      );
+      expect(cachedMsg).toBeDefined();
+
+      // Dynamic Guideセクションはキャッシュブレークポイントの後に配置される
+      const dynamicMsg = result.messages.find(m =>
+        typeof m.content === 'string' && m.content.includes('Dynamic Guide')
+      );
+      expect(dynamicMsg).toBeDefined();
+    });
+
+    it('cache=true: output内のsystem roleメッセージがsystemに反映される', () => {
+      const prompt: CompiledPrompt = {
+        instructions: [{ type: 'text', content: 'Base' }],
+        data: [{ type: 'text', content: 'Data' }],
+        output: [
+          { type: 'message', role: 'system', content: 'System context from output' },
+          { type: 'text', content: 'Respond now.' },
+        ]
+      };
+
+      const result = driver.compiledPromptToAnthropic(prompt, { cache: true });
+      const systemText = Array.isArray(result.system)
+        ? result.system.map(b => b.text).join('\n')
+        : result.system;
+      expect(systemText).toContain('System context from output');
     });
 
     it('cache=true: recentMessageはuserメッセージのみ追跡される', () => {
