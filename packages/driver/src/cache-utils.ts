@@ -5,7 +5,9 @@ export function isElementCacheable(el: Element): boolean {
     return el.cacheHint === 'static';
   }
   switch (el.type) {
-    case 'message': return true;
+    case 'message':
+      if ('role' in el && el.role === 'tool') return false;
+      return true;
     case 'material': return true;
     case 'section':
       if (el.title === 'Current State' || el.title === 'Input Chunks') return false;

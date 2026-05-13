@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { GoogleGenAI } from '@google/genai';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
-import { elementToPart, elementToContent, convertTools } from './element-converter.js';
+import { elementToPart, elementToContent, convertTools, mergeToolResultContents } from './element-converter.js';
 
 export interface GoogleGenAICacheControllerConfig {
   ttl?: string;
@@ -60,7 +60,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
     }
 
     if (params.data && params.data.length > 0) {
-      cacheConfig.contents = params.data.map(el => elementToContent(el));
+      cacheConfig.contents = mergeToolResultContents(params.data.map(el => elementToContent(el)));
     }
 
     if (params.tools && params.tools.length > 0) {
@@ -109,6 +109,8 @@ export class GoogleGenAICacheController implements PromptCacheController {
   }
 
   async close(): Promise<void> {
+    await Promise.all([...this.inflightRequests.values()]).catch(() => {});
+    this.inflightRequests.clear();
     const deletions = this.managedCaches.map(name =>
       this.client.caches.delete({ name }).catch(() => {})
     );

@@ -18,6 +18,11 @@ describe('isElementCacheable', () => {
     expect(isElementCacheable(el)).toBe(true);
   });
 
+  it('tool message without cacheHint → not cacheable', () => {
+    const el: Element = { type: 'message', role: 'tool', toolCallId: 'tc1', name: 'search', kind: 'text', value: 'result' } as Element;
+    expect(isElementCacheable(el)).toBe(false);
+  });
+
   it('material without cacheHint → cacheable', () => {
     const el: Element = { type: 'material', id: 'm1', title: 'Doc', content: 'text' };
     expect(isElementCacheable(el)).toBe(true);
