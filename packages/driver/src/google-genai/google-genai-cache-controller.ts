@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { GoogleGenAI } from '@google/genai';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
 import { elementToPart, elementToContent, convertTools } from './element-converter.js';
@@ -9,13 +10,30 @@ export interface GoogleGenAICacheControllerConfig {
 
 export class GoogleGenAICacheController implements PromptCacheController {
   private managedCaches: string[] = [];
+  private cacheByHash = new Map<string, CacheHandle>();
 
   constructor(
     private client: GoogleGenAI,
     private config?: GoogleGenAICacheControllerConfig
   ) {}
 
+  private computeCacheKey(params: CachePrepareParams): string {
+    const payload = {
+      model: params.model,
+      instructions: params.instructions,
+      data: params.data,
+      tools: params.tools,
+    };
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  }
+
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
+    const cacheKey = this.computeCacheKey(params);
+    const existing = this.cacheByHash.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
+
     const cacheConfig: Record<string, unknown> = {
       ttl: this.config?.ttl || '3600s',
       displayName: this.config?.displayName,
@@ -44,10 +62,13 @@ export class GoogleGenAICacheController implements PromptCacheController {
       config: cacheConfig,
     });
 
-    const ref = cache.name!;
+    if (!cache.name) {
+      throw new Error('GoogleGenAI caches.create() returned a cache without a name');
+    }
+    const ref = cache.name;
     this.managedCaches.push(ref);
 
-    return {
+    const handle: CacheHandle = {
       ref,
       includes: {
         instructions: (params.instructions?.length ?? 0) > 0,
@@ -55,11 +76,20 @@ export class GoogleGenAICacheController implements PromptCacheController {
         tools: (params.tools?.length ?? 0) > 0,
       },
     };
+    this.cacheByHash.set(cacheKey, handle);
+
+    return handle;
   }
 
   async invalidate(handle: CacheHandle): Promise<void> {
     await this.client.caches.delete({ name: handle.ref });
     this.managedCaches = this.managedCaches.filter(n => n !== handle.ref);
+    for (const [key, cached] of this.cacheByHash) {
+      if (cached.ref === handle.ref) {
+        this.cacheByHash.delete(key);
+        break;
+      }
+    }
   }
 
   async close(): Promise<void> {
@@ -68,5 +98,6 @@ export class GoogleGenAICacheController implements PromptCacheController {
     );
     await Promise.all(deletions);
     this.managedCaches = [];
+    this.cacheByHash.clear();
   }
 }

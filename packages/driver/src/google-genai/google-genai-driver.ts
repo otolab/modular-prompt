@@ -103,11 +103,14 @@ export class GoogleGenAIDriver implements AIDriver {
         data: partition.cacheable.data,
         tools: mergedOptions.tools,
       });
+      const uncachedInstructionParts = partition.volatile.instructions.length > 0
+        ? partition.volatile.instructions.map(el => elementToPart(el))
+        : undefined;
       const volatileElements = [...partition.volatile.data, ...partition.volatile.output];
       const contents = volatileElements.length > 0
         ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
         : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
-      return { systemInstructionParts: undefined, contents, cacheHandle: handle };
+      return { systemInstructionParts: uncachedInstructionParts, contents, cacheHandle: handle };
     }
 
     const systemInstructionParts = prompt.instructions?.map(el => elementToPart(el));
@@ -500,6 +503,6 @@ export class GoogleGenAIDriver implements AIDriver {
    * Close the client
    */
   async close(): Promise<void> {
-    // GoogleGenAI client doesn't need explicit closing
+    await this.cacheController?.close();
   }
 }

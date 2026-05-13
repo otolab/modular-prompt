@@ -21,6 +21,7 @@ export interface PromptPartition {
     data: Element[];
   };
   volatile: {
+    instructions: Element[];
     data: Element[];
     output: Element[];
   };
@@ -28,13 +29,24 @@ export interface PromptPartition {
 
 export function partitionPrompt(prompt: CompiledPrompt): PromptPartition {
   const cacheable = {
-    instructions: prompt.instructions || [],
+    instructions: [] as Element[],
     data: [] as Element[],
   };
   const volatile = {
+    instructions: [] as Element[],
     data: [] as Element[],
     output: prompt.output || [],
   };
+
+  if (prompt.instructions) {
+    for (const el of prompt.instructions) {
+      if (isElementCacheable(el)) {
+        cacheable.instructions.push(el);
+      } else {
+        volatile.instructions.push(el);
+      }
+    }
+  }
 
   if (prompt.data) {
     for (const el of prompt.data) {

@@ -105,6 +105,46 @@ describe('GoogleGenAICacheController', () => {
       expect(handle.includes.instructions).toBe(false);
       expect(handle.includes.dataElementCount).toBe(0);
     });
+
+    it('should reuse cache for identical params', async () => {
+      const params = {
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'Be helpful' }],
+        data: [{ type: 'material' as const, id: 'm1', title: 'Doc', content: 'text' }],
+      };
+      const handle1 = await controller.prepare(params);
+      const handle2 = await controller.prepare(params);
+
+      expect(handle1.ref).toBe(handle2.ref);
+      expect(mockClient.caches.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should create separate caches for different params', async () => {
+      mockClient.caches.create
+        .mockResolvedValueOnce({ name: 'cachedContents/cache-1' })
+        .mockResolvedValueOnce({ name: 'cachedContents/cache-2' });
+
+      const handle1 = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'prompt A' }],
+      });
+      const handle2 = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'prompt B' }],
+      });
+
+      expect(handle1.ref).not.toBe(handle2.ref);
+      expect(mockClient.caches.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw when cache.name is missing', async () => {
+      mockClient.caches.create.mockResolvedValueOnce({ name: undefined });
+
+      await expect(controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'prompt' }],
+      })).rejects.toThrow('returned a cache without a name');
+    });
   });
 
   describe('invalidate', () => {
@@ -116,6 +156,21 @@ describe('GoogleGenAICacheController', () => {
 
       await controller.invalidate(handle);
       expect(mockClient.caches.delete).toHaveBeenCalledWith({ name: 'cachedContents/test-cache-123' });
+    });
+
+    it('should allow re-creation after invalidation', async () => {
+      const params = {
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'prompt' }],
+      };
+      const handle1 = await controller.prepare(params);
+      await controller.invalidate(handle1);
+
+      mockClient.caches.create.mockResolvedValueOnce({ name: 'cachedContents/new-cache' });
+      const handle2 = await controller.prepare(params);
+
+      expect(handle2.ref).toBe('cachedContents/new-cache');
+      expect(mockClient.caches.create).toHaveBeenCalledTimes(2);
     });
   });
 

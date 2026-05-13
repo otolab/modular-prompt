@@ -55,7 +55,7 @@ describe('isElementCacheable', () => {
 });
 
 describe('partitionPrompt', () => {
-  it('instructions are always in cacheable', () => {
+  it('instructions without cacheHint go to cacheable', () => {
     const prompt: CompiledPrompt = {
       instructions: [{ type: 'text', content: 'Be helpful' }],
       data: [],
@@ -63,8 +63,25 @@ describe('partitionPrompt', () => {
     };
     const result = partitionPrompt(prompt);
     expect(result.cacheable.instructions).toHaveLength(1);
+    expect(result.volatile.instructions).toHaveLength(0);
     expect(result.cacheable.data).toHaveLength(0);
     expect(result.volatile.data).toHaveLength(0);
+  });
+
+  it('contextual instructions go to volatile', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Be helpful' },
+        { type: 'text', content: 'Current time is 12:00', cacheHint: 'contextual' },
+        { type: 'text', content: 'Static rule', cacheHint: 'static' },
+      ],
+      data: [],
+      output: [],
+    };
+    const result = partitionPrompt(prompt);
+    expect(result.cacheable.instructions).toHaveLength(2);
+    expect(result.volatile.instructions).toHaveLength(1);
+    expect(result.volatile.instructions[0].type).toBe('text');
   });
 
   it('data elements are partitioned by cacheability', () => {
@@ -101,6 +118,7 @@ describe('partitionPrompt', () => {
     };
     const result = partitionPrompt(prompt);
     expect(result.cacheable.instructions).toHaveLength(0);
+    expect(result.volatile.instructions).toHaveLength(0);
     expect(result.cacheable.data).toHaveLength(0);
     expect(result.volatile.data).toHaveLength(0);
     expect(result.volatile.output).toHaveLength(0);
