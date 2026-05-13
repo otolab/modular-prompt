@@ -1,9 +1,9 @@
 import type { Part, Content, FunctionDeclaration } from '@google/genai';
-import type { Element } from '@modular-prompt/core';
+import type { Element, ToolResultKind } from '@modular-prompt/core';
 import type { ToolDefinition } from '../types.js';
 import { contentToString } from '../content-utils.js';
 
-export function toFunctionResponsePayload(kind: string, value: unknown): Record<string, unknown> {
+export function toFunctionResponsePayload(kind: ToolResultKind, value: unknown): Record<string, unknown> {
   if (kind === 'text') {
     return { output: String(value) };
   } else if (kind === 'data') {
@@ -27,7 +27,7 @@ export function elementToPart(element: Element | string): Part {
 
     case 'message': {
       if (element.role === 'tool') {
-        const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
+        const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: ToolResultKind; value: unknown };
         const textValue = toolResultEl.kind === 'text' ? String(toolResultEl.value) : JSON.stringify(toolResultEl.value);
         return { text: `${element.role}: ${textValue}` };
       }
@@ -75,7 +75,7 @@ export function elementToContent(element: Element | string): Content {
 
   if (element.type === 'message') {
     if (element.role === 'tool') {
-      const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: string; value: unknown };
+      const toolResultEl = element as { role: 'tool'; toolCallId: string; name: string; kind: ToolResultKind; value: unknown };
       return {
         role: 'user',
         parts: [{

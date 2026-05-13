@@ -37,14 +37,16 @@ export class GoogleGenAICacheController implements PromptCacheController {
   }
 
   private computeCacheKey(params: CachePrepareParams): string {
-    const normalize = <T>(arr: T[] | undefined): T[] | undefined =>
-      arr && arr.length > 0 ? arr : undefined;
-    const payload = {
-      model: params.model,
-      instructions: normalize(params.instructions),
-      data: normalize(params.data),
-      tools: normalize(params.tools),
-    };
+    const payload: Record<string, unknown> = { model: params.model };
+    if (params.instructions && params.instructions.length > 0) {
+      payload.systemInstruction = params.instructions.map(el => elementToPart(el));
+    }
+    if (params.data && params.data.length > 0) {
+      payload.contents = params.data.map(el => elementToContent(el));
+    }
+    if (params.tools && params.tools.length > 0) {
+      payload.tools = convertTools(params.tools);
+    }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }
 
