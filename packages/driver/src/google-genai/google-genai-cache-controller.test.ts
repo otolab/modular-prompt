@@ -226,6 +226,10 @@ describe('GoogleGenAICacheController', () => {
 
   describe('close', () => {
     it('should delete all managed caches', async () => {
+      mockClient.caches.create
+        .mockResolvedValueOnce({ name: 'cachedContents/close-1' })
+        .mockResolvedValueOnce({ name: 'cachedContents/close-2' });
+
       await controller.prepare({ model: 'gemini-2.5-flash', instructions: [{ type: 'text', content: 'a' }] });
       await controller.prepare({ model: 'gemini-2.5-flash', instructions: [{ type: 'text', content: 'b' }] });
 

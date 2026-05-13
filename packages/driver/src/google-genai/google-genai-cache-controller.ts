@@ -22,7 +22,7 @@ function parseTtlSeconds(ttl: string): number {
 }
 
 export class GoogleGenAICacheController implements PromptCacheController {
-  private managedCaches: string[] = [];
+  private managedCaches = new Set<string>();
   private cacheByHash = new Map<string, CacheEntry>();
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
   private ttlSeconds: number;
@@ -55,7 +55,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
     for (const [key, entry] of this.cacheByHash) {
       if ((now - entry.createdAt) / 1000 >= this.ttlSeconds) {
         this.cacheByHash.delete(key);
-        this.managedCaches = this.managedCaches.filter(n => n !== entry.handle.ref);
+        this.managedCaches.delete(entry.handle.ref);
       }
     }
   }
@@ -116,7 +116,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
       throw new Error('GoogleGenAI caches.create() returned a cache without a name');
     }
     const ref = cache.name;
-    this.managedCaches.push(ref);
+    this.managedCaches.add(ref);
 
     const handle: CacheHandle = {
       ref,
@@ -133,7 +133,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
 
   async invalidate(handle: CacheHandle): Promise<void> {
     await this.client.caches.delete({ name: handle.ref });
-    this.managedCaches = this.managedCaches.filter(n => n !== handle.ref);
+    this.managedCaches.delete(handle.ref);
     for (const [key, entry] of this.cacheByHash) {
       if (entry.handle.ref === handle.ref) {
         this.cacheByHash.delete(key);
@@ -145,11 +145,11 @@ export class GoogleGenAICacheController implements PromptCacheController {
   async close(): Promise<void> {
     await Promise.allSettled([...this.inflightRequests.values()]);
     this.inflightRequests.clear();
-    const deletions = this.managedCaches.map(name =>
+    const deletions = [...this.managedCaches].map(name =>
       this.client.caches.delete({ name }).catch(() => {})
     );
     await Promise.all(deletions);
-    this.managedCaches = [];
+    this.managedCaches.clear();
     this.cacheByHash.clear();
   }
 }
