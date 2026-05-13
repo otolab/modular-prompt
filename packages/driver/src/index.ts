@@ -18,6 +18,19 @@ export type {
 
 export { hasToolCalls, isToolResult } from './types.js';
 
+// Cache utilities
+export type {
+  PromptCacheController,
+  CachePrepareParams,
+  CacheHandle
+} from './cache-controller.js';
+
+export {
+  isElementCacheable,
+  partitionPrompt,
+  type PromptPartition
+} from './cache-utils.js';
+
 // Query Logger
 export { QueryLogger } from './query-logger.js';
 
@@ -94,6 +107,11 @@ export {
   type GoogleGenAIDriverConfig,
   type GoogleGenAIQueryOptions
 } from './google-genai/google-genai-driver.js';
+
+export {
+  GoogleGenAICacheController,
+  type GoogleGenAICacheControllerConfig
+} from './google-genai/google-genai-cache-controller.js';
 
 // Formatter exports (moved from utils to avoid circular dependency)
 export type {
