@@ -109,10 +109,18 @@ export class GoogleGenAIDriver implements AIDriver {
           data: partition.cacheable.data,
           tools: mergedOptions.tools,
         });
-        const uncachedInstructionParts = partition.volatile.instructions.length > 0
-          ? partition.volatile.instructions.map(el => elementToPart(el))
+
+        const instructionsForRequest = handle.includes.instructions
+          ? partition.volatile.instructions
+          : [...partition.cacheable.instructions, ...partition.volatile.instructions];
+        const uncachedInstructionParts = instructionsForRequest.length > 0
+          ? instructionsForRequest.map(el => elementToPart(el))
           : undefined;
-        const volatileElements = [...partition.volatile.data, ...partition.volatile.output];
+
+        const dataForRequest = handle.includes.dataElementCount > 0
+          ? partition.volatile.data
+          : [...partition.cacheable.data, ...partition.volatile.data];
+        const volatileElements = [...dataForRequest, ...partition.volatile.output];
         const contents = volatileElements.length > 0
           ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
           : [{ parts: [{ text: 'Please process according to the instructions.' }] }];

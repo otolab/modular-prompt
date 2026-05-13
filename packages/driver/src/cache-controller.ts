@@ -10,6 +10,7 @@ export interface CachePrepareParams {
 
 export interface CacheHandle {
   ref: string;
+  /** What the cache contains. Drivers use these flags to avoid sending duplicate content. */
   includes: {
     instructions: boolean;
     dataElementCount: number;

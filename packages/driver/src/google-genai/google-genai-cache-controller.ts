@@ -23,12 +23,14 @@ export class GoogleGenAICacheController implements PromptCacheController {
   private cacheByHash = new Map<string, CacheEntry>();
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
   private ttlSeconds: number;
+  private normalizedTtl: string;
 
   constructor(
     private client: GoogleGenAI,
     private config?: GoogleGenAICacheControllerConfig
   ) {
     this.ttlSeconds = parseTtlSeconds(this.config?.ttl || '3600s');
+    this.normalizedTtl = `${this.ttlSeconds}s`;
   }
 
   private computeCacheKey(params: CachePrepareParams): string {
@@ -69,7 +71,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
 
   private async createCache(params: CachePrepareParams, cacheKey: string): Promise<CacheHandle> {
     const cacheConfig: Record<string, unknown> = {
-      ttl: this.config?.ttl || '3600s',
+      ttl: this.normalizedTtl,
       displayName: this.config?.displayName,
     };
 
@@ -127,7 +129,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
   }
 
   async close(): Promise<void> {
-    await Promise.all([...this.inflightRequests.values()]).catch(() => {});
+    await Promise.allSettled([...this.inflightRequests.values()]);
     this.inflightRequests.clear();
     const deletions = this.managedCaches.map(name =>
       this.client.caches.delete({ name }).catch(() => {})

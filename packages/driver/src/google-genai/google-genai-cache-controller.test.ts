@@ -360,6 +360,68 @@ describe('GoogleGenAIDriver with CacheController', () => {
     expect(config.cachedContent).toBe('cachedContents/abc');
   });
 
+  it('should fall back to sending all instructions when cache excludes them', async () => {
+    const controllerNoInstructions: PromptCacheController = {
+      prepare: vi.fn().mockResolvedValue({
+        ref: 'cachedContents/partial',
+        includes: { instructions: false, dataElementCount: 1, tools: false },
+      }),
+      invalidate: vi.fn(),
+      close: vi.fn(),
+    };
+    const partialDriver = new GoogleGenAIDriver({
+      apiKey: 'test-api-key',
+      model: 'gemini-2.5-flash',
+      cacheController: controllerNoInstructions,
+    });
+
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'Static rule' }],
+      data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'text' }],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await partialDriver.query(prompt);
+
+    const generateContent = (partialDriver as any).client.models.generateContent;
+    const config = generateContent.mock.calls[0][0].config;
+    expect(config.cachedContent).toBe('cachedContents/partial');
+    expect(config.systemInstruction).toBeDefined();
+    expect(config.systemInstruction).toHaveLength(1);
+    expect(config.systemInstruction[0].text).toContain('Static rule');
+  });
+
+  it('should fall back to sending all data when cache excludes them', async () => {
+    const controllerNoData: PromptCacheController = {
+      prepare: vi.fn().mockResolvedValue({
+        ref: 'cachedContents/no-data',
+        includes: { instructions: true, dataElementCount: 0, tools: false },
+      }),
+      invalidate: vi.fn(),
+      close: vi.fn(),
+    };
+    const noDataDriver = new GoogleGenAIDriver({
+      apiKey: 'test-api-key',
+      model: 'gemini-2.5-flash',
+      cacheController: controllerNoData,
+    });
+
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'system' }],
+      data: [
+        { type: 'material', id: 'm1', title: 'Doc', content: 'stable' },
+        { type: 'chunk', partOf: 'doc', content: 'volatile' },
+      ],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await noDataDriver.query(prompt);
+
+    const generateContent = (noDataDriver as any).client.models.generateContent;
+    const contents = generateContent.mock.calls[0][0].contents;
+    expect(contents.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('should skip cache when all cacheable elements are empty', async () => {
     const prompt: CompiledPrompt = {
       instructions: [{ type: 'text', content: 'dynamic only', cacheHint: 'contextual' }],
