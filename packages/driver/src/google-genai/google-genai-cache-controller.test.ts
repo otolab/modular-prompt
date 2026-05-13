@@ -146,6 +146,30 @@ describe('GoogleGenAICacheController', () => {
       })).rejects.toThrow('returned a cache without a name');
     });
 
+    it('should re-create cache after TTL expiry', async () => {
+      const shortTtlController = new GoogleGenAICacheController(mockClient as any, { ttl: '1s' });
+      const params = {
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'prompt' }],
+      };
+
+      mockClient.caches.create.mockResolvedValueOnce({ name: 'cachedContents/first' });
+      const handle1 = await shortTtlController.prepare(params);
+      expect(handle1.ref).toBe('cachedContents/first');
+
+      // Simulate TTL expiry by advancing Date.now
+      const originalNow = Date.now;
+      Date.now = () => originalNow() + 2000;
+      try {
+        mockClient.caches.create.mockResolvedValueOnce({ name: 'cachedContents/second' });
+        const handle2 = await shortTtlController.prepare(params);
+        expect(handle2.ref).toBe('cachedContents/second');
+        expect(mockClient.caches.create).toHaveBeenCalledTimes(2);
+      } finally {
+        Date.now = originalNow;
+      }
+    });
+
     it('should coalesce concurrent calls with identical params', async () => {
       let resolveCreate: (val: { name: string }) => void;
       mockClient.caches.create.mockReturnValueOnce(
@@ -334,5 +358,21 @@ describe('GoogleGenAIDriver with CacheController', () => {
     const generateContentStream = (driver as any).client.models.generateContentStream;
     const config = generateContentStream.mock.calls[0][0].config;
     expect(config.cachedContent).toBe('cachedContents/abc');
+  });
+
+  it('should skip cache when all cacheable elements are empty', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'dynamic only', cacheHint: 'contextual' }],
+      data: [{ type: 'chunk', partOf: 'doc', content: 'volatile' }],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await driver.query(prompt);
+
+    expect(mockController.prepare).not.toHaveBeenCalled();
+    const generateContent = (driver as any).client.models.generateContent;
+    const config = generateContent.mock.calls[0][0].config;
+    expect(config.cachedContent).toBeUndefined();
+    expect(config.systemInstruction).toBeDefined();
   });
 });

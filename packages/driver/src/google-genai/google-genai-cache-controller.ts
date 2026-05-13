@@ -8,15 +8,28 @@ export interface GoogleGenAICacheControllerConfig {
   displayName?: string;
 }
 
+interface CacheEntry {
+  handle: CacheHandle;
+  createdAt: number;
+}
+
+function parseTtlSeconds(ttl: string): number {
+  const match = ttl.match(/^(\d+)s$/);
+  return match ? Number(match[1]) : 3600;
+}
+
 export class GoogleGenAICacheController implements PromptCacheController {
   private managedCaches: string[] = [];
-  private cacheByHash = new Map<string, CacheHandle>();
+  private cacheByHash = new Map<string, CacheEntry>();
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
+  private ttlSeconds: number;
 
   constructor(
     private client: GoogleGenAI,
     private config?: GoogleGenAICacheControllerConfig
-  ) {}
+  ) {
+    this.ttlSeconds = parseTtlSeconds(this.config?.ttl || '3600s');
+  }
 
   private computeCacheKey(params: CachePrepareParams): string {
     const payload = {
@@ -32,7 +45,12 @@ export class GoogleGenAICacheController implements PromptCacheController {
     const cacheKey = this.computeCacheKey(params);
     const existing = this.cacheByHash.get(cacheKey);
     if (existing) {
-      return existing;
+      const ageSeconds = (Date.now() - existing.createdAt) / 1000;
+      if (ageSeconds < this.ttlSeconds) {
+        return existing.handle;
+      }
+      this.cacheByHash.delete(cacheKey);
+      this.managedCaches = this.managedCaches.filter(n => n !== existing.handle.ref);
     }
 
     const inflight = this.inflightRequests.get(cacheKey);
@@ -92,7 +110,7 @@ export class GoogleGenAICacheController implements PromptCacheController {
         tools: (params.tools?.length ?? 0) > 0,
       },
     };
-    this.cacheByHash.set(cacheKey, handle);
+    this.cacheByHash.set(cacheKey, { handle, createdAt: Date.now() });
 
     return handle;
   }
@@ -100,8 +118,8 @@ export class GoogleGenAICacheController implements PromptCacheController {
   async invalidate(handle: CacheHandle): Promise<void> {
     await this.client.caches.delete({ name: handle.ref });
     this.managedCaches = this.managedCaches.filter(n => n !== handle.ref);
-    for (const [key, cached] of this.cacheByHash) {
-      if (cached.ref === handle.ref) {
+    for (const [key, entry] of this.cacheByHash) {
+      if (entry.handle.ref === handle.ref) {
         this.cacheByHash.delete(key);
         break;
       }

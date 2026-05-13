@@ -97,20 +97,27 @@ export class GoogleGenAIDriver implements AIDriver {
   }> {
     if (this.cacheController) {
       const partition = partitionPrompt(prompt);
-      const handle = await this.cacheController.prepare({
-        model,
-        instructions: partition.cacheable.instructions,
-        data: partition.cacheable.data,
-        tools: mergedOptions.tools,
-      });
-      const uncachedInstructionParts = partition.volatile.instructions.length > 0
-        ? partition.volatile.instructions.map(el => elementToPart(el))
-        : undefined;
-      const volatileElements = [...partition.volatile.data, ...partition.volatile.output];
-      const contents = volatileElements.length > 0
-        ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
-        : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
-      return { systemInstructionParts: uncachedInstructionParts, contents, cacheHandle: handle };
+      const hasCacheableContent =
+        partition.cacheable.instructions.length > 0 ||
+        partition.cacheable.data.length > 0 ||
+        (mergedOptions.tools && mergedOptions.tools.length > 0);
+
+      if (hasCacheableContent) {
+        const handle = await this.cacheController.prepare({
+          model,
+          instructions: partition.cacheable.instructions,
+          data: partition.cacheable.data,
+          tools: mergedOptions.tools,
+        });
+        const uncachedInstructionParts = partition.volatile.instructions.length > 0
+          ? partition.volatile.instructions.map(el => elementToPart(el))
+          : undefined;
+        const volatileElements = [...partition.volatile.data, ...partition.volatile.output];
+        const contents = volatileElements.length > 0
+          ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
+          : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+        return { systemInstructionParts: uncachedInstructionParts, contents, cacheHandle: handle };
+      }
     }
 
     const systemInstructionParts = prompt.instructions?.map(el => elementToPart(el));
