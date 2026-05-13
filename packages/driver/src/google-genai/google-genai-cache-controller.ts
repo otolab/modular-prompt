@@ -34,25 +34,34 @@ export class GoogleGenAICacheController implements PromptCacheController {
   }
 
   private computeCacheKey(params: CachePrepareParams): string {
+    const normalize = <T>(arr: T[] | undefined): T[] | undefined =>
+      arr && arr.length > 0 ? arr : undefined;
     const payload = {
       model: params.model,
-      instructions: params.instructions,
-      data: params.data,
-      tools: params.tools,
+      instructions: normalize(params.instructions),
+      data: normalize(params.data),
+      tools: normalize(params.tools),
     };
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }
 
+  private sweepExpired(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cacheByHash) {
+      if ((now - entry.createdAt) / 1000 >= this.ttlSeconds) {
+        this.cacheByHash.delete(key);
+        this.managedCaches = this.managedCaches.filter(n => n !== entry.handle.ref);
+      }
+    }
+  }
+
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
+    this.sweepExpired();
     const cacheKey = this.computeCacheKey(params);
+
     const existing = this.cacheByHash.get(cacheKey);
     if (existing) {
-      const ageSeconds = (Date.now() - existing.createdAt) / 1000;
-      if (ageSeconds < this.ttlSeconds) {
-        return existing.handle;
-      }
-      this.cacheByHash.delete(cacheKey);
-      this.managedCaches = this.managedCaches.filter(n => n !== existing.handle.ref);
+      return existing.handle;
     }
 
     const inflight = this.inflightRequests.get(cacheKey);

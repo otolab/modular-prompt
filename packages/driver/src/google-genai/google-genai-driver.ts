@@ -117,7 +117,7 @@ export class GoogleGenAIDriver implements AIDriver {
           ? instructionsForRequest.map(el => elementToPart(el))
           : undefined;
 
-        const dataForRequest = handle.includes.dataElementCount > 0
+        const dataForRequest = handle.includes.dataElementCount >= partition.cacheable.data.length
           ? partition.volatile.data
           : [...partition.cacheable.data, ...partition.volatile.data];
         const volatileElements = [...dataForRequest, ...partition.volatile.output];
