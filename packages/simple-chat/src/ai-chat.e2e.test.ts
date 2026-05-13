@@ -45,7 +45,6 @@ describe('AI Chat E2E Tests', () => {
         chatLog,
         'こんにちは、今日はいい天気ですね。',
         undefined,
-        undefined,
         driver
       );
 
@@ -84,7 +83,6 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'TypeScriptとは何ですか？',
-        undefined,
         undefined,
         driver
       );
@@ -128,7 +126,6 @@ describe('AI Chat E2E Tests', () => {
         chatLog,
         'テストメッセージです',
         undefined,
-        undefined,
         driver
       );
 
@@ -163,7 +160,6 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'こんにちは',
-        undefined,
         undefined,
         driver
       );
@@ -208,7 +204,6 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         '散歩に行きたい',
-        undefined,
         undefined,
         driver
       );
@@ -285,7 +280,6 @@ describe('AI Chat E2E Tests', () => {
         chatLog,
         'ありがとう、とても参考になりました',
         undefined,
-        undefined,
         driver
       );
 
@@ -328,7 +322,6 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'テスト質問',
-        undefined,
         undefined,
         driver
       );

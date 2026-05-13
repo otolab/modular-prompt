@@ -243,7 +243,6 @@ export async function performAIChat(
   chatLog: ChatLog,
   userMessage: string,
   materials?: MaterialContext['materials'],
-  images?: string[],
   overrideDriver?: AIDriver,
 ): Promise<{ response: string; driver: AIDriver }> {
   const spinner = new Spinner();
