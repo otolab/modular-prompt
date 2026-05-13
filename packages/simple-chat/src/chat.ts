@@ -187,7 +187,6 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     chatLog,
     userMessage,
     materials,
-    resolvedImages,
   );
 
   // Add assistant response to log

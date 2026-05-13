@@ -38,6 +38,12 @@ simple-chat -p custom.yaml -l session.json --temperature 0.8 "創造的な回答
 
 # VLMモデルをtext-onlyモードで使用
 simple-chat --model mlx-community/Qwen2-VL-2B-Instruct-4bit --text-only "こんにちは"
+
+# VLMモデルで画像入力（Image-Text-to-Text）
+simple-chat --model mlx-community/Qwen2-VL-2B-Instruct-4bit -i photo.jpg "この画像について説明して"
+
+# 複数画像を入力
+simple-chat --model mlx-community/Qwen2-VL-2B-Instruct-4bit -i img1.jpg -i img2.jpg "これらの画像を比較して"
 ```
 
 ### ライブラリとして使用
@@ -106,6 +112,33 @@ options:
   temperature: 0.3  # より正確な回答のため低めに設定
 ```
 
+#### 2. VLMモデルで画像入力（Image-Text-to-Text）
+
+```yaml
+model: "mlx-community/Qwen2-VL-2B-Instruct-4bit"
+module:
+  objective:
+    - 画像の内容を分析し、ユーザーの質問に回答する
+options:
+  temperature: 0.7
+  maxTokens: 4000
+```
+
+CLIで画像ファイルを指定して使用します：
+
+```bash
+# 単一画像
+simple-chat -p vlm-profile.yaml -i photo.jpg "この画像に何が写っていますか？"
+
+# 複数画像
+simple-chat -p vlm-profile.yaml -i before.jpg -i after.jpg "変更点を教えて"
+
+# チャットログで会話を継続（画像情報もログに保存されます）
+simple-chat -p vlm-profile.yaml -l session.json -i diagram.png "この図の説明をお願いします"
+```
+
+VLMモデルは`config.json`の`model_type`から自動検出されます。画像は最大768pxにリサイズされて処理されます。
+
 #### 3. VLMモデルをテキストのみで使用
 
 ```yaml
@@ -119,7 +152,7 @@ options:
   maxTokens: 4000
 ```
 
-#### 2. 創作支援用プロファイル
+#### 4. 創作支援用プロファイル
 
 ```yaml
 model: "mlx-community/gemma-3-270m-it-qat-4bit"  
