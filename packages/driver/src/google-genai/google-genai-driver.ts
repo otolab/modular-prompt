@@ -234,19 +234,17 @@ export class GoogleGenAIDriver implements AIDriver {
 
       if (cacheHandle) {
         config.cachedContent = cacheHandle.ref;
-        if (!cacheHandle.includes.instructions && systemInstructionParts && systemInstructionParts.length > 0) {
-          config.systemInstruction = systemInstructionParts;
-        }
         if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
           config.tools = convertTools(mergedOptions.tools);
         }
       } else {
-        if (systemInstructionParts && systemInstructionParts.length > 0) {
-          config.systemInstruction = systemInstructionParts;
-        }
         if (mergedOptions.tools && mergedOptions.tools.length > 0) {
           config.tools = convertTools(mergedOptions.tools);
         }
+      }
+
+      if (systemInstructionParts && systemInstructionParts.length > 0) {
+        config.systemInstruction = systemInstructionParts;
       }
 
       // Handle structured outputs
@@ -353,19 +351,17 @@ export class GoogleGenAIDriver implements AIDriver {
 
     if (cacheHandle) {
       config.cachedContent = cacheHandle.ref;
-      if (!cacheHandle.includes.instructions && systemInstructionParts && systemInstructionParts.length > 0) {
-        config.systemInstruction = systemInstructionParts;
-      }
       if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
         config.tools = convertTools(mergedOptions.tools);
       }
     } else {
-      if (systemInstructionParts && systemInstructionParts.length > 0) {
-        config.systemInstruction = systemInstructionParts;
-      }
       if (mergedOptions.tools && mergedOptions.tools.length > 0) {
         config.tools = convertTools(mergedOptions.tools);
       }
+    }
+
+    if (systemInstructionParts && systemInstructionParts.length > 0) {
+      config.systemInstruction = systemInstructionParts;
     }
 
     // Handle structured outputs

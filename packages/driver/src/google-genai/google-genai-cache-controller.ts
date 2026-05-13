@@ -11,6 +11,7 @@ export interface GoogleGenAICacheControllerConfig {
 export class GoogleGenAICacheController implements PromptCacheController {
   private managedCaches: string[] = [];
   private cacheByHash = new Map<string, CacheHandle>();
+  private inflightRequests = new Map<string, Promise<CacheHandle>>();
 
   constructor(
     private client: GoogleGenAI,
@@ -34,6 +35,21 @@ export class GoogleGenAICacheController implements PromptCacheController {
       return existing;
     }
 
+    const inflight = this.inflightRequests.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
+
+    const promise = this.createCache(params, cacheKey);
+    this.inflightRequests.set(cacheKey, promise);
+    try {
+      return await promise;
+    } finally {
+      this.inflightRequests.delete(cacheKey);
+    }
+  }
+
+  private async createCache(params: CachePrepareParams, cacheKey: string): Promise<CacheHandle> {
     const cacheConfig: Record<string, unknown> = {
       ttl: this.config?.ttl || '3600s',
       displayName: this.config?.displayName,

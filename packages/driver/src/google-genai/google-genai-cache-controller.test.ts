@@ -145,6 +145,27 @@ describe('GoogleGenAICacheController', () => {
         instructions: [{ type: 'text' as const, content: 'prompt' }],
       })).rejects.toThrow('returned a cache without a name');
     });
+
+    it('should coalesce concurrent calls with identical params', async () => {
+      let resolveCreate: (val: { name: string }) => void;
+      mockClient.caches.create.mockReturnValueOnce(
+        new Promise(resolve => { resolveCreate = resolve; })
+      );
+
+      const params = {
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'prompt' }],
+      };
+      const p1 = controller.prepare(params);
+      const p2 = controller.prepare(params);
+
+      resolveCreate!({ name: 'cachedContents/coalesced' });
+
+      const [h1, h2] = await Promise.all([p1, p2]);
+      expect(h1.ref).toBe('cachedContents/coalesced');
+      expect(h2.ref).toBe('cachedContents/coalesced');
+      expect(mockClient.caches.create).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('invalidate', () => {
@@ -275,6 +296,26 @@ describe('GoogleGenAIDriver with CacheController', () => {
     const generateContent = (driver as any).client.models.generateContent;
     const contents = generateContent.mock.calls[0][0].contents;
     expect(contents).toHaveLength(2);
+  });
+
+  it('should send volatile instructions as systemInstruction even when cache includes instructions', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Static rule' },
+        { type: 'text', content: 'Current time is 12:00', cacheHint: 'contextual' },
+      ],
+      data: [],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await driver.query(prompt);
+
+    const generateContent = (driver as any).client.models.generateContent;
+    const config = generateContent.mock.calls[0][0].config;
+    expect(config.cachedContent).toBe('cachedContents/abc');
+    expect(config.systemInstruction).toBeDefined();
+    expect(config.systemInstruction).toHaveLength(1);
+    expect(config.systemInstruction[0].text).toContain('Current time');
   });
 
   it('should work with streamQuery', async () => {
