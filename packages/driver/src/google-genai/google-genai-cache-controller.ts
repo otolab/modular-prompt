@@ -15,7 +15,10 @@ interface CacheEntry {
 
 function parseTtlSeconds(ttl: string): number {
   const match = ttl.match(/^(\d+)s$/);
-  return match ? Number(match[1]) : 3600;
+  if (!match) {
+    throw new Error(`Invalid TTL format "${ttl}": expected "<digits>s" (e.g. "3600s")`);
+  }
+  return Number(match[1]);
 }
 
 export class GoogleGenAICacheController implements PromptCacheController {

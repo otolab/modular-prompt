@@ -97,6 +97,11 @@ describe('GoogleGenAICacheController', () => {
       expect(createCall.config.ttl).toBe('7200s');
     });
 
+    it('should throw on invalid TTL format', () => {
+      expect(() => new GoogleGenAICacheController(mockClient as any, { ttl: '1h' }))
+        .toThrow('Invalid TTL format');
+    });
+
     it('should handle empty instructions and data', async () => {
       const handle = await controller.prepare({
         model: 'gemini-2.5-flash',
