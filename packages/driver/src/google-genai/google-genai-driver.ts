@@ -136,6 +136,58 @@ export class GoogleGenAIDriver implements AIDriver {
     return { systemInstructionParts, contents, cacheHandle: null };
   }
 
+  private buildGenerationConfig(
+    mergedOptions: GoogleGenAIQueryOptions,
+    cacheHandle: CacheHandle | null,
+    systemInstructionParts: ReturnType<typeof elementToPart>[] | undefined,
+    prompt: CompiledPrompt
+  ): Record<string, unknown> {
+    const config: Record<string, unknown> = {
+      temperature: mergedOptions.temperature ?? this.defaultTemperature,
+      maxOutputTokens: mergedOptions.maxTokens,
+      topP: mergedOptions.topP,
+      topK: mergedOptions.topK,
+      candidateCount: mergedOptions.candidateCount,
+      stopSequences: mergedOptions.stopSequences,
+      thinkingConfig: mergedOptions.thinkingConfig ??
+        (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
+    };
+
+    if (cacheHandle) {
+      config.cachedContent = cacheHandle.ref;
+      if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
+        config.tools = convertTools(mergedOptions.tools);
+      }
+    } else {
+      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+        config.tools = convertTools(mergedOptions.tools);
+      }
+    }
+
+    if (systemInstructionParts && systemInstructionParts.length > 0) {
+      config.systemInstruction = systemInstructionParts;
+    }
+
+    if (prompt.metadata?.outputSchema) {
+      config.responseMimeType = 'application/json';
+      config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
+    }
+
+    if (mergedOptions.toolChoice) {
+      config.toolConfig = {
+        functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
+      };
+    }
+
+    Object.keys(config).forEach(key => {
+      if (config[key] === undefined) {
+        delete config[key];
+      }
+    });
+
+    return config;
+  }
+
   private chatMessageToContent(message: ChatMessage): Content {
     if (hasToolCalls(message)) {
       const parts: Part[] = [];
@@ -235,53 +287,8 @@ export class GoogleGenAIDriver implements AIDriver {
       const { systemInstructionParts, contents, cacheHandle } =
         await this.buildPromptPayload(prompt, mergedOptions, model);
 
-      // Create generation config
-      const config: Record<string, unknown> = {
-        temperature: mergedOptions.temperature ?? this.defaultTemperature,
-        maxOutputTokens: mergedOptions.maxTokens,
-        topP: mergedOptions.topP,
-        topK: mergedOptions.topK,
-        candidateCount: mergedOptions.candidateCount,
-        stopSequences: mergedOptions.stopSequences,
-        thinkingConfig: mergedOptions.thinkingConfig ??
-          (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
-      };
+      const config = this.buildGenerationConfig(mergedOptions, cacheHandle, systemInstructionParts, prompt);
 
-      if (cacheHandle) {
-        config.cachedContent = cacheHandle.ref;
-        if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
-          config.tools = convertTools(mergedOptions.tools);
-        }
-      } else {
-        if (mergedOptions.tools && mergedOptions.tools.length > 0) {
-          config.tools = convertTools(mergedOptions.tools);
-        }
-      }
-
-      if (systemInstructionParts && systemInstructionParts.length > 0) {
-        config.systemInstruction = systemInstructionParts;
-      }
-
-      // Handle structured outputs
-      if (prompt.metadata?.outputSchema) {
-        config.responseMimeType = 'application/json';
-        config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
-      }
-
-      if (mergedOptions.toolChoice) {
-        config.toolConfig = {
-          functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
-        };
-      }
-
-      // Remove undefined values
-      Object.keys(config).forEach(key => {
-        if (config[key] === undefined) {
-          delete config[key];
-        }
-      });
-
-      // Generate content
       const response = await this.client.models.generateContent({
         model,
         contents,
@@ -352,53 +359,8 @@ export class GoogleGenAIDriver implements AIDriver {
     const { systemInstructionParts, contents, cacheHandle } =
       await this.buildPromptPayload(prompt, mergedOptions, model);
 
-    // Create generation config
-    const config: Record<string, unknown> = {
-      temperature: mergedOptions.temperature ?? this.defaultTemperature,
-      maxOutputTokens: mergedOptions.maxTokens,
-      topP: mergedOptions.topP,
-      topK: mergedOptions.topK,
-      candidateCount: mergedOptions.candidateCount,
-      stopSequences: mergedOptions.stopSequences,
-      thinkingConfig: mergedOptions.thinkingConfig ??
-        (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
-    };
+    const config = this.buildGenerationConfig(mergedOptions, cacheHandle, systemInstructionParts, prompt);
 
-    if (cacheHandle) {
-      config.cachedContent = cacheHandle.ref;
-      if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
-        config.tools = convertTools(mergedOptions.tools);
-      }
-    } else {
-      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
-        config.tools = convertTools(mergedOptions.tools);
-      }
-    }
-
-    if (systemInstructionParts && systemInstructionParts.length > 0) {
-      config.systemInstruction = systemInstructionParts;
-    }
-
-    // Handle structured outputs
-    if (prompt.metadata?.outputSchema) {
-      config.responseMimeType = 'application/json';
-      config.responseSchema = this.convertJsonSchema(prompt.metadata.outputSchema);
-    }
-
-    if (mergedOptions.toolChoice) {
-      config.toolConfig = {
-        functionCallingConfig: this.convertToolChoice(mergedOptions.toolChoice),
-      };
-    }
-
-    // Remove undefined values
-    Object.keys(config).forEach(key => {
-      if (config[key] === undefined) {
-        delete config[key];
-      }
-    });
-
-    // Generate content stream
     const streamResponse = await this.client.models.generateContentStream({
       model,
       contents,
