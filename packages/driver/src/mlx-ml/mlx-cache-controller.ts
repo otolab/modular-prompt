@@ -4,7 +4,12 @@ import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { MlxProcess } from './process/index.js';
+import type { MlxMessage } from './process/types.js';
 import { convertMessages } from './mlx-driver.js';
+
+export interface MlxCacheControllerConfig {
+  chatProcessor?: (messages: MlxMessage[]) => MlxMessage[];
+}
 
 export class MlxCacheController implements PromptCacheController {
   private cacheByHash = new Map<string, CacheHandle>();
@@ -12,7 +17,8 @@ export class MlxCacheController implements PromptCacheController {
 
   constructor(
     private process: MlxProcess,
-    private formatterOptions: FormatterOptions = {}
+    private formatterOptions: FormatterOptions = {},
+    private config?: MlxCacheControllerConfig
   ) {}
 
   private computeCacheKey(params: CachePrepareParams): string {
@@ -27,6 +33,13 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
+    const hasContent =
+      (params.instructions?.length ?? 0) > 0 ||
+      (params.data?.length ?? 0) > 0;
+    if (!hasContent) {
+      throw new Error('Cannot prepare cache with no cacheable content');
+    }
+
     const cacheKey = this.computeCacheKey(params);
 
     const existing = this.cacheByHash.get(cacheKey);
@@ -56,7 +69,11 @@ export class MlxCacheController implements PromptCacheController {
     };
 
     const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
-    const mlxMessages = convertMessages(chatMessages);
+    let mlxMessages = convertMessages(chatMessages);
+
+    if (this.config?.chatProcessor) {
+      mlxMessages = this.config.chatProcessor(mlxMessages);
+    }
 
     const cacheId = `mlx-cache-${cacheKey.slice(0, 16)}`;
     await this.process.cachePrefill(cacheId, mlxMessages);

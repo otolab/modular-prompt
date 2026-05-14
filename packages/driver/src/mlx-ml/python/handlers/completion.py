@@ -18,8 +18,6 @@ def handle_completion(
     if options is None:
         options = {}
 
-    prompt_cache = backend.cache_get(cache_id) if cache_id else None
-
     final_options = dict(options)
     if images:
         final_options["max_image_size"] = max_image_size
@@ -31,6 +29,7 @@ def handle_completion(
         else:
             sys.stderr.write(f"--- prompt\n{prompt}\n")
 
+    prompt_cache = backend.cache_get(cache_id) if cache_id else None
     for response in backend.stream_generate(prompt, final_options, images, prompt_cache=prompt_cache):
         print(response.text.replace("\0", ""), end="", flush=True)
 

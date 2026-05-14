@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import sys
 from typing import Any, Iterator
 
@@ -79,7 +80,10 @@ class MlxLmBackend(ModelBackend):
             sys.stderr.write(f"Cache deleted: {cache_id}\n")
 
     def cache_get(self, cache_id: str) -> list | None:
-        return self._caches.get(cache_id)
+        cached = self._caches.get(cache_id)
+        if cached is None:
+            return None
+        return copy.deepcopy(cached)
 
     def supports_vision(self) -> bool:
         return False

@@ -38,11 +38,14 @@ class Server:
                 break
             self._dispatch(req)
 
+    def _error_response(self, message: str) -> None:
+        sys.stderr.write(f"Error: {message}\n")
+        print(json.dumps({"error": message}), end='\0', flush=True)
+
     def _dispatch(self, req: dict):
         method = req.get('method')
         if not method:
-            sys.stderr.write("Error: 'method' field is required\n")
-            print('\n', end='\0', flush=True)
+            self._error_response("'method' field is required")
             return
 
         try:
@@ -52,8 +55,7 @@ class Server:
             elif method == 'format_test':
                 messages = req.get('messages')
                 if not messages:
-                    sys.stderr.write("Error: 'messages' field is required for format_test method\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'messages' field is required for format_test method")
                     return
                 handle_format_test(self.backend, self.capabilities, messages, req.get('options', {}), req.get('tools'))
 
@@ -61,24 +63,21 @@ class Server:
                 cache_id = req.get('cache_id')
                 messages = req.get('messages')
                 if not cache_id or not messages:
-                    sys.stderr.write("Error: 'cache_id' and 'messages' fields are required for cache_prefill\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'cache_id' and 'messages' fields are required for cache_prefill")
                     return
                 handle_cache_prefill(self.backend, self.capabilities, cache_id, messages)
 
             elif method == 'cache_delete':
                 cache_id = req.get('cache_id')
                 if not cache_id:
-                    sys.stderr.write("Error: 'cache_id' field is required for cache_delete\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'cache_id' field is required for cache_delete")
                     return
                 handle_cache_delete(self.backend, cache_id)
 
             elif method == 'chat':
                 messages = req.get('messages')
                 if not messages:
-                    sys.stderr.write("Error: 'messages' field is required for chat method\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'messages' field is required for chat method")
                     return
                 handle_chat(
                     self.backend,
@@ -96,8 +95,7 @@ class Server:
             elif method == 'completion':
                 prompt = req.get('prompt')
                 if not prompt:
-                    sys.stderr.write("Error: 'prompt' field is required for completion method\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'prompt' field is required for completion method")
                     return
                 images = req.get('images', [])
                 handle_completion(
@@ -110,9 +108,7 @@ class Server:
                 )
 
             else:
-                sys.stderr.write(f"Error: Unknown method '{method}'\n")
-                print('\n', end='\0', flush=True)
+                self._error_response(f"Unknown method '{method}'")
 
         except Exception as e:
-            sys.stderr.write(f"Error processing request: {e}\n")
-            print('\n', end='\0', flush=True)
+            self._error_response(f"Error processing request: {e}")

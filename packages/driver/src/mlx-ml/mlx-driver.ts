@@ -15,7 +15,8 @@ import { formatToolDefinitionsAsText } from './tool-call-parser.js';
 import { contentToString, extractImagePaths } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
 import type { PromptCacheController } from '../cache-controller.js';
-import { partitionPrompt } from '../cache-utils.js';
+import { extractCacheablePrefix } from '../cache-utils.js';
+import { MlxCacheController } from './mlx-cache-controller.js';
 
 // ========================================================================
 // Utility Functions (exported for testing)
@@ -130,8 +131,8 @@ export interface MlxDriverConfig {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
-  /** Prompt cache controller */
-  cacheController?: PromptCacheController;
+  /** KVキャッシュによるプロンプトプレフィルを有効化（LMバックエンドのみ） */
+  enableCaching?: boolean;
 }
 
 /**
@@ -183,6 +184,7 @@ export class MlxDriver implements AIDriver {
   private maxImageSize: number;
   private queryLogger = new QueryLogger('MLX');
   private cacheController?: PromptCacheController;
+  private enableCaching: boolean;
 
   get defaultOptions(): Partial<MlxMlModelOptions> {
     return this._defaultOptions;
@@ -199,7 +201,7 @@ export class MlxDriver implements AIDriver {
     this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
     this.modelProcessor = createModelSpecificProcessor(config.model);
-    this.cacheController = config.cacheController;
+    this.enableCaching = config.enableCaching ?? false;
     if (config.drafterModel) {
       this.queryLogger.log.info(`Drafter model: ${config.drafterModel}`);
     }
@@ -227,6 +229,15 @@ export class MlxDriver implements AIDriver {
           chatRestrictions: this.runtimeInfo.chat_restrictions,
           modelKind: this.runtimeInfo.model_kind,
         });
+
+        // Initialize cache controller after runtime info is available (LM only)
+        if (this.enableCaching && !this.cacheController && this.runtimeInfo.model_kind !== 'vlm') {
+          this.cacheController = new MlxCacheController(
+            this.process,
+            this.formatterOptions,
+            { chatProcessor: (msgs) => this.modelProcessor.applyChatSpecificProcessing(msgs) }
+          );
+        }
       } catch (error) {
         this.queryLogger.log.error('Failed to get MLX runtime info:', error instanceof Error ? error.message : String(error));
       }
@@ -293,29 +304,11 @@ export class MlxDriver implements AIDriver {
       };
     }
 
-    // Cache: cacheable部分をプレフィルし、cacheIdを取得
-    let cacheId: string | undefined;
-    if (this.cacheController) {
-      const partition = partitionPrompt(augmentedPrompt);
-      const hasCacheableContent =
-        partition.cacheable.instructions.length > 0 ||
-        partition.cacheable.data.length > 0;
-
-      if (hasCacheableContent) {
-        const handle = await this.cacheController.prepare({
-          model: this.model,
-          instructions: partition.cacheable.instructions,
-          data: partition.cacheable.data,
-        });
-        cacheId = handle.ref;
-      }
-    }
-
     let stream: Readable;
     if (api === 'completion') {
       let formattedPrompt = formatCompletionPrompt(augmentedPrompt, this.formatterOptions);
       formattedPrompt = this.modelProcessor.applyCompletionSpecificProcessing(formattedPrompt);
-      stream = await this.process.completion(formattedPrompt, mlxOptions, undefined, undefined, cacheId);
+      stream = await this.process.completion(formattedPrompt, mlxOptions);
     } else {
       const messages = formatPromptAsMessages(augmentedPrompt, this.formatterOptions);
       const vlm = this.isVLM();
@@ -325,6 +318,26 @@ export class MlxDriver implements AIDriver {
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
+
+      // Cache: chat APIのみ、nativeTools未使用時のみキャッシュを使用
+      // (completion APIはフォーマット不一致、nativeToolsはchat template出力に影響)
+      let cacheId: string | undefined;
+      if (this.cacheController && !nativeTools) {
+        const prefix = extractCacheablePrefix(augmentedPrompt);
+        const hasCacheableContent =
+          prefix.instructions.length > 0 ||
+          prefix.data.length > 0;
+
+        if (hasCacheableContent) {
+          const handle = await this.cacheController.prepare({
+            model: this.model,
+            instructions: prefix.instructions,
+            data: prefix.data,
+          });
+          cacheId = handle.ref;
+        }
+      }
+
       stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cacheId);
     }
 

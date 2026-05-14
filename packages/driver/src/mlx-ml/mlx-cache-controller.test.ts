@@ -71,13 +71,11 @@ describe('MlxCacheController', () => {
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle empty instructions and data', async () => {
-      const handle = await controller.prepare({
+    it('should throw on empty instructions and data', async () => {
+      await expect(controller.prepare({
         model: 'test-model',
-      });
-
-      expect(handle.includes.instructions).toBe(false);
-      expect(handle.includes.dataElementCount).toBe(0);
+      })).rejects.toThrow('Cannot prepare cache with no cacheable content');
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
 
     it('should coalesce concurrent calls with identical params', async () => {
@@ -153,6 +151,68 @@ describe('MlxCacheController', () => {
 
       await controller.close();
       expect(mockProcess.cacheDelete).toHaveBeenCalledTimes(2);
+    });
+
+    it('should wait for inflight requests before closing', async () => {
+      let resolvePrefill: (val: { cache_id: string }) => void;
+      mockProcess.cachePrefill.mockReturnValueOnce(
+        new Promise(resolve => { resolvePrefill = resolve; })
+      );
+
+      const preparePromise = controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'inflight' }],
+      });
+
+      const closePromise = controller.close();
+
+      resolvePrefill!({ cache_id: 'mlx-cache-done' });
+      await preparePromise;
+      await closePromise;
+
+      expect(mockProcess.cacheDelete).toHaveBeenCalledTimes(1);
+    });
+
+    it('should suppress errors during cache deletion on close', async () => {
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+      mockProcess.cacheDelete.mockRejectedValueOnce(new Error('delete failed'));
+
+      await expect(controller.close()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('error handling', () => {
+    it('should propagate prefill errors', async () => {
+      mockProcess.cachePrefill.mockRejectedValueOnce(new Error('prefill failed'));
+
+      await expect(controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      })).rejects.toThrow('prefill failed');
+    });
+
+    it('should apply chatProcessor to messages', async () => {
+      const chatProcessor = vi.fn((msgs: any[]) => [
+        { role: 'system', content: 'processed' },
+        ...msgs.slice(1),
+      ]);
+      const ctrlWithProcessor = new MlxCacheController(
+        mockProcess as any,
+        {},
+        { chatProcessor },
+      );
+
+      await ctrlWithProcessor.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'original' }],
+      });
+
+      expect(chatProcessor).toHaveBeenCalledTimes(1);
+      const [, messages] = mockProcess.cachePrefill.mock.calls[0];
+      expect(messages[0].content).toBe('processed');
     });
   });
 });

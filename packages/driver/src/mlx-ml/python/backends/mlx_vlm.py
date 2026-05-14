@@ -40,7 +40,8 @@ class MlxVlmBackend(ModelBackend):
         return self.processor
 
     def stream_generate(
-        self, prompt: str | list[int], options: dict, images: list | None = None
+        self, prompt: str | list[int], options: dict, images: list | None = None,
+        prompt_cache: list | None = None,
     ) -> Iterator[Any]:
         if self.model is None or self.processor is None:
             raise RuntimeError("Model is not loaded")

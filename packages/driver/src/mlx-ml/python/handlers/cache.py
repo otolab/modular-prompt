@@ -16,18 +16,11 @@ def handle_cache_prefill(
     tokenizer = backend.get_tokenizer()
 
     if supports_chat_template(tokenizer):
-        try:
-            prompt = tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=False,
-                tokenize=False,
-            )
-        except TypeError:
-            prompt = tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=False,
-                tokenize=False,
-            )
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=False,
+            tokenize=False,
+        )
     else:
         prompt = generate_merged_prompt(messages, capabilities)
 
