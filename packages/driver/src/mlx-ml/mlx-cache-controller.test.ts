@@ -135,7 +135,7 @@ describe('MlxCacheController', () => {
       const handle1 = await controller.prepare(params);
       await controller.invalidate(handle1);
 
-      const handle2 = await controller.prepare(params);
+      await controller.prepare(params);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
     });
   });

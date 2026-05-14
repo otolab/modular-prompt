@@ -14,7 +14,7 @@ import { extractJSON } from '@modular-prompt/utils';
 import { formatToolDefinitionsAsText } from './tool-call-parser.js';
 import { contentToString, extractImagePaths } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
-import type { PromptCacheController, CacheHandle } from '../cache-controller.js';
+import type { PromptCacheController } from '../cache-controller.js';
 import { partitionPrompt } from '../cache-utils.js';
 
 // ========================================================================
