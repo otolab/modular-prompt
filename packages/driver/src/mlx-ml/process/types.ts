@@ -43,7 +43,7 @@ export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxT
 
 // API v2.0 リクエスト型定義
 export interface MlxBaseRequest {
-  method: 'capabilities' | 'format_test' | 'chat' | 'completion';
+  method: 'capabilities' | 'format_test' | 'chat' | 'completion' | 'cache_prefill' | 'cache_delete';
 }
 
 export interface MlxCapabilitiesRequest extends MlxBaseRequest {
@@ -74,20 +74,41 @@ export interface MlxChatRequest extends MlxBaseRequest {
   primer?: string;
   tools?: MlxToolDefinition[];
   options?: MlxMlModelOptions;
-  images?: string[];  // ファイルパス配列（VLM用）
-  maxImageSize?: number;  // 画像の最大辺ピクセル数
+  images?: string[];
+  maxImageSize?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
+  cache_id?: string;
 }
 
 export interface MlxCompletionRequest extends MlxBaseRequest {
   method: 'completion';
   prompt: string;
   options?: MlxMlModelOptions;
-  images?: string[];  // ファイルパス配列（VLM用）
-  maxImageSize?: number;  // 画像の最大辺ピクセル数
+  images?: string[];
+  maxImageSize?: number;
+  cache_id?: string;
 }
 
-export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest;
+export interface MlxCachePrefillRequest extends MlxBaseRequest {
+  method: 'cache_prefill';
+  cache_id: string;
+  messages: MlxMessage[];
+}
+
+export interface MlxCacheDeleteRequest extends MlxBaseRequest {
+  method: 'cache_delete';
+  cache_id: string;
+}
+
+export interface MlxCachePrefillResult {
+  cache_id: string;
+}
+
+export interface MlxCacheDeleteResult {
+  ok: boolean;
+}
+
+export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest | MlxCachePrefillRequest | MlxCacheDeleteRequest;
 
 /** MLX-LMが認識するtool_parser_type */
 export type KnownToolParserType =
@@ -178,6 +199,20 @@ export interface FormatTestQueueItem extends BaseQueueItem {
   expectJsonResponse: true;
 }
 
+export interface CachePrefillQueueItem extends BaseQueueItem {
+  request: MlxCachePrefillRequest;
+  resolve: (value: MlxCachePrefillResult) => void;
+  reject: (reason: Error) => void;
+  expectJsonResponse: true;
+}
+
+export interface CacheDeleteQueueItem extends BaseQueueItem {
+  request: MlxCacheDeleteRequest;
+  resolve: (value: MlxCacheDeleteResult) => void;
+  reject: (reason: Error) => void;
+  expectJsonResponse: true;
+}
+
 export interface StreamingQueueItem extends BaseQueueItem {
   request: MlxChatRequest | MlxCompletionRequest | LegacyMlxRequest;
   resolve: (value: Readable) => void;
@@ -185,7 +220,7 @@ export interface StreamingQueueItem extends BaseQueueItem {
   expectJsonResponse?: false;
 }
 
-export type QueueItem = CapabilitiesQueueItem | FormatTestQueueItem | StreamingQueueItem;
+export type QueueItem = CapabilitiesQueueItem | FormatTestQueueItem | CachePrefillQueueItem | CacheDeleteQueueItem | StreamingQueueItem;
 
 // Node.js stream import
 import { Readable } from 'stream';

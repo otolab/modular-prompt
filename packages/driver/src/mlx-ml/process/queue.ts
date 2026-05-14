@@ -11,15 +11,21 @@ import type {
   QueueItem,
   CapabilitiesQueueItem,
   FormatTestQueueItem,
+  CachePrefillQueueItem,
+  CacheDeleteQueueItem,
   StreamingQueueItem,
   MlxCapabilitiesRequest,
   MlxFormatTestRequest,
   MlxChatRequest,
   MlxCompletionRequest,
+  MlxCachePrefillRequest,
+  MlxCacheDeleteRequest,
   MlxMessage,
   MlxMlModelOptions,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxCachePrefillResult,
+  MlxCacheDeleteResult,
   MlxToolDefinition
 } from './types.js';
 
@@ -69,7 +75,7 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high'): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cacheId?: string): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
@@ -77,9 +83,10 @@ export class QueueManager {
           messages,
           primer,
           tools,
-          options: mapOptionsToPython(options, true),  // strict mode: true
+          options: mapOptionsToPython(options, true),
           ...(images?.length ? { images, maxImageSize } : {}),
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+          ...(cacheId ? { cache_id: cacheId } : {}),
         };
         this.queue.push({
           request,
@@ -93,14 +100,48 @@ export class QueueManager {
     });
   }
 
-  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
+  addCachePrefillRequest(cacheId: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
+    return new Promise((resolve, reject) => {
+      const request: MlxCachePrefillRequest = {
+        method: 'cache_prefill',
+        cache_id: cacheId,
+        messages,
+      };
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true,
+      } as CachePrefillQueueItem);
+      this.processNext();
+    });
+  }
+
+  addCacheDeleteRequest(cacheId: string): Promise<MlxCacheDeleteResult> {
+    return new Promise((resolve, reject) => {
+      const request: MlxCacheDeleteRequest = {
+        method: 'cache_delete',
+        cache_id: cacheId,
+      };
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true,
+      } as CacheDeleteQueueItem);
+      this.processNext();
+    });
+  }
+
+  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cacheId?: string): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxCompletionRequest = {
           method: 'completion',
           prompt,
-          options: mapOptionsToPython(options, true),  // strict mode: true
-          ...(images?.length ? { images, maxImageSize } : {})
+          options: mapOptionsToPython(options, true),
+          ...(images?.length ? { images, maxImageSize } : {}),
+          ...(cacheId ? { cache_id: cacheId } : {}),
         };
         this.queue.push({
           request,
@@ -146,9 +187,12 @@ export class QueueManager {
             (queueItem as CapabilitiesQueueItem).resolve(jsonResponse);
           } else if (queueItem.request.method === 'format_test') {
             (queueItem as FormatTestQueueItem).resolve(jsonResponse);
+          } else if (queueItem.request.method === 'cache_prefill') {
+            (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
+          } else if (queueItem.request.method === 'cache_delete') {
+            (queueItem as CacheDeleteQueueItem).resolve(jsonResponse);
           }
         } catch (e) {
-          // エラー時のフォールバック処理
           if (queueItem.request.method === 'capabilities') {
             (queueItem as CapabilitiesQueueItem).resolve({
               methods: [],
@@ -162,13 +206,18 @@ export class QueueManager {
               model_specific_processing: null,
               error: e instanceof Error ? e.message : 'Unknown error'
             });
+          } else if (queueItem.request.method === 'cache_prefill') {
+            (queueItem as CachePrefillQueueItem).reject(
+              e instanceof Error ? e : new Error(String(e))
+            );
+          } else if (queueItem.request.method === 'cache_delete') {
+            (queueItem as CacheDeleteQueueItem).reject(
+              e instanceof Error ? e : new Error(String(e))
+            );
           }
         }
       }
     }
-    // 注: isProcessing/processNext は onRequestCompleted() に一元化
-    // handleJsonResponse と onRequestCompleted の二重呼び出しによる
-    // isProcessing フラグの不整合を防止
   }
 
   onRequestCompleted(): void {

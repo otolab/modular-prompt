@@ -12,6 +12,8 @@ import type {
   MlxMessage,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxCachePrefillResult,
+  MlxCacheDeleteResult,
   MlxToolDefinition
 } from './types.js';
 import { QueueManager, QueueManagerCallbacks } from './queue.js';
@@ -25,6 +27,8 @@ export type {
   MlxMessage,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxCachePrefillResult,
+  MlxCacheDeleteResult,
   MlxToolDefinition
 };
 
@@ -84,16 +88,23 @@ export class MlxProcess {
     return this.queueManager.addFormatTestRequest(messages, options);
   }
 
-  // API v2.0 Chat - chat APIを直接使用
-  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high'): Promise<Readable> {
-    // chat APIを直接使用（前処理はドライバーで実施済み）
-    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort);
+  // Cache operations
+  async cachePrefill(cacheId: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
+    return this.queueManager.addCachePrefillRequest(cacheId, messages);
   }
 
-  // API v2.0 Completion - completion APIを直接使用
-  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
-    // completion APIを直接使用（前処理はドライバーで実施済み）
-    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize);
+  async cacheDelete(cacheId: string): Promise<MlxCacheDeleteResult> {
+    return this.queueManager.addCacheDeleteRequest(cacheId);
+  }
+
+  // API v2.0 Chat
+  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cacheId?: string): Promise<Readable> {
+    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cacheId);
+  }
+
+  // API v2.0 Completion
+  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cacheId?: string): Promise<Readable> {
+    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize, cacheId);
   }
 
 

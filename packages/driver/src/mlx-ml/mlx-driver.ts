@@ -14,6 +14,8 @@ import { extractJSON } from '@modular-prompt/utils';
 import { formatToolDefinitionsAsText } from './tool-call-parser.js';
 import { contentToString, extractImagePaths } from '../content-utils.js';
 import { QueryLogger } from '../query-logger.js';
+import type { PromptCacheController, CacheHandle } from '../cache-controller.js';
+import { partitionPrompt } from '../cache-utils.js';
 
 // ========================================================================
 // Utility Functions (exported for testing)
@@ -128,6 +130,8 @@ export interface MlxDriverConfig {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** Prompt cache controller */
+  cacheController?: PromptCacheController;
 }
 
 /**
@@ -178,6 +182,7 @@ export class MlxDriver implements AIDriver {
   private formatterOptions: FormatterOptions;
   private maxImageSize: number;
   private queryLogger = new QueryLogger('MLX');
+  private cacheController?: PromptCacheController;
 
   get defaultOptions(): Partial<MlxMlModelOptions> {
     return this._defaultOptions;
@@ -194,6 +199,7 @@ export class MlxDriver implements AIDriver {
     this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
     this.modelProcessor = createModelSpecificProcessor(config.model);
+    this.cacheController = config.cacheController;
     if (config.drafterModel) {
       this.queryLogger.log.info(`Drafter model: ${config.drafterModel}`);
     }
@@ -278,7 +284,6 @@ export class MlxDriver implements AIDriver {
         this.runtimeInfo?.special_tokens,
         this.runtimeInfo?.features?.chat_template?.tool_call_format
       );
-      // instructions の末尾にTextElementとして追加
       augmentedPrompt = {
         ...prompt,
         instructions: [
@@ -288,28 +293,39 @@ export class MlxDriver implements AIDriver {
       };
     }
 
+    // Cache: cacheable部分をプレフィルし、cacheIdを取得
+    let cacheId: string | undefined;
+    if (this.cacheController) {
+      const partition = partitionPrompt(augmentedPrompt);
+      const hasCacheableContent =
+        partition.cacheable.instructions.length > 0 ||
+        partition.cacheable.data.length > 0;
+
+      if (hasCacheableContent) {
+        const handle = await this.cacheController.prepare({
+          model: this.model,
+          instructions: partition.cacheable.instructions,
+          data: partition.cacheable.data,
+        });
+        cacheId = handle.ref;
+      }
+    }
+
     let stream: Readable;
     if (api === 'completion') {
-      // completion APIを使用 - 標準フォーマッターを使用
-      // completion APIではtools非対応
       let formattedPrompt = formatCompletionPrompt(augmentedPrompt, this.formatterOptions);
-      // モデル固有の後処理を適用
       formattedPrompt = this.modelProcessor.applyCompletionSpecificProcessing(formattedPrompt);
-      stream = await this.process.completion(formattedPrompt, mlxOptions);
+      stream = await this.process.completion(formattedPrompt, mlxOptions, undefined, undefined, cacheId);
     } else {
-      // chat APIを使用 - メッセージ変換して処理
       const messages = formatPromptAsMessages(augmentedPrompt, this.formatterOptions);
       const vlm = this.isVLM();
       let mlxMessages = convertMessages(messages, vlm);
-      // chat APIではチャット処理を適用
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
-      // nativeツール対応の場合のみPythonにtoolsを渡す
       const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
-      // VLMの場合は画像パスを抽出（ファイル読み込み用）
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort);
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cacheId);
     }
 
     return stream;
@@ -449,6 +465,7 @@ export class MlxDriver implements AIDriver {
    * Close the process
    */
   async close(): Promise<void> {
+    await this.cacheController?.close();
     await this.process.exit();
   }
 }
