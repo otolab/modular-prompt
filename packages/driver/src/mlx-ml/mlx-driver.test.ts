@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MlxDriver, convertMessages } from './mlx-driver.js';
+import { MlxDriver } from './mlx-driver.js';
+import { convertMessages } from './mlx-message-utils.js';
 import type { ChatMessage } from '../formatter/types.js';
 
 // Mock the MlxProcess

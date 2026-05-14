@@ -8,7 +8,7 @@ import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { MlxProcess } from './process/index.js';
-import { convertMessages } from './mlx-driver.js';
+import { convertMessages } from './mlx-message-utils.js';
 import { Logger } from '@modular-prompt/utils';
 
 const logger = new Logger({ prefix: 'MLX', context: 'cache' });
@@ -49,7 +49,7 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private generateCachePath(cacheKey: string): string {
-    return join(this.cacheDir, `${cacheKey.slice(0, 16)}.safetensors`);
+    return join(this.cacheDir, `${cacheKey}.safetensors`);
   }
 
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
