@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_cache_prefill, handle_cache_delete, handle_capabilities, handle_chat, handle_completion, handle_format_test
+from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test
 
 
 MAX_READ_LINES = 10000
@@ -60,19 +60,12 @@ class Server:
                 handle_format_test(self.backend, self.capabilities, messages, req.get('options', {}), req.get('tools'))
 
             elif method == 'cache_prefill':
-                cache_id = req.get('cache_id')
+                cache_path = req.get('cache_path')
                 messages = req.get('messages')
-                if not cache_id or not messages:
-                    self._error_response("'cache_id' and 'messages' fields are required for cache_prefill")
+                if not cache_path or not messages:
+                    self._error_response("'cache_path' and 'messages' fields are required for cache_prefill")
                     return
-                handle_cache_prefill(self.backend, self.capabilities, cache_id, messages)
-
-            elif method == 'cache_delete':
-                cache_id = req.get('cache_id')
-                if not cache_id:
-                    self._error_response("'cache_id' field is required for cache_delete")
-                    return
-                handle_cache_delete(self.backend, cache_id)
+                handle_cache_prefill(self.backend, self.capabilities, cache_path, messages)
 
             elif method == 'chat':
                 messages = req.get('messages')
@@ -89,7 +82,7 @@ class Server:
                     images=req.get('images', []),
                     max_image_size=req.get('maxImageSize', 768),
                     reasoning_effort=req.get('reasoning_effort'),
-                    cache_id=req.get('cache_id'),
+                    cache_path=req.get('cache_path'),
                 )
 
             elif method == 'completion':
@@ -104,7 +97,7 @@ class Server:
                     options=req.get('options', {}),
                     images=images if images else None,
                     max_image_size=req.get('maxImageSize', 768),
-                    cache_id=req.get('cache_id'),
+                    cache_path=req.get('cache_path'),
                 )
 
             else:

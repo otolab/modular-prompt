@@ -12,7 +12,7 @@ def handle_completion(
     options: dict | None = None,
     images: list | None = None,
     max_image_size: int = 768,
-    cache_id: str | None = None,
+    cache_path: str | None = None,
 ) -> None:
     """completion API の処理"""
     if options is None:
@@ -29,7 +29,7 @@ def handle_completion(
         else:
             sys.stderr.write(f"--- prompt\n{prompt}\n")
 
-    prompt_cache = backend.cache_get(cache_id) if cache_id else None
+    prompt_cache = backend.load_cache_from_file(cache_path) if cache_path else None
     for response in backend.stream_generate(prompt, final_options, images, prompt_cache=prompt_cache):
         print(response.text.replace("\0", ""), end="", flush=True)
 

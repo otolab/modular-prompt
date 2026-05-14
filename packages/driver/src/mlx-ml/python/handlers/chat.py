@@ -34,7 +34,7 @@ def handle_chat(
     images: list | None = None,
     max_image_size: int = 768,
     reasoning_effort: str | None = None,
-    cache_id: str | None = None,
+    cache_path: str | None = None,
 ) -> None:
     """chat API の処理"""
     if options is None:
@@ -80,7 +80,7 @@ def handle_chat(
         )
         return
 
-    prompt_cache = backend.cache_get(cache_id) if cache_id else None
+    prompt_cache = backend.load_cache_from_file(cache_path) if cache_path else None
 
     if not supports_chat_template(tokenizer):
         prompt = generate_merged_prompt(messages, capabilities)

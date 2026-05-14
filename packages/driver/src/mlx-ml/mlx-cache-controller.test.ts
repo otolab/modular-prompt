@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MlxCacheController } from './mlx-cache-controller.js';
 
+vi.mock('node:fs/promises', () => ({
+  unlink: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { unlink, mkdir, rm } from 'node:fs/promises';
+
 function createMockProcess() {
   return {
-    cachePrefill: vi.fn().mockResolvedValue({ cache_id: 'mlx-cache-abc' }),
-    cacheDelete: vi.fn().mockResolvedValue({ ok: true }),
+    cachePrefill: vi.fn().mockResolvedValue({ cache_path: '/tmp/mlx-prompt-cache-abc/test.safetensors' }),
   };
 }
 
@@ -25,11 +32,12 @@ describe('MlxCacheController', () => {
         instructions: [{ type: 'text', content: 'Be helpful' }],
       });
 
-      expect(handle.ref).toMatch(/^mlx-cache-/);
+      expect(handle.ref).toMatch(/\.safetensors$/);
       expect(handle.includes.instructions).toBe(true);
       expect(handle.includes.dataElementCount).toBe(0);
       expect(handle.includes.tools).toBe(false);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      expect(mkdir).toHaveBeenCalledTimes(1);
     });
 
     it('should create cache with instructions and data', async () => {
@@ -79,7 +87,7 @@ describe('MlxCacheController', () => {
     });
 
     it('should coalesce concurrent calls with identical params', async () => {
-      let resolvePrefill: (val: { cache_id: string }) => void;
+      let resolvePrefill: (val: { cache_path: string }) => void;
       mockProcess.cachePrefill.mockReturnValueOnce(
         new Promise(resolve => { resolvePrefill = resolve; })
       );
@@ -92,36 +100,36 @@ describe('MlxCacheController', () => {
       const p1 = controller.prepare(params);
       const p2 = controller.prepare(params);
 
-      resolvePrefill!({ cache_id: 'mlx-cache-coalesced' });
+      resolvePrefill!({ cache_path: '/tmp/mlx-prompt-cache-abc/coalesced.safetensors' });
 
       const [h1, h2] = await Promise.all([p1, p2]);
       expect(h1.ref).toBe(h2.ref);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
     });
 
-    it('should pass formatted messages to process.cachePrefill', async () => {
+    it('should pass file path and formatted messages to process.cachePrefill', async () => {
       await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'system prompt' }],
         data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'content' }],
       });
 
-      const [cacheId, messages] = mockProcess.cachePrefill.mock.calls[0];
-      expect(cacheId).toMatch(/^mlx-cache-/);
+      const [cachePath, messages] = mockProcess.cachePrefill.mock.calls[0];
+      expect(cachePath).toMatch(/\.safetensors$/);
       expect(Array.isArray(messages)).toBe(true);
       expect(messages.length).toBeGreaterThan(0);
     });
   });
 
   describe('invalidate', () => {
-    it('should delete the cached content', async () => {
+    it('should delete the cache file', async () => {
       const handle = await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'prompt' }],
       });
 
       await controller.invalidate(handle);
-      expect(mockProcess.cacheDelete).toHaveBeenCalledWith(handle.ref);
+      expect(unlink).toHaveBeenCalledWith(handle.ref);
     });
 
     it('should allow re-creation after invalidation', async () => {
@@ -136,10 +144,20 @@ describe('MlxCacheController', () => {
       await controller.prepare(params);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
     });
+
+    it('should suppress errors when file does not exist', async () => {
+      vi.mocked(unlink).mockRejectedValueOnce(new Error('ENOENT'));
+      const handle = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'prompt' }],
+      });
+
+      await expect(controller.invalidate(handle)).resolves.toBeUndefined();
+    });
   });
 
   describe('close', () => {
-    it('should delete all managed caches', async () => {
+    it('should remove cache directory recursively', async () => {
       await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'a' }],
@@ -150,11 +168,15 @@ describe('MlxCacheController', () => {
       });
 
       await controller.close();
-      expect(mockProcess.cacheDelete).toHaveBeenCalledTimes(2);
+      expect(rm).toHaveBeenCalledTimes(1);
+      expect(rm).toHaveBeenCalledWith(
+        expect.stringMatching(/mlx-prompt-cache-/),
+        { recursive: true, force: true }
+      );
     });
 
     it('should wait for inflight requests before closing', async () => {
-      let resolvePrefill: (val: { cache_id: string }) => void;
+      let resolvePrefill: (val: { cache_path: string }) => void;
       mockProcess.cachePrefill.mockReturnValueOnce(
         new Promise(resolve => { resolvePrefill = resolve; })
       );
@@ -166,19 +188,19 @@ describe('MlxCacheController', () => {
 
       const closePromise = controller.close();
 
-      resolvePrefill!({ cache_id: 'mlx-cache-done' });
+      resolvePrefill!({ cache_path: '/tmp/mlx-prompt-cache-abc/done.safetensors' });
       await preparePromise;
       await closePromise;
 
-      expect(mockProcess.cacheDelete).toHaveBeenCalledTimes(1);
+      expect(rm).toHaveBeenCalledTimes(1);
     });
 
-    it('should suppress errors during cache deletion on close', async () => {
+    it('should suppress errors during directory removal on close', async () => {
       await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'test' }],
       });
-      mockProcess.cacheDelete.mockRejectedValueOnce(new Error('delete failed'));
+      vi.mocked(rm).mockRejectedValueOnce(new Error('rm failed'));
 
       await expect(controller.close()).resolves.toBeUndefined();
     });

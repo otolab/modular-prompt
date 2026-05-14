@@ -13,7 +13,6 @@ import type {
   MlxRuntimeInfo,
   MlxFormatTestResult,
   MlxCachePrefillResult,
-  MlxCacheDeleteResult,
   MlxToolDefinition
 } from './types.js';
 import { QueueManager, QueueManagerCallbacks } from './queue.js';
@@ -28,7 +27,6 @@ export type {
   MlxRuntimeInfo,
   MlxFormatTestResult,
   MlxCachePrefillResult,
-  MlxCacheDeleteResult,
   MlxToolDefinition
 };
 
@@ -89,22 +87,18 @@ export class MlxProcess {
   }
 
   // Cache operations
-  async cachePrefill(cacheId: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
-    return this.queueManager.addCachePrefillRequest(cacheId, messages);
-  }
-
-  async cacheDelete(cacheId: string): Promise<MlxCacheDeleteResult> {
-    return this.queueManager.addCacheDeleteRequest(cacheId);
+  async cachePrefill(cachePath: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
+    return this.queueManager.addCachePrefillRequest(cachePath, messages);
   }
 
   // API v2.0 Chat
-  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cacheId?: string): Promise<Readable> {
-    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cacheId);
+  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string): Promise<Readable> {
+    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cachePath);
   }
 
   // API v2.0 Completion
-  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cacheId?: string): Promise<Readable> {
-    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize, cacheId);
+  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cachePath?: string): Promise<Readable> {
+    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize, cachePath);
   }
 
 

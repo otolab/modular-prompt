@@ -321,7 +321,7 @@ export class MlxDriver implements AIDriver {
 
       // Cache: chat APIのみ、nativeTools未使用時のみキャッシュを使用
       // (completion APIはフォーマット不一致、nativeToolsはchat template出力に影響)
-      let cacheId: string | undefined;
+      let cachePath: string | undefined;
       if (this.cacheController && !nativeTools) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
@@ -334,11 +334,11 @@ export class MlxDriver implements AIDriver {
             instructions: prefix.instructions,
             data: prefix.data,
           });
-          cacheId = handle.ref;
+          cachePath = handle.ref;
         }
       }
 
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cacheId);
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cachePath);
     }
 
     return stream;

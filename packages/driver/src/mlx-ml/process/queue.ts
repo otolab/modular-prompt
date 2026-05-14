@@ -6,30 +6,24 @@
 
 import { Readable } from 'stream';
 import { mapOptionsToPython } from './parameter-mapper.js';
-import { Logger } from '@modular-prompt/utils';
 import type {
   QueueItem,
   CapabilitiesQueueItem,
   FormatTestQueueItem,
   CachePrefillQueueItem,
-  CacheDeleteQueueItem,
   StreamingQueueItem,
   MlxCapabilitiesRequest,
   MlxFormatTestRequest,
   MlxChatRequest,
   MlxCompletionRequest,
   MlxCachePrefillRequest,
-  MlxCacheDeleteRequest,
   MlxMessage,
   MlxMlModelOptions,
   MlxRuntimeInfo,
   MlxFormatTestResult,
   MlxCachePrefillResult,
-  MlxCacheDeleteResult,
   MlxToolDefinition
 } from './types.js';
-
-const logger = new Logger({ prefix: 'MLX', context: 'queue' });
 
 export interface QueueManagerCallbacks {
   sendToProcess: (data: string) => void;
@@ -75,7 +69,7 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cacheId?: string): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
@@ -86,7 +80,7 @@ export class QueueManager {
           options: mapOptionsToPython(options, true),
           ...(images?.length ? { images, maxImageSize } : {}),
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-          ...(cacheId ? { cache_id: cacheId } : {}),
+          ...(cachePath ? { cache_path: cachePath } : {}),
         };
         this.queue.push({
           request,
@@ -100,11 +94,11 @@ export class QueueManager {
     });
   }
 
-  addCachePrefillRequest(cacheId: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
+  addCachePrefillRequest(cachePath: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
     return new Promise((resolve, reject) => {
       const request: MlxCachePrefillRequest = {
         method: 'cache_prefill',
-        cache_id: cacheId,
+        cache_path: cachePath,
         messages,
       };
       this.queue.push({
@@ -117,23 +111,7 @@ export class QueueManager {
     });
   }
 
-  addCacheDeleteRequest(cacheId: string): Promise<MlxCacheDeleteResult> {
-    return new Promise((resolve, reject) => {
-      const request: MlxCacheDeleteRequest = {
-        method: 'cache_delete',
-        cache_id: cacheId,
-      };
-      this.queue.push({
-        request,
-        resolve,
-        reject,
-        expectJsonResponse: true,
-      } as CacheDeleteQueueItem);
-      this.processNext();
-    });
-  }
-
-  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cacheId?: string): Promise<Readable> {
+  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cachePath?: string): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxCompletionRequest = {
@@ -141,7 +119,7 @@ export class QueueManager {
           prompt,
           options: mapOptionsToPython(options, true),
           ...(images?.length ? { images, maxImageSize } : {}),
-          ...(cacheId ? { cache_id: cacheId } : {}),
+          ...(cachePath ? { cache_path: cachePath } : {}),
         };
         this.queue.push({
           request,
@@ -189,8 +167,6 @@ export class QueueManager {
             (queueItem as FormatTestQueueItem).resolve(jsonResponse);
           } else if (queueItem.request.method === 'cache_prefill') {
             (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
-          } else if (queueItem.request.method === 'cache_delete') {
-            (queueItem as CacheDeleteQueueItem).resolve(jsonResponse);
           }
         } catch (e) {
           if (queueItem.request.method === 'capabilities') {
@@ -208,10 +184,6 @@ export class QueueManager {
             });
           } else if (queueItem.request.method === 'cache_prefill') {
             (queueItem as CachePrefillQueueItem).reject(
-              e instanceof Error ? e : new Error(String(e))
-            );
-          } else if (queueItem.request.method === 'cache_delete') {
-            (queueItem as CacheDeleteQueueItem).reject(
               e instanceof Error ? e : new Error(String(e))
             );
           }
