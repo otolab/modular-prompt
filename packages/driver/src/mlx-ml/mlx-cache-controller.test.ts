@@ -94,6 +94,15 @@ describe('MlxCacheController', () => {
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
 
+    it('should reject when tools are provided', async () => {
+      await expect(controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'prompt' }],
+        tools: [{ name: 'get_weather', description: 'Get weather', parameters: {} }],
+      })).rejects.toThrow('MlxCacheController does not support tool-aware caching');
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+    });
+
     it('should coalesce concurrent calls with identical params', async () => {
       let resolvePrefill: (val: { cache_path: string }) => void;
       mockProcess.cachePrefill.mockReturnValueOnce(

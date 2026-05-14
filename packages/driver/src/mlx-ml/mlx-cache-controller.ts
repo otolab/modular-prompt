@@ -59,6 +59,10 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
+    if (params.tools && params.tools.length > 0) {
+      throw new Error('MlxCacheController does not support tool-aware caching');
+    }
+
     const hasContent =
       (params.instructions?.length ?? 0) > 0 ||
       (params.data?.length ?? 0) > 0;

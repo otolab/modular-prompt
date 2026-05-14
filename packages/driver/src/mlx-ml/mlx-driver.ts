@@ -323,8 +323,10 @@ export class MlxDriver implements AIDriver {
       // - nativeTools未使用（chat template出力に影響）
       // - reasoningEffort未指定（apply_chat_templateの出力に影響しうる）
       // - outputSchema未指定（formatPromptAsMessagesがschemaを挿入し、prefixがずれる）
+      // - trustRemoteCode未指定（apply_chat_template kwargsが異なる）
       let cachePath: string | undefined;
-      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema) {
+      const trustRemoteCode = mlxOptions.trustRemoteCode;
+      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && !trustRemoteCode) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
