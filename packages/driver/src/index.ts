@@ -91,7 +91,6 @@ export {
 
 export {
   MlxCacheController,
-  type MlxCacheControllerConfig
 } from './mlx-ml/mlx-cache-controller.js';
 
 export type {

@@ -60,6 +60,13 @@ export interface ModelSpecificProcessor {
   hasCompletionProcessor(): boolean;
 
   /**
+   * Chat API用のモデル固有プロセッサが存在するか
+   * true の場合、chatProcessor はメッセージ全体の文脈に依存する変換を行うため
+   * サブセットへの適用は prefix 安定性を保証しない
+   */
+  hasChatProcessor(): boolean;
+
+  /**
    * runtimeInfo取得後に制約・モデル情報を反映
    */
   setRuntimeContext(context: { chatRestrictions?: ChatRestrictions; modelKind?: 'lm' | 'vlm' }): void;
@@ -122,6 +129,10 @@ export class DefaultModelSpecificProcessor implements ModelSpecificProcessor {
    */
   hasCompletionProcessor(): boolean {
     return selectCompletionProcessor(this.modelName) !== null;
+  }
+
+  hasChatProcessor(): boolean {
+    return selectChatProcessor(this.modelName) !== null;
   }
 
   /**

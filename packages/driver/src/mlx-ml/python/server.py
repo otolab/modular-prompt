@@ -97,7 +97,6 @@ class Server:
                     options=req.get('options', {}),
                     images=images if images else None,
                     max_image_size=req.get('maxImageSize', 768),
-                    cache_path=req.get('cache_path'),
                 )
 
             else:

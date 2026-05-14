@@ -97,8 +97,8 @@ export class MlxProcess {
   }
 
   // API v2.0 Completion
-  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cachePath?: string): Promise<Readable> {
-    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize, cachePath);
+  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
+    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize);
   }
 
 

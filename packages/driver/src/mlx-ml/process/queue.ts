@@ -111,7 +111,7 @@ export class QueueManager {
     });
   }
 
-  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number, cachePath?: string): Promise<Readable> {
+  addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxCompletionRequest = {
@@ -119,7 +119,6 @@ export class QueueManager {
           prompt,
           options: mapOptionsToPython(options, true),
           ...(images?.length ? { images, maxImageSize } : {}),
-          ...(cachePath ? { cache_path: cachePath } : {}),
         };
         this.queue.push({
           request,
@@ -161,16 +160,16 @@ export class QueueManager {
       if (queueItem?.expectJsonResponse) {
         try {
           const jsonResponse = JSON.parse(jsonData);
+          if (jsonResponse.error) {
+            queueItem.reject?.(new Error(jsonResponse.error));
+            return;
+          }
           if (queueItem.request.method === 'capabilities') {
             (queueItem as CapabilitiesQueueItem).resolve(jsonResponse);
           } else if (queueItem.request.method === 'format_test') {
             (queueItem as FormatTestQueueItem).resolve(jsonResponse);
           } else if (queueItem.request.method === 'cache_prefill') {
-            if (jsonResponse.error) {
-              (queueItem as CachePrefillQueueItem).reject(new Error(jsonResponse.error));
-            } else {
-              (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
-            }
+            (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
           }
         } catch (e) {
           if (queueItem.request.method === 'capabilities') {

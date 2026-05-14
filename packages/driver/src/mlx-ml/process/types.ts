@@ -86,7 +86,6 @@ export interface MlxCompletionRequest extends MlxBaseRequest {
   options?: MlxMlModelOptions;
   images?: string[];
   maxImageSize?: number;
-  cache_path?: string;
 }
 
 export interface MlxCachePrefillRequest extends MlxBaseRequest {

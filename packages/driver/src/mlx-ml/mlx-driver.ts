@@ -230,12 +230,16 @@ export class MlxDriver implements AIDriver {
           modelKind: this.runtimeInfo.model_kind,
         });
 
-        // Initialize cache controller after runtime info is available (LM only)
-        if (this.enableCaching && !this.cacheController && this.runtimeInfo.model_kind !== 'vlm') {
+        // Initialize cache controller after runtime info is available
+        // Skip: VLM, models requiring system message merge, models with model-specific chat processors
+        if (this.enableCaching && !this.cacheController
+          && this.runtimeInfo.model_kind !== 'vlm'
+          && !this.runtimeInfo.chat_restrictions?.single_system_at_start
+          && !this.modelProcessor.hasChatProcessor()
+        ) {
           this.cacheController = new MlxCacheController(
             this.process,
             this.formatterOptions,
-            { chatProcessor: (msgs) => this.modelProcessor.applyChatSpecificProcessing(msgs) }
           );
         }
       } catch (error) {
