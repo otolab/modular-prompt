@@ -39,7 +39,7 @@ export class MlxCacheController implements PromptCacheController {
 
   private async ensureCacheDir(): Promise<void> {
     if (this.cacheDirReady) return;
-    await mkdir(this.cacheDir, { recursive: true });
+    await mkdir(this.cacheDir, { recursive: true, mode: 0o700 });
     this.cacheDirReady = true;
   }
 
@@ -101,7 +101,11 @@ export class MlxCacheController implements PromptCacheController {
     let mlxMessages = convertMessages(chatMessages);
 
     if (this.config?.chatProcessor) {
+      const hadUserMessage = mlxMessages.some(m => m.role === 'user');
       mlxMessages = this.config.chatProcessor(mlxMessages);
+      if (!hadUserMessage) {
+        mlxMessages = mlxMessages.filter(m => m.role !== 'user');
+      }
     }
 
     const cachePath = this.generateCachePath(cacheKey);
@@ -133,7 +137,11 @@ export class MlxCacheController implements PromptCacheController {
 
   async close(): Promise<void> {
     logger.debug('close', `entries=${this.cacheByHash.size}`);
-    await Promise.allSettled([...this.inflightRequests.values()]);
+    const timeout = new Promise<void>(resolve => setTimeout(resolve, 30_000));
+    await Promise.race([
+      Promise.allSettled([...this.inflightRequests.values()]),
+      timeout,
+    ]);
     this.inflightRequests.clear();
     this.cacheByHash.clear();
     await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});

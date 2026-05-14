@@ -319,10 +319,12 @@ export class MlxDriver implements AIDriver {
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
 
-      // Cache: chat APIのみ、nativeTools未使用時のみキャッシュを使用
-      // (completion APIはフォーマット不一致、nativeToolsはchat template出力に影響)
+      // Cache: chat APIのみ、以下の条件を全て満たす場合にキャッシュを使用
+      // - nativeTools未使用（chat template出力に影響）
+      // - reasoningEffort未指定（apply_chat_templateの出力に影響しうる）
+      // - outputSchema未指定（formatPromptAsMessagesがschemaを挿入し、prefixがずれる）
       let cachePath: string | undefined;
-      if (this.cacheController && !nativeTools) {
+      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||

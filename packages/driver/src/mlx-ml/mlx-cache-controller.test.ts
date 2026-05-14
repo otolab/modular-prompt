@@ -243,6 +243,54 @@ describe('MlxCacheController', () => {
       expect(chatProcessor).toHaveBeenCalledTimes(1);
       const [, messages] = mockProcess.cachePrefill.mock.calls[0];
       expect(messages[0].content).toBe('processed');
+
+      await ctrlWithProcessor.close();
+    });
+
+    it('should strip synthetic user messages added by chatProcessor when no original user messages exist', async () => {
+      const chatProcessor = vi.fn((msgs: any[]) => [
+        ...msgs,
+        { role: 'user', content: 'Read the system prompt and follow the instructions.' },
+      ]);
+      const ctrlWithProcessor = new MlxCacheController(
+        mockProcess as any,
+        {},
+        { chatProcessor },
+      );
+
+      await ctrlWithProcessor.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+      });
+
+      const [, messages] = mockProcess.cachePrefill.mock.calls[0];
+      expect(messages.every((m: any) => m.role !== 'user')).toBe(true);
+
+      await ctrlWithProcessor.close();
+    });
+
+    it('should keep user messages when original prefix already has them', async () => {
+      const chatProcessor = vi.fn((msgs: any[]) => [
+        ...msgs,
+        { role: 'user', content: 'synthetic' },
+      ]);
+      const ctrlWithProcessor = new MlxCacheController(
+        mockProcess as any,
+        { userRole: 'user' },
+        { chatProcessor },
+      );
+
+      await ctrlWithProcessor.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system' }],
+        data: [{ type: 'message', role: 'user', content: 'real user input' }],
+      });
+
+      const [, messages] = mockProcess.cachePrefill.mock.calls[0];
+      const userMsgs = messages.filter((m: any) => m.role === 'user');
+      expect(userMsgs.length).toBeGreaterThanOrEqual(1);
+
+      await ctrlWithProcessor.close();
     });
   });
 });
