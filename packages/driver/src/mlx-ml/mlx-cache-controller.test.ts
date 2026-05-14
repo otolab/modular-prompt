@@ -1,5 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MlxCacheController } from './mlx-cache-controller.js';
+
+vi.mock('node:fs', () => ({
+  rmSync: vi.fn(),
+}));
 
 vi.mock('node:fs/promises', () => ({
   unlink: vi.fn().mockResolvedValue(undefined),
@@ -23,6 +27,10 @@ describe('MlxCacheController', () => {
     vi.clearAllMocks();
     mockProcess = createMockProcess();
     controller = new MlxCacheController(mockProcess as any);
+  });
+
+  afterEach(async () => {
+    await controller.close();
   });
 
   describe('prepare', () => {

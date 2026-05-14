@@ -90,7 +90,8 @@ export {
 } from './mlx-ml/process/index.js';
 
 export {
-  MlxCacheController
+  MlxCacheController,
+  type MlxCacheControllerConfig
 } from './mlx-ml/mlx-cache-controller.js';
 
 export type {

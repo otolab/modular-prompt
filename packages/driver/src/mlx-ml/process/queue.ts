@@ -166,7 +166,11 @@ export class QueueManager {
           } else if (queueItem.request.method === 'format_test') {
             (queueItem as FormatTestQueueItem).resolve(jsonResponse);
           } else if (queueItem.request.method === 'cache_prefill') {
-            (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
+            if (jsonResponse.error) {
+              (queueItem as CachePrefillQueueItem).reject(new Error(jsonResponse.error));
+            } else {
+              (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
+            }
           }
         } catch (e) {
           if (queueItem.request.method === 'capabilities') {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { unlink, mkdir, rm } from 'node:fs/promises';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
 import type { FormatterOptions } from '../formatter/types.js';
@@ -22,6 +23,7 @@ export class MlxCacheController implements PromptCacheController {
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
   private cacheDir: string;
   private cacheDirReady = false;
+  private cleanupHandler: () => void;
 
   constructor(
     private process: MlxProcess,
@@ -29,6 +31,10 @@ export class MlxCacheController implements PromptCacheController {
     private config?: MlxCacheControllerConfig
   ) {
     this.cacheDir = join(tmpdir(), `mlx-prompt-cache-${randomBytes(6).toString('hex')}`);
+    this.cleanupHandler = () => {
+      try { rmSync(this.cacheDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+    };
+    globalThis.process.on('exit', this.cleanupHandler);
   }
 
   private async ensureCacheDir(): Promise<void> {
@@ -132,5 +138,6 @@ export class MlxCacheController implements PromptCacheController {
     this.cacheByHash.clear();
     await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     this.cacheDirReady = false;
+    globalThis.process.removeListener('exit', this.cleanupHandler);
   }
 }
