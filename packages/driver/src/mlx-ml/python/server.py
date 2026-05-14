@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_capabilities, handle_chat, handle_completion, handle_format_test
+from handlers import handle_cache_prefill, handle_cache_delete, handle_capabilities, handle_chat, handle_completion, handle_format_test
 
 
 MAX_READ_LINES = 10000
@@ -57,6 +57,23 @@ class Server:
                     return
                 handle_format_test(self.backend, self.capabilities, messages, req.get('options', {}), req.get('tools'))
 
+            elif method == 'cache_prefill':
+                cache_id = req.get('cache_id')
+                messages = req.get('messages')
+                if not cache_id or not messages:
+                    sys.stderr.write("Error: 'cache_id' and 'messages' fields are required for cache_prefill\n")
+                    print('\n', end='\0', flush=True)
+                    return
+                handle_cache_prefill(self.backend, self.capabilities, cache_id, messages)
+
+            elif method == 'cache_delete':
+                cache_id = req.get('cache_id')
+                if not cache_id:
+                    sys.stderr.write("Error: 'cache_id' field is required for cache_delete\n")
+                    print('\n', end='\0', flush=True)
+                    return
+                handle_cache_delete(self.backend, cache_id)
+
             elif method == 'chat':
                 messages = req.get('messages')
                 if not messages:
@@ -73,6 +90,7 @@ class Server:
                     images=req.get('images', []),
                     max_image_size=req.get('maxImageSize', 768),
                     reasoning_effort=req.get('reasoning_effort'),
+                    cache_id=req.get('cache_id'),
                 )
 
             elif method == 'completion':
@@ -88,6 +106,7 @@ class Server:
                     options=req.get('options', {}),
                     images=images if images else None,
                     max_image_size=req.get('maxImageSize', 768),
+                    cache_id=req.get('cache_id'),
                 )
 
             else:

@@ -42,3 +42,19 @@ class ModelBackend(ABC):
     def has_drafter(self) -> bool:
         """Return whether a drafter model is loaded."""
         return False
+
+    def cache_prefill(self, cache_id: str, prompt: str) -> dict:
+        """Build a KV cache from a prompt prefix."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support prompt caching"
+        )
+
+    def cache_delete(self, cache_id: str) -> None:
+        """Delete a cached KV cache entry."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support prompt caching"
+        )
+
+    def cache_get(self, cache_id: str) -> list | None:
+        """Return the prompt cache for the given ID, or None."""
+        return None
