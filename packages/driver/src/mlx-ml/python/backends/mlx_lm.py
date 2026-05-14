@@ -65,7 +65,7 @@ class MlxLmBackend(ModelBackend):
         prompt_cache = make_prompt_cache(self.model)
         for _ in mlx_lm_stream_generate(
             self.model, self.tokenizer, prompt,
-            prompt_cache=prompt_cache, max_tokens=1,
+            prompt_cache=prompt_cache, max_tokens=0,
         ):
             pass
         save_prompt_cache(cache_path, prompt_cache)
