@@ -127,7 +127,10 @@ export class MlxCacheController implements PromptCacheController {
 
   async close(): Promise<void> {
     logger.debug('close', `entries=${this.cacheByHash.size}`);
-    const timeout = new Promise<void>(resolve => setTimeout(resolve, 30_000));
+    const timeout = new Promise<void>(resolve => {
+      const timer = setTimeout(resolve, 30_000);
+      timer.unref();
+    });
     await Promise.race([
       Promise.allSettled([...this.inflightRequests.values()]),
       timeout,

@@ -160,14 +160,13 @@ export class QueueManager {
       if (queueItem?.expectJsonResponse) {
         try {
           const jsonResponse = JSON.parse(jsonData);
-          if (jsonResponse.error) {
-            queueItem.reject?.(new Error(jsonResponse.error));
-            return;
-          }
-          if (queueItem.request.method === 'capabilities') {
-            (queueItem as CapabilitiesQueueItem).resolve(jsonResponse);
-          } else if (queueItem.request.method === 'format_test') {
+          // format_test has its own error field in MlxFormatTestResult — always resolve
+          if (queueItem.request.method === 'format_test') {
             (queueItem as FormatTestQueueItem).resolve(jsonResponse);
+          } else if (jsonResponse.error) {
+            queueItem.reject?.(new Error(jsonResponse.error));
+          } else if (queueItem.request.method === 'capabilities') {
+            (queueItem as CapabilitiesQueueItem).resolve(jsonResponse);
           } else if (queueItem.request.method === 'cache_prefill') {
             (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
           }

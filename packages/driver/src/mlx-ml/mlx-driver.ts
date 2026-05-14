@@ -330,7 +330,7 @@ export class MlxDriver implements AIDriver {
       // - trustRemoteCode未指定（apply_chat_template kwargsが異なる）
       let cachePath: string | undefined;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
-      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && !trustRemoteCode) {
+      if (this.cacheController && !nativeTools?.length && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && !trustRemoteCode) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
