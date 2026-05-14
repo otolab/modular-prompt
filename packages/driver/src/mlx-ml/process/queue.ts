@@ -160,9 +160,19 @@ export class QueueManager {
       if (queueItem?.expectJsonResponse) {
         try {
           const jsonResponse = JSON.parse(jsonData);
-          // format_test has its own error field in MlxFormatTestResult — always resolve
+          // format_test has its own error field in MlxFormatTestResult — resolve if well-formed,
+          // but reject bare protocol errors (missing template_applied indicates server-side exception)
           if (queueItem.request.method === 'format_test') {
-            (queueItem as FormatTestQueueItem).resolve(jsonResponse);
+            if ('template_applied' in jsonResponse) {
+              (queueItem as FormatTestQueueItem).resolve(jsonResponse);
+            } else {
+              (queueItem as FormatTestQueueItem).resolve({
+                formatted_prompt: null,
+                template_applied: false,
+                model_specific_processing: null,
+                error: jsonResponse.error || 'Malformed format_test response'
+              });
+            }
           } else if (jsonResponse.error) {
             queueItem.reject?.(new Error(jsonResponse.error));
           } else if (queueItem.request.method === 'capabilities') {

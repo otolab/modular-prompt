@@ -231,10 +231,12 @@ export class MlxDriver implements AIDriver {
         });
 
         // Initialize cache controller after runtime info is available
-        // Skip: VLM, models requiring system message merge, models with model-specific chat processors
+        // Skip: VLM, models requiring system message merge, models with model-specific chat processors,
+        // models requiring user-last (cacheable prefix may end in assistant message)
         if (this.enableCaching && !this.cacheController
           && this.runtimeInfo.model_kind !== 'vlm'
           && !this.runtimeInfo.chat_restrictions?.single_system_at_start
+          && !this.runtimeInfo.chat_restrictions?.requires_user_last
           && !this.modelProcessor.hasChatProcessor()
         ) {
           this.cacheController = new MlxCacheController(
@@ -327,10 +329,10 @@ export class MlxDriver implements AIDriver {
       // - nativeTools未使用（chat template出力に影響）
       // - reasoningEffort未指定（apply_chat_templateの出力に影響しうる）
       // - outputSchema未指定（formatPromptAsMessagesがschemaを挿入し、prefixがずれる）
-      // - trustRemoteCode未指定（apply_chat_template kwargsが異なる）
+      // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
       let cachePath: string | undefined;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
-      if (this.cacheController && !nativeTools?.length && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && !trustRemoteCode) {
+      if (this.cacheController && !nativeTools?.length && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
