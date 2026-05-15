@@ -3,6 +3,7 @@ import { MlxCacheController } from './mlx-cache-controller.js';
 
 vi.mock('node:fs', () => ({
   rmSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -12,6 +13,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 import { unlink, mkdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 function createMockProcess() {
   return {
@@ -26,7 +28,8 @@ describe('MlxCacheController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcess = createMockProcess();
-    controller = new MlxCacheController(mockProcess as any);
+    controller = new MlxCacheController();
+    controller.bind(mockProcess as any, {});
   });
 
   afterEach(async () => {
@@ -136,6 +139,36 @@ describe('MlxCacheController', () => {
       expect(Array.isArray(messages)).toBe(true);
       expect(messages.length).toBeGreaterThan(0);
     });
+
+    it('should throw when not bound to a process', async () => {
+      const unboundController = new MlxCacheController();
+      await expect(unboundController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      })).rejects.toThrow('MlxCacheController is not bound to a process');
+    });
+
+    it('should produce different cache keys for different formatterOptions', async () => {
+      const controllerA = new MlxCacheController();
+      controllerA.bind(mockProcess as any, { specialTokens: { bosToken: '<s>' } });
+
+      const controllerB = new MlxCacheController();
+      controllerB.bind(mockProcess as any, { specialTokens: { bosToken: '<bos>' } });
+
+      const params = {
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'prompt' }],
+      };
+
+      const handleA = await controllerA.prepare(params);
+      const handleB = await controllerB.prepare(params);
+
+      expect(handleA.ref).not.toBe(handleB.ref);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
+
+      await controllerA.close();
+      await controllerB.close();
+    });
   });
 
   describe('invalidate', () => {
@@ -233,6 +266,61 @@ describe('MlxCacheController', () => {
       });
       expect(handle.ref).toBe('');
       expect(handle.includes.instructions).toBe(false);
+    });
+  });
+
+  describe('bind', () => {
+    it('should throw when bind is called twice', () => {
+      const ctrl = new MlxCacheController();
+      ctrl.bind(mockProcess as any, {});
+      expect(() => ctrl.bind(mockProcess as any, {}))
+        .toThrow('MlxCacheController is already bound to a process');
+    });
+  });
+
+  describe('external cacheDir', () => {
+    let externalController: MlxCacheController;
+
+    beforeEach(() => {
+      externalController = new MlxCacheController({ cacheDir: '/custom/cache/dir' });
+      externalController.bind(mockProcess as any, {});
+    });
+
+    afterEach(async () => {
+      await externalController.close();
+    });
+
+    it('should use specified cacheDir for cache paths', async () => {
+      const handle = await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(handle.ref).toMatch(/^\/custom\/cache\/dir\//);
+      expect(handle.ref).toMatch(/\.safetensors$/);
+    });
+
+    it('should not remove directory on close', async () => {
+      await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      await externalController.close();
+      expect(rm).not.toHaveBeenCalled();
+    });
+
+    it('should skip prefill when cache file already exists', async () => {
+      vi.mocked(existsSync).mockReturnValueOnce(true);
+
+      const handle = await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.includes.instructions).toBe(true);
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
   });
 });

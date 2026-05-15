@@ -70,8 +70,8 @@ export interface MlxDriverConfig {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
-  /** KVキャッシュによるプロンプトプレフィルを有効化（LMバックエンドのみ） */
-  enableCaching?: boolean;
+  /** 外部で生成したキャッシュコントローラー */
+  cacheController?: PromptCacheController;
 }
 
 /**
@@ -123,7 +123,7 @@ export class MlxDriver implements AIDriver {
   private maxImageSize: number;
   private queryLogger = new QueryLogger('MLX');
   private cacheController?: PromptCacheController;
-  private enableCaching: boolean;
+  private cacheControllerBound = false;
 
   get defaultOptions(): Partial<MlxMlModelOptions> {
     return this._defaultOptions;
@@ -140,7 +140,7 @@ export class MlxDriver implements AIDriver {
     this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
     this.modelProcessor = createModelSpecificProcessor(config.model);
-    this.enableCaching = config.enableCaching ?? false;
+    this.cacheController = config.cacheController;
     if (config.drafterModel) {
       this.queryLogger.log.info(`Drafter model: ${config.drafterModel}`);
     }
@@ -169,19 +169,22 @@ export class MlxDriver implements AIDriver {
           modelKind: this.runtimeInfo.model_kind,
         });
 
-        // Initialize cache controller after runtime info is available
-        // Skip: VLM, models requiring system message merge, models with model-specific chat processors,
-        // models requiring user-last (cacheable prefix may end in assistant message)
-        if (this.enableCaching && !this.cacheController
-          && this.runtimeInfo.model_kind !== 'vlm'
-          && !this.runtimeInfo.chat_restrictions?.single_system_at_start
-          && !this.runtimeInfo.chat_restrictions?.requires_user_last
-          && !this.modelProcessor.hasChatProcessor()
-        ) {
-          this.cacheController = new MlxCacheController(
-            this.process,
-            this.formatterOptions,
-          );
+        // Bind cache controller if provided and not yet bound
+        // NOTE: instanceof guard means VLM check only covers MlxCacheController.
+        // A custom PromptCacheController on a VLM model would bypass this — add a
+        // model-kind guard here if another implementation is introduced.
+        if (this.cacheController instanceof MlxCacheController && !this.cacheControllerBound) {
+          if (this.runtimeInfo.model_kind === 'vlm') {
+            this.queryLogger.log.info('VLM models do not support prompt caching — cacheController disabled');
+            this.cacheController = undefined;
+          } else {
+            this.cacheController.bind(
+              this.process,
+              this.formatterOptions,
+              (msgs) => this.modelProcessor.applyChatSpecificProcessing(msgs),
+            );
+            this.cacheControllerBound = true;
+          }
         }
       } catch (error) {
         this.queryLogger.log.error('Failed to get MLX runtime info:', error instanceof Error ? error.message : String(error));
