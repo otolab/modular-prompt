@@ -60,3 +60,7 @@ options:
 # resourceFiles:
 #   - ./knowledge.md
 #   - ./guidelines.txt
+
+# KVキャッシュ（MLX専用、オプション）
+# プロンプトの静的部分をキャッシュして推論を高速化
+# cacheDir: .cache/mlx-kv

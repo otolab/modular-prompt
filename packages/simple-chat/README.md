@@ -87,6 +87,9 @@ options:
   temperature: 0.7      # 生成の創造性（0.0-2.0）
   maxTokens: 4000      # 最大トークン数
   topP: 0.9            # トップP サンプリング
+
+# KVキャッシュ（MLX専用、オプション）
+cacheDir: ".cache/mlx-kv"  # プロンプトの静的部分をキャッシュして推論を高速化
 ```
 
 ### デフォルトプロファイル
@@ -163,6 +166,24 @@ options:
   temperature: 1.2  # 創造性を高めるため高めに設定
   maxTokens: 8000  # 長い文章生成に対応
 ```
+
+### KVキャッシュの活用（MLX専用）
+
+`cacheDir`を指定すると、プロンプトの静的部分（システムプロンプト、会話履歴、資料など）のKV状態をファイルに保存し、2回目以降の推論を高速化できます。
+
+```yaml
+model: "mlx-community/gemma-3-270m-it-qat-4bit"
+cacheDir: ".cache/mlx-kv"  # キャッシュファイルの保存先
+options:
+  temperature: 0.7
+  maxTokens: 4000
+```
+
+#### 特徴
+- MLXドライバー専用（他のプロバイダーでは無視されます）
+- 会話履歴や資料が多い場合に効果が大きい
+- キャッシュファイル（.safetensors）は手動管理（`rm -rf <cacheDir>`でクリア）
+- ディレクトリが存在しない場合は自動作成される
 
 ## 実装のポイント
 
