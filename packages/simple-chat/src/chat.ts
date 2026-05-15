@@ -3,7 +3,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import chalk from 'chalk';
 import type {
   DialogProfile,
@@ -115,6 +115,10 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   if (options.drafterModel) {
     profile.drafterModel = options.drafterModel;
     logger.info(chalk.gray(`⚡ Drafter model: ${options.drafterModel}`));
+  }
+  if (profile.cacheDir) {
+    const base = options.profilePath ? dirname(resolve(options.profilePath)) : process.cwd();
+    profile.cacheDir = resolve(base, profile.cacheDir);
   }
 
   // Load or create chat log
