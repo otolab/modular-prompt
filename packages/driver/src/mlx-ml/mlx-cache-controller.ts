@@ -18,6 +18,7 @@ export class MlxCacheController implements PromptCacheController {
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
   private cacheDir: string;
   private cacheDirReady = false;
+  private closed = false;
   private cleanupHandler: () => void;
 
   constructor(
@@ -86,8 +87,17 @@ export class MlxCacheController implements PromptCacheController {
     }
   }
 
+  private static readonly EMPTY_HANDLE: CacheHandle = {
+    ref: '', includes: { instructions: false, dataElementCount: 0, tools: false }
+  };
+
   private async createCache(params: CachePrepareParams, cacheKey: string): Promise<CacheHandle> {
-    await this.ensureCacheDir();
+    try {
+      await this.ensureCacheDir();
+    } catch (e) {
+      logger.verbose('cache dir creation failed, skipping cache:', e instanceof Error ? e.message : String(e));
+      return MlxCacheController.EMPTY_HANDLE;
+    }
 
     const prefillPrompt: CompiledPrompt = {
       instructions: params.instructions || [],
@@ -104,7 +114,12 @@ export class MlxCacheController implements PromptCacheController {
       await this.process.cachePrefill(cachePath, mlxMessages);
     } catch (e) {
       logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
-      return { ref: '', includes: { instructions: false, dataElementCount: 0, tools: false } };
+      return MlxCacheController.EMPTY_HANDLE;
+    }
+
+    if (this.closed) {
+      await unlink(cachePath).catch(() => {});
+      return MlxCacheController.EMPTY_HANDLE;
     }
 
     const handle: CacheHandle = {
@@ -131,6 +146,7 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
     logger.debug('close', `entries=${this.cacheByHash.size}`);
     const timeout = new Promise<void>(resolve => {
       const timer = setTimeout(resolve, 30_000);
