@@ -170,6 +170,9 @@ export class MlxDriver implements AIDriver {
         });
 
         // Bind cache controller if provided and not yet bound
+        // NOTE: instanceof guard means VLM check only covers MlxCacheController.
+        // A custom PromptCacheController on a VLM model would bypass this — add a
+        // model-kind guard here if another implementation is introduced.
         if (this.cacheController instanceof MlxCacheController && !this.cacheControllerBound) {
           if (this.runtimeInfo.model_kind === 'vlm') {
             this.queryLogger.log.info('VLM models do not support prompt caching — cacheController disabled');
