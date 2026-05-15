@@ -28,6 +28,8 @@ export interface DialogProfile {
   drafterModel?: string;
   /** KVキャッシュディレクトリ。指定するとプロンプトキャッシュが有効になる */
   cacheDir?: string;
+  /** チャットログファイルパス（JSON） */
+  logPath?: string;
   /** Options */
   options?: {
     /** Temperature (0.0-2.0) */
