@@ -26,6 +26,8 @@ export interface DialogProfile {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** KVキャッシュディレクトリ。指定するとプロンプトキャッシュが有効になる */
+  cacheDir?: string;
   /** Options */
   options?: {
     /** Temperature (0.0-2.0) */

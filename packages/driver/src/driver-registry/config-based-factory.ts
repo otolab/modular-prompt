@@ -11,6 +11,7 @@ import type { ModelSpec, MlxModelDriverOptions } from './types.js';
 
 // 個別ドライバーのインポート
 import { MlxDriver } from '../mlx-ml/mlx-driver.js';
+import { MlxCacheController } from '../mlx-ml/mlx-cache-controller.js';
 import { OpenAIDriver } from '../openai/openai-driver.js';
 import { AnthropicDriver } from '../anthropic/anthropic-driver.js';
 import { VertexAIDriver } from '../vertexai/vertexai-driver.js';
@@ -102,12 +103,16 @@ export function registerFactories(
   // MLX Driver Factory
   registry.registerFactory('mlx', (spec) => {
     const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
+    const cacheController = driverOpts?.cacheDir
+      ? new MlxCacheController({ cacheDir: driverOpts.cacheDir })
+      : undefined;
     return new MlxDriver({
       model: spec.model,
       defaultOptions: mergeDefaults(spec),
       textOnly: driverOpts?.textOnly,
       maxImageSize: driverOpts?.maxImageSize,
       drafterModel: driverOpts?.drafterModel,
+      cacheController,
     });
   });
 

@@ -97,10 +97,11 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   registerFactories(registry, appConfig);
 
   const driverOptions =
-    (profile.textOnly || profile.drafterModel)
+    (profile.textOnly || profile.drafterModel || profile.cacheDir)
       ? {
           ...(profile.textOnly && { textOnly: true }),
           ...(profile.drafterModel && { drafterModel: profile.drafterModel }),
+          ...(profile.cacheDir && { cacheDir: profile.cacheDir }),
         }
       : undefined;
 

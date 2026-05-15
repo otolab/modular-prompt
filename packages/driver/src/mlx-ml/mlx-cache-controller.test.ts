@@ -3,6 +3,7 @@ import { MlxCacheController } from './mlx-cache-controller.js';
 
 vi.mock('node:fs', () => ({
   rmSync: vi.fn(),
+  existsSync: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('node:fs/promises', () => ({
@@ -12,6 +13,7 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 import { unlink, mkdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 function createMockProcess() {
   return {
@@ -26,7 +28,8 @@ describe('MlxCacheController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcess = createMockProcess();
-    controller = new MlxCacheController(mockProcess as any);
+    controller = new MlxCacheController();
+    controller.bind(mockProcess as any, {});
   });
 
   afterEach(async () => {
@@ -136,6 +139,14 @@ describe('MlxCacheController', () => {
       expect(Array.isArray(messages)).toBe(true);
       expect(messages.length).toBeGreaterThan(0);
     });
+
+    it('should throw when not bound to a process', async () => {
+      const unboundController = new MlxCacheController();
+      await expect(unboundController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      })).rejects.toThrow('MlxCacheController is not bound to a process');
+    });
   });
 
   describe('invalidate', () => {
@@ -233,6 +244,52 @@ describe('MlxCacheController', () => {
       });
       expect(handle.ref).toBe('');
       expect(handle.includes.instructions).toBe(false);
+    });
+  });
+
+  describe('external cacheDir', () => {
+    let externalController: MlxCacheController;
+
+    beforeEach(() => {
+      externalController = new MlxCacheController({ cacheDir: '/custom/cache/dir' });
+      externalController.bind(mockProcess as any, {});
+    });
+
+    afterEach(async () => {
+      await externalController.close();
+    });
+
+    it('should use specified cacheDir for cache paths', async () => {
+      const handle = await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(handle.ref).toMatch(/^\/custom\/cache\/dir\//);
+      expect(handle.ref).toMatch(/\.safetensors$/);
+    });
+
+    it('should not remove directory on close', async () => {
+      await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      await externalController.close();
+      expect(rm).not.toHaveBeenCalled();
+    });
+
+    it('should skip prefill when cache file already exists', async () => {
+      vi.mocked(existsSync).mockReturnValueOnce(true);
+
+      const handle = await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.includes.instructions).toBe(true);
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
   });
 });

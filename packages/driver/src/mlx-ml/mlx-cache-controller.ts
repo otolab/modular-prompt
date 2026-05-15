@@ -1,35 +1,66 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { rmSync } from 'node:fs';
+import { rmSync, existsSync } from 'node:fs';
 import { unlink, mkdir, rm } from 'node:fs/promises';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
 import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { MlxProcess } from './process/index.js';
+import type { MlxMessage } from './process/index.js';
 import { convertMessages } from './mlx-message-utils.js';
 import { Logger } from '@modular-prompt/utils';
 
 const logger = new Logger({ prefix: 'MLX', context: 'cache' });
 
+export interface MlxCacheControllerOptions {
+  /** 固定キャッシュディレクトリ。指定時はauto-cleanupが無効になる */
+  cacheDir?: string;
+}
+
 export class MlxCacheController implements PromptCacheController {
   private cacheByHash = new Map<string, CacheHandle>();
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
+  private process?: MlxProcess;
   private cacheDir: string;
+  private managedDir: boolean;
   private cacheDirReady = false;
   private closed = false;
-  private cleanupHandler: () => void;
+  private bound = false;
+  private cleanupHandler?: () => void;
+  private messageProcessor?: (messages: MlxMessage[]) => MlxMessage[];
+  private formatterOptions: FormatterOptions;
 
-  constructor(
-    private process: MlxProcess,
-    private formatterOptions: FormatterOptions = {},
-  ) {
-    this.cacheDir = join(tmpdir(), `mlx-prompt-cache-${randomBytes(6).toString('hex')}`);
-    this.cleanupHandler = () => {
-      try { rmSync(this.cacheDir, { recursive: true, force: true }); } catch { /* best-effort */ }
-    };
-    globalThis.process.on('exit', this.cleanupHandler);
+  constructor(options?: MlxCacheControllerOptions) {
+    this.formatterOptions = {};
+    if (options?.cacheDir) {
+      this.cacheDir = options.cacheDir;
+      this.managedDir = false;
+    } else {
+      this.cacheDir = '';
+      this.managedDir = true;
+    }
+  }
+
+  bind(
+    process: MlxProcess,
+    formatterOptions: FormatterOptions,
+    messageProcessor?: (messages: MlxMessage[]) => MlxMessage[],
+  ): void {
+    this.process = process;
+    this.formatterOptions = formatterOptions;
+    this.messageProcessor = messageProcessor;
+    if (!this.cacheDir) {
+      this.cacheDir = join(tmpdir(), `mlx-prompt-cache-${randomBytes(6).toString('hex')}`);
+    }
+    if (this.managedDir) {
+      this.cleanupHandler = () => {
+        try { rmSync(this.cacheDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+      };
+      globalThis.process.on('exit', this.cleanupHandler);
+    }
+    this.bound = true;
   }
 
   private async ensureCacheDir(): Promise<void> {
@@ -54,6 +85,9 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
+    if (!this.bound) {
+      throw new Error('MlxCacheController is not bound to a process');
+    }
     if (params.tools && params.tools.length > 0) {
       throw new Error('MlxCacheController does not support tool-aware caching');
     }
@@ -99,27 +133,36 @@ export class MlxCacheController implements PromptCacheController {
       return MlxCacheController.EMPTY_HANDLE;
     }
 
-    const prefillPrompt: CompiledPrompt = {
-      instructions: params.instructions || [],
-      data: params.data || [],
-      output: [],
-    };
-
-    const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
-    const mlxMessages = convertMessages(chatMessages);
-
     const cachePath = this.generateCachePath(cacheKey);
-    logger.debug('prefill', cachePath);
-    try {
-      await this.process.cachePrefill(cachePath, mlxMessages);
-    } catch (e) {
-      logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
-      return MlxCacheController.EMPTY_HANDLE;
-    }
 
-    if (this.closed) {
-      await unlink(cachePath).catch(() => {});
-      return MlxCacheController.EMPTY_HANDLE;
+    // 既存キャッシュファイルがあればprefillをスキップ
+    if (existsSync(cachePath)) {
+      logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
+    } else {
+      const prefillPrompt: CompiledPrompt = {
+        instructions: params.instructions || [],
+        data: params.data || [],
+        output: [],
+      };
+
+      const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
+      let mlxMessages = convertMessages(chatMessages);
+      if (this.messageProcessor) {
+        mlxMessages = this.messageProcessor(mlxMessages);
+      }
+
+      logger.debug('prefill', cachePath);
+      try {
+        await this.process!.cachePrefill(cachePath, mlxMessages);
+      } catch (e) {
+        logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
+        return MlxCacheController.EMPTY_HANDLE;
+      }
+
+      if (this.closed) {
+        await unlink(cachePath).catch(() => {});
+        return MlxCacheController.EMPTY_HANDLE;
+      }
     }
 
     const handle: CacheHandle = {
@@ -158,8 +201,12 @@ export class MlxCacheController implements PromptCacheController {
     ]);
     this.inflightRequests.clear();
     this.cacheByHash.clear();
-    await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
+    if (this.managedDir && this.cacheDir) {
+      await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
+    }
     this.cacheDirReady = false;
-    globalThis.process.removeListener('exit', this.cleanupHandler);
+    if (this.cleanupHandler) {
+      globalThis.process.removeListener('exit', this.cleanupHandler);
+    }
   }
 }
