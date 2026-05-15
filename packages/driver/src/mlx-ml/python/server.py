@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_capabilities, handle_chat, handle_completion, handle_format_test
+from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test
 
 
 MAX_READ_LINES = 10000
@@ -38,11 +38,14 @@ class Server:
                 break
             self._dispatch(req)
 
+    def _error_response(self, message: str) -> None:
+        sys.stderr.write(f"Error: {message}\n")
+        print(json.dumps({"error": message}), end='\0', flush=True)
+
     def _dispatch(self, req: dict):
         method = req.get('method')
         if not method:
-            sys.stderr.write("Error: 'method' field is required\n")
-            print('\n', end='\0', flush=True)
+            self._error_response("'method' field is required")
             return
 
         try:
@@ -52,16 +55,22 @@ class Server:
             elif method == 'format_test':
                 messages = req.get('messages')
                 if not messages:
-                    sys.stderr.write("Error: 'messages' field is required for format_test method\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'messages' field is required for format_test method")
                     return
                 handle_format_test(self.backend, self.capabilities, messages, req.get('options', {}), req.get('tools'))
+
+            elif method == 'cache_prefill':
+                cache_path = req.get('cache_path')
+                messages = req.get('messages')
+                if not cache_path or not messages:
+                    self._error_response("'cache_path' and 'messages' fields are required for cache_prefill")
+                    return
+                handle_cache_prefill(self.backend, self.capabilities, cache_path, messages)
 
             elif method == 'chat':
                 messages = req.get('messages')
                 if not messages:
-                    sys.stderr.write("Error: 'messages' field is required for chat method\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'messages' field is required for chat method")
                     return
                 handle_chat(
                     self.backend,
@@ -73,13 +82,13 @@ class Server:
                     images=req.get('images', []),
                     max_image_size=req.get('maxImageSize', 768),
                     reasoning_effort=req.get('reasoning_effort'),
+                    cache_path=req.get('cache_path'),
                 )
 
             elif method == 'completion':
                 prompt = req.get('prompt')
                 if not prompt:
-                    sys.stderr.write("Error: 'prompt' field is required for completion method\n")
-                    print('\n', end='\0', flush=True)
+                    self._error_response("'prompt' field is required for completion method")
                     return
                 images = req.get('images', [])
                 handle_completion(
@@ -91,9 +100,7 @@ class Server:
                 )
 
             else:
-                sys.stderr.write(f"Error: Unknown method '{method}'\n")
-                print('\n', end='\0', flush=True)
+                self._error_response(f"Unknown method '{method}'")
 
         except Exception as e:
-            sys.stderr.write(f"Error processing request: {e}\n")
-            print('\n', end='\0', flush=True)
+            self._error_response(f"Error processing request: {e}")

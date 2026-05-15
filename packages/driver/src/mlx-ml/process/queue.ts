@@ -6,24 +6,24 @@
 
 import { Readable } from 'stream';
 import { mapOptionsToPython } from './parameter-mapper.js';
-import { Logger } from '@modular-prompt/utils';
 import type {
   QueueItem,
   CapabilitiesQueueItem,
   FormatTestQueueItem,
+  CachePrefillQueueItem,
   StreamingQueueItem,
   MlxCapabilitiesRequest,
   MlxFormatTestRequest,
   MlxChatRequest,
   MlxCompletionRequest,
+  MlxCachePrefillRequest,
   MlxMessage,
   MlxMlModelOptions,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxCachePrefillResult,
   MlxToolDefinition
 } from './types.js';
-
-const logger = new Logger({ prefix: 'MLX', context: 'queue' });
 
 export interface QueueManagerCallbacks {
   sendToProcess: (data: string) => void;
@@ -69,7 +69,7 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high'): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
@@ -77,9 +77,10 @@ export class QueueManager {
           messages,
           primer,
           tools,
-          options: mapOptionsToPython(options, true),  // strict mode: true
+          options: mapOptionsToPython(options, true),
           ...(images?.length ? { images, maxImageSize } : {}),
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+          ...(cachePath ? { cache_path: cachePath } : {}),
         };
         this.queue.push({
           request,
@@ -93,14 +94,31 @@ export class QueueManager {
     });
   }
 
+  addCachePrefillRequest(cachePath: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
+    return new Promise((resolve, reject) => {
+      const request: MlxCachePrefillRequest = {
+        method: 'cache_prefill',
+        cache_path: cachePath,
+        messages,
+      };
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true,
+      } as CachePrefillQueueItem);
+      this.processNext();
+    });
+  }
+
   addCompletionRequest(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxCompletionRequest = {
           method: 'completion',
           prompt,
-          options: mapOptionsToPython(options, true),  // strict mode: true
-          ...(images?.length ? { images, maxImageSize } : {})
+          options: mapOptionsToPython(options, true),
+          ...(images?.length ? { images, maxImageSize } : {}),
         };
         this.queue.push({
           request,
@@ -142,13 +160,27 @@ export class QueueManager {
       if (queueItem?.expectJsonResponse) {
         try {
           const jsonResponse = JSON.parse(jsonData);
-          if (queueItem.request.method === 'capabilities') {
+          // format_test has its own error field in MlxFormatTestResult — resolve if well-formed,
+          // but reject bare protocol errors (missing template_applied indicates server-side exception)
+          if (queueItem.request.method === 'format_test') {
+            if ('template_applied' in jsonResponse) {
+              (queueItem as FormatTestQueueItem).resolve(jsonResponse);
+            } else {
+              (queueItem as FormatTestQueueItem).resolve({
+                formatted_prompt: null,
+                template_applied: false,
+                model_specific_processing: null,
+                error: jsonResponse.error || 'Malformed format_test response'
+              });
+            }
+          } else if (jsonResponse.error) {
+            queueItem.reject?.(new Error(jsonResponse.error));
+          } else if (queueItem.request.method === 'capabilities') {
             (queueItem as CapabilitiesQueueItem).resolve(jsonResponse);
-          } else if (queueItem.request.method === 'format_test') {
-            (queueItem as FormatTestQueueItem).resolve(jsonResponse);
+          } else if (queueItem.request.method === 'cache_prefill') {
+            (queueItem as CachePrefillQueueItem).resolve(jsonResponse);
           }
         } catch (e) {
-          // エラー時のフォールバック処理
           if (queueItem.request.method === 'capabilities') {
             (queueItem as CapabilitiesQueueItem).resolve({
               methods: [],
@@ -162,13 +194,14 @@ export class QueueManager {
               model_specific_processing: null,
               error: e instanceof Error ? e.message : 'Unknown error'
             });
+          } else if (queueItem.request.method === 'cache_prefill') {
+            (queueItem as CachePrefillQueueItem).reject(
+              e instanceof Error ? e : new Error(String(e))
+            );
           }
         }
       }
     }
-    // 注: isProcessing/processNext は onRequestCompleted() に一元化
-    // handleJsonResponse と onRequestCompleted の二重呼び出しによる
-    // isProcessing フラグの不整合を防止
   }
 
   onRequestCompleted(): void {

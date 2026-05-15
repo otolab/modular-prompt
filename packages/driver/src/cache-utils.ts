@@ -29,6 +29,33 @@ export interface PromptPartition {
   };
 }
 
+export interface CacheablePrefix {
+  instructions: Element[];
+  data: Element[];
+}
+
+export function extractCacheablePrefix(prompt: CompiledPrompt): CacheablePrefix {
+  const instructions: Element[] = [];
+  const data: Element[] = [];
+
+  if (prompt.instructions) {
+    for (const el of prompt.instructions) {
+      if (!isElementCacheable(el)) break;
+      instructions.push(el);
+    }
+  }
+
+  const allInstructionsCacheable = instructions.length === (prompt.instructions?.length ?? 0);
+  if (allInstructionsCacheable && prompt.data) {
+    for (const el of prompt.data) {
+      if (!isElementCacheable(el)) break;
+      data.push(el);
+    }
+  }
+
+  return { instructions, data };
+}
+
 export function partitionPrompt(prompt: CompiledPrompt): PromptPartition {
   const cacheable = {
     instructions: [] as Element[],

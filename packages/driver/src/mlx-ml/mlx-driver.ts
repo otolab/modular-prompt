@@ -1,19 +1,22 @@
 import { Readable } from 'stream';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, FinishReason } from '../types.js';
-import { hasToolCalls, isToolResult } from '../types.js';
-import type { FormatterOptions, ChatMessage } from '../formatter/types.js';
+import { isToolResult } from '../types.js';
+import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
 import { MlxProcess } from './process/index.js';
-import type { MlxMessage, MlxMlModelOptions, MlxModelCapabilities, MlxContentPart } from './types.js';
+import type { MlxMlModelOptions, MlxModelCapabilities } from './types.js';
 import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
 import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
 import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
 import { formatToolDefinitionsAsText } from './tool-call-parser.js';
-import { contentToString, extractImagePaths } from '../content-utils.js';
+import { convertMessages, extractImagePaths } from './mlx-message-utils.js';
 import { QueryLogger } from '../query-logger.js';
+import type { PromptCacheController } from '../cache-controller.js';
+import { extractCacheablePrefix } from '../cache-utils.js';
+import { MlxCacheController } from './mlx-cache-controller.js';
 
 // ========================================================================
 // Utility Functions (exported for testing)
@@ -50,67 +53,6 @@ export function hasMessageElement(prompt: CompiledPrompt): boolean {
     checkElements(prompt.output);
 }
 
-/**
- * Convert ChatMessage format to MLX format
- * VLM mode preserves image placeholders as structured content parts
- */
-export function convertMessages(messages: ChatMessage[], vlm: boolean = false): MlxMessage[] {
-  return messages.map(msg => {
-    // AssistantToolCallMessage - tool_calls付きメッセージ
-    if (hasToolCalls(msg)) {
-      return {
-        role: 'assistant' as const,
-        content: msg.content,
-        tool_calls: msg.toolCalls.map(tc => ({
-          id: tc.id,
-          type: 'function' as const,
-          function: {
-            name: tc.name,
-            arguments: JSON.stringify(tc.arguments)
-          }
-        }))
-      };
-    }
-
-    // ToolResultMessage - ツール結果メッセージ
-    if (isToolResult(msg)) {
-      let content: string;
-      if (msg.kind === 'text') {
-        content = String(msg.value);
-      } else if (msg.kind === 'data') {
-        content = JSON.stringify(msg.value);
-      } else {
-        content = String(msg.value);
-      }
-      return {
-        role: 'tool' as const,
-        content,
-        tool_call_id: msg.toolCallId,
-        name: msg.name
-      };
-    }
-
-    // StandardChatMessage - 通常メッセージ（VLM対応含む）
-    if (vlm && Array.isArray(msg.content)) {
-      const parts: MlxContentPart[] = [];
-      for (const att of msg.content) {
-        if (att.type === 'image_url' && att.image_url?.url) {
-          parts.push({ type: 'image' });
-        } else if (att.type === 'text' && att.text) {
-          parts.push({ type: 'text', text: att.text });
-        }
-      }
-      if (parts.length > 0) {
-        return { role: msg.role as 'system' | 'user' | 'assistant', content: parts };
-      }
-    }
-    return {
-      role: msg.role as 'system' | 'user' | 'assistant',
-      content: contentToString(msg.content)
-    };
-  });
-}
-
 // ========================================================================
 // Main Class
 // ========================================================================
@@ -128,6 +70,8 @@ export interface MlxDriverConfig {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** KVキャッシュによるプロンプトプレフィルを有効化（LMバックエンドのみ） */
+  enableCaching?: boolean;
 }
 
 /**
@@ -178,6 +122,8 @@ export class MlxDriver implements AIDriver {
   private formatterOptions: FormatterOptions;
   private maxImageSize: number;
   private queryLogger = new QueryLogger('MLX');
+  private cacheController?: PromptCacheController;
+  private enableCaching: boolean;
 
   get defaultOptions(): Partial<MlxMlModelOptions> {
     return this._defaultOptions;
@@ -194,6 +140,7 @@ export class MlxDriver implements AIDriver {
     this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
     this.modelProcessor = createModelSpecificProcessor(config.model);
+    this.enableCaching = config.enableCaching ?? false;
     if (config.drafterModel) {
       this.queryLogger.log.info(`Drafter model: ${config.drafterModel}`);
     }
@@ -221,6 +168,21 @@ export class MlxDriver implements AIDriver {
           chatRestrictions: this.runtimeInfo.chat_restrictions,
           modelKind: this.runtimeInfo.model_kind,
         });
+
+        // Initialize cache controller after runtime info is available
+        // Skip: VLM, models requiring system message merge, models with model-specific chat processors,
+        // models requiring user-last (cacheable prefix may end in assistant message)
+        if (this.enableCaching && !this.cacheController
+          && this.runtimeInfo.model_kind !== 'vlm'
+          && !this.runtimeInfo.chat_restrictions?.single_system_at_start
+          && !this.runtimeInfo.chat_restrictions?.requires_user_last
+          && !this.modelProcessor.hasChatProcessor()
+        ) {
+          this.cacheController = new MlxCacheController(
+            this.process,
+            this.formatterOptions,
+          );
+        }
       } catch (error) {
         this.queryLogger.log.error('Failed to get MLX runtime info:', error instanceof Error ? error.message : String(error));
       }
@@ -278,7 +240,6 @@ export class MlxDriver implements AIDriver {
         this.runtimeInfo?.special_tokens,
         this.runtimeInfo?.features?.chat_template?.tool_call_format
       );
-      // instructions の末尾にTextElementとして追加
       augmentedPrompt = {
         ...prompt,
         instructions: [
@@ -290,26 +251,43 @@ export class MlxDriver implements AIDriver {
 
     let stream: Readable;
     if (api === 'completion') {
-      // completion APIを使用 - 標準フォーマッターを使用
-      // completion APIではtools非対応
       let formattedPrompt = formatCompletionPrompt(augmentedPrompt, this.formatterOptions);
-      // モデル固有の後処理を適用
       formattedPrompt = this.modelProcessor.applyCompletionSpecificProcessing(formattedPrompt);
       stream = await this.process.completion(formattedPrompt, mlxOptions);
     } else {
-      // chat APIを使用 - メッセージ変換して処理
       const messages = formatPromptAsMessages(augmentedPrompt, this.formatterOptions);
       const vlm = this.isVLM();
       let mlxMessages = convertMessages(messages, vlm);
-      // chat APIではチャット処理を適用
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
-      // nativeツール対応の場合のみPythonにtoolsを渡す
-      const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
-      // VLMの場合は画像パスを抽出（ファイル読み込み用）
+      const nativeTools = this.hasNativeToolSupport() && tools?.length ? tools : undefined;
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort);
+
+      // Cache: chat APIのみ、以下の条件を全て満たす場合にキャッシュを使用
+      // - nativeTools未使用（chat template出力に影響）
+      // - reasoningEffort未指定（apply_chat_templateの出力に影響しうる）
+      // - outputSchema未指定（formatPromptAsMessagesがschemaを挿入し、prefixがずれる）
+      // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
+      let cachePath: string | undefined;
+      const trustRemoteCode = mlxOptions.trustRemoteCode;
+      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
+        const prefix = extractCacheablePrefix(augmentedPrompt);
+        const hasCacheableContent =
+          prefix.instructions.length > 0 ||
+          prefix.data.length > 0;
+
+        if (hasCacheableContent) {
+          const handle = await this.cacheController.prepare({
+            model: this.model,
+            instructions: prefix.instructions,
+            data: prefix.data,
+          });
+          cachePath = handle.ref || undefined;
+        }
+      }
+
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cachePath);
     }
 
     return stream;
@@ -449,6 +427,7 @@ export class MlxDriver implements AIDriver {
    * Close the process
    */
   async close(): Promise<void> {
+    await this.cacheController?.close();
     await this.process.exit();
   }
 }

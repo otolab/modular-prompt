@@ -39,6 +39,8 @@ if __name__ == "__main__":
 
     capabilities = get_capabilities(backend.get_tokenizer())
     capabilities["model_kind"] = model_kind
+    if model_kind == "lm":
+        capabilities["methods"].append("cache_prefill")
 
     server = Server(backend, capabilities)
     server.run()

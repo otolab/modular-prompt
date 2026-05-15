@@ -89,6 +89,10 @@ export {
   MlxProcess
 } from './mlx-ml/process/index.js';
 
+export {
+  MlxCacheController,
+} from './mlx-ml/mlx-cache-controller.js';
+
 export type {
   MlxMessage,
   MlxContentPart

@@ -17,7 +17,8 @@ class ModelBackend(ABC):
 
     @abstractmethod
     def stream_generate(
-        self, prompt: str | list[int], options: dict, images: list | None = None
+        self, prompt: str | list[int], options: dict, images: list | None = None,
+        prompt_cache: list | None = None,
     ) -> Iterator[Any]:
         """Stream generation results."""
         raise NotImplementedError
@@ -42,3 +43,13 @@ class ModelBackend(ABC):
     def has_drafter(self) -> bool:
         """Return whether a drafter model is loaded."""
         return False
+
+    def cache_prefill(self, cache_path: str, prompt: str) -> dict:
+        """Build a KV cache from a prompt prefix."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support prompt caching"
+        )
+
+    def load_cache_from_file(self, cache_path: str) -> list | None:
+        """Load a prompt cache from file, or None."""
+        return None

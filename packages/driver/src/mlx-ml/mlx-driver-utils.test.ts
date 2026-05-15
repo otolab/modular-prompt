@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { hasMessageElement, convertMessages } from './mlx-driver.js';
+import { hasMessageElement } from './mlx-driver.js';
+import { convertMessages } from './mlx-message-utils.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { ChatMessage } from '../formatter/types.js';
 
