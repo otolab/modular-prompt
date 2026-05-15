@@ -94,12 +94,13 @@ export class QueueManager {
     });
   }
 
-  addCachePrefillRequest(cachePath: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
+  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string): Promise<MlxCachePrefillResult> {
     return new Promise((resolve, reject) => {
       const request: MlxCachePrefillRequest = {
         method: 'cache_prefill',
         cache_path: cachePath,
         messages,
+        ...(baseCachePath && { base_cache_path: baseCachePath }),
       };
       this.queue.push({
         request,

@@ -92,6 +92,7 @@ export interface MlxCachePrefillRequest extends MlxBaseRequest {
   method: 'cache_prefill';
   cache_path: string;
   messages: MlxMessage[];
+  base_cache_path?: string;
 }
 
 export interface MlxCachePrefillResult {

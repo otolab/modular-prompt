@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { rmSync, existsSync } from 'node:fs';
-import { unlink, mkdir, rm } from 'node:fs/promises';
+import { rmSync, existsSync, readFileSync } from 'node:fs';
+import { unlink, mkdir, rm, writeFile } from 'node:fs/promises';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
 import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
@@ -13,6 +13,19 @@ import { convertMessages } from './mlx-message-utils.js';
 import { Logger } from '@modular-prompt/utils';
 
 const logger = new Logger({ prefix: 'MLX', context: 'cache' });
+
+interface CacheIndexEntry {
+  key: string;
+  model: string;
+  formatterOptionsHash: string;
+  elementHashes: string[];
+  createdAt: string;
+}
+
+interface CacheIndex {
+  version: 1;
+  entries: CacheIndexEntry[];
+}
 
 export interface MlxCacheControllerOptions {
   /** 固定キャッシュディレクトリ。指定時はauto-cleanupが無効になる */
@@ -31,6 +44,9 @@ export class MlxCacheController implements PromptCacheController {
   private cleanupHandler?: () => void;
   private messageProcessor?: (messages: MlxMessage[]) => MlxMessage[];
   private formatterOptions: FormatterOptions;
+  private lastHandle?: CacheHandle;
+  private cacheIndex: CacheIndex = { version: 1, entries: [] };
+  private indexLoaded = false;
 
   constructor(options?: MlxCacheControllerOptions) {
     this.formatterOptions = {};
@@ -63,6 +79,9 @@ export class MlxCacheController implements PromptCacheController {
       };
       globalThis.process.on('exit', this.cleanupHandler);
     }
+    if (!this.managedDir) {
+      this.loadIndexSync();
+    }
     this.bound = true;
   }
 
@@ -70,6 +89,106 @@ export class MlxCacheController implements PromptCacheController {
     if (this.cacheDirReady) return;
     await mkdir(this.cacheDir, { recursive: true, mode: 0o700 });
     this.cacheDirReady = true;
+  }
+
+  private get indexPath(): string {
+    return join(this.cacheDir, 'cache-index.json');
+  }
+
+  private loadIndexSync(): void {
+    try {
+      if (existsSync(this.indexPath)) {
+        const raw = readFileSync(this.indexPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.version === 1 && Array.isArray(parsed.entries)) {
+          this.cacheIndex = parsed;
+        }
+      }
+    } catch {
+      // corrupt index — start fresh
+    }
+    this.indexLoaded = true;
+  }
+
+  private async saveIndex(): Promise<void> {
+    if (this.managedDir) return;
+    try {
+      await this.ensureCacheDir();
+      await writeFile(this.indexPath, JSON.stringify(this.cacheIndex, null, 2));
+    } catch {
+      // best-effort
+    }
+  }
+
+  private computeFormatterOptionsHash(): string {
+    if (!this.formatterOptions || Object.keys(this.formatterOptions).length === 0) {
+      return '';
+    }
+    return createHash('sha256').update(JSON.stringify(this.formatterOptions)).digest('hex');
+  }
+
+  private computeElementHashes(params: CachePrepareParams): string[] {
+    const hashes: string[] = [];
+    for (const el of params.instructions || []) {
+      hashes.push(createHash('sha256').update(JSON.stringify(el)).digest('hex'));
+    }
+    for (const el of params.data || []) {
+      hashes.push(createHash('sha256').update(JSON.stringify(el)).digest('hex'));
+    }
+    return hashes;
+  }
+
+  private findBestBase(params: CachePrepareParams): string | undefined {
+    if (this.cacheIndex.entries.length === 0) return undefined;
+
+    const newHashes = this.computeElementHashes(params);
+    const fmtHash = this.computeFormatterOptionsHash();
+    let bestPath: string | undefined;
+    let bestLength = 0;
+    const staleKeys: string[] = [];
+
+    for (const entry of this.cacheIndex.entries) {
+      if (entry.model !== params.model) continue;
+      if (entry.formatterOptionsHash !== fmtHash) continue;
+      if (entry.elementHashes.length >= newHashes.length) continue;
+      const isPrefix = entry.elementHashes.every((h, i) => h === newHashes[i]);
+      if (isPrefix && entry.elementHashes.length > bestLength) {
+        const path = this.generateCachePath(entry.key);
+        if (existsSync(path)) {
+          bestPath = path;
+          bestLength = entry.elementHashes.length;
+        } else {
+          staleKeys.push(entry.key);
+        }
+      }
+    }
+
+    // lazy cleanup of stale entries
+    if (staleKeys.length > 0) {
+      this.cacheIndex.entries = this.cacheIndex.entries.filter(e => !staleKeys.includes(e.key));
+    }
+
+    return bestPath;
+  }
+
+  private addToIndex(params: CachePrepareParams, cacheKey: string): void {
+    // avoid duplicates
+    if (this.cacheIndex.entries.some(e => e.key === cacheKey)) return;
+
+    this.cacheIndex.entries.push({
+      key: cacheKey,
+      model: params.model,
+      formatterOptionsHash: this.computeFormatterOptionsHash(),
+      elementHashes: this.computeElementHashes(params),
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  private removeFromIndex(cachePath: string): void {
+    const key = cachePath.split('/').pop()?.replace('.safetensors', '');
+    if (key) {
+      this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.key !== key);
+    }
   }
 
   private computeCacheKey(params: CachePrepareParams): string {
@@ -141,10 +260,21 @@ export class MlxCacheController implements PromptCacheController {
 
     const cachePath = this.generateCachePath(cacheKey);
 
-    // 既存キャッシュファイルがあればprefillをスキップ
     if (existsSync(cachePath)) {
       logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
     } else {
+      // base cacheの探索: セッション内lastHandle → インデックス探索
+      let baseCachePath: string | undefined;
+      if (this.lastHandle?.ref && existsSync(this.lastHandle.ref)) {
+        baseCachePath = this.lastHandle.ref;
+      } else {
+        baseCachePath = this.findBestBase(params);
+      }
+
+      if (baseCachePath) {
+        logger.verbose('incremental prefill from', baseCachePath.split('/').pop());
+      }
+
       const prefillPrompt: CompiledPrompt = {
         instructions: params.instructions || [],
         data: params.data || [],
@@ -159,7 +289,7 @@ export class MlxCacheController implements PromptCacheController {
 
       logger.debug('prefill', cachePath);
       try {
-        await this.process!.cachePrefill(cachePath, mlxMessages);
+        await this.process!.cachePrefill(cachePath, mlxMessages, baseCachePath);
       } catch (e) {
         logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
         return MlxCacheController.EMPTY_HANDLE;
@@ -180,11 +310,17 @@ export class MlxCacheController implements PromptCacheController {
       },
     };
     this.cacheByHash.set(cacheKey, handle);
+    this.lastHandle = handle;
+
+    this.addToIndex(params, cacheKey);
+    await this.saveIndex();
+
     return handle;
   }
 
   async invalidate(handle: CacheHandle): Promise<void> {
     logger.debug('invalidate', handle.ref);
+    this.removeFromIndex(handle.ref);
     await unlink(handle.ref).catch(() => {});
     for (const [key, entry] of this.cacheByHash) {
       if (entry.ref === handle.ref) {
@@ -192,6 +328,10 @@ export class MlxCacheController implements PromptCacheController {
         break;
       }
     }
+    if (this.lastHandle?.ref === handle.ref) {
+      this.lastHandle = undefined;
+    }
+    await this.saveIndex();
   }
 
   async close(): Promise<void> {
@@ -207,8 +347,11 @@ export class MlxCacheController implements PromptCacheController {
     ]);
     this.inflightRequests.clear();
     this.cacheByHash.clear();
+    this.lastHandle = undefined;
     if (this.managedDir && this.cacheDir) {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
+    } else {
+      await this.saveIndex();
     }
     this.cacheDirReady = false;
     if (this.cleanupHandler) {

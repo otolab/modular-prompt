@@ -65,7 +65,10 @@ class Server:
                 if not cache_path or not messages:
                     self._error_response("'cache_path' and 'messages' fields are required for cache_prefill")
                     return
-                handle_cache_prefill(self.backend, self.capabilities, cache_path, messages)
+                handle_cache_prefill(
+                    self.backend, self.capabilities, cache_path, messages,
+                    base_cache_path=req.get('base_cache_path'),
+                )
 
             elif method == 'chat':
                 messages = req.get('messages')

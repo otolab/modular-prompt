@@ -87,8 +87,8 @@ export class MlxProcess {
   }
 
   // Cache operations
-  async cachePrefill(cachePath: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
-    return this.queueManager.addCachePrefillRequest(cachePath, messages);
+  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string): Promise<MlxCachePrefillResult> {
+    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath);
   }
 
   // API v2.0 Chat

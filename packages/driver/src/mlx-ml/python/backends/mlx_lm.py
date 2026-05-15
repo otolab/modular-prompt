@@ -58,11 +58,20 @@ class MlxLmBackend(ModelBackend):
                 break
             yield response
 
-    def cache_prefill(self, cache_path: str, prompt: str) -> dict:
+    def cache_prefill(self, cache_path: str, prompt: str, base_cache_path: str | None = None) -> dict:
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded")
 
-        prompt_cache = make_prompt_cache(self.model)
+        if base_cache_path is not None:
+            try:
+                prompt_cache = load_prompt_cache(base_cache_path)
+                sys.stderr.write(f"Incremental prefill from: {base_cache_path}\n")
+            except Exception as e:
+                sys.stderr.write(f"Base cache load failed, creating fresh: {e}\n")
+                prompt_cache = make_prompt_cache(self.model)
+        else:
+            prompt_cache = make_prompt_cache(self.model)
+
         for _ in mlx_lm_stream_generate(
             self.model, self.tokenizer, prompt,
             prompt_cache=prompt_cache, max_tokens=1,

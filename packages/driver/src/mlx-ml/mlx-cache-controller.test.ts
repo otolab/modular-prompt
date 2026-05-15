@@ -4,16 +4,18 @@ import { MlxCacheController } from './mlx-cache-controller.js';
 vi.mock('node:fs', () => ({
   rmSync: vi.fn(),
   existsSync: vi.fn().mockReturnValue(false),
+  readFileSync: vi.fn().mockReturnValue(''),
 }));
 
 vi.mock('node:fs/promises', () => ({
   unlink: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn().mockResolvedValue(undefined),
   rm: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { unlink, mkdir, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { unlink, mkdir, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 
 function createMockProcess() {
   return {
@@ -27,6 +29,8 @@ describe('MlxCacheController', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(readFileSync).mockReturnValue('');
     mockProcess = createMockProcess();
     controller = new MlxCacheController();
     controller.bind(mockProcess as any, {});
@@ -321,6 +325,148 @@ describe('MlxCacheController', () => {
       expect(handle.ref).toMatch(/\.safetensors$/);
       expect(handle.includes.instructions).toBe(true);
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('incremental prefill', () => {
+    it('should pass lastHandle as baseCachePath on second prepare', async () => {
+      // 1回目: baseCachePathなし
+      const handle1 = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const [, , basePath1] = mockProcess.cachePrefill.mock.calls[0];
+      expect(basePath1).toBeUndefined();
+
+      // lastHandleのファイルが存在する状態にする
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        return path === handle1.ref;
+      });
+
+      // 2回目: 異なるparams → lastHandleがbaseCachePathとして渡される
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+        data: [{ type: 'text', content: 'message 1' }],
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
+      const [, , basePath2] = mockProcess.cachePrefill.mock.calls[1];
+      expect(basePath2).toBe(handle1.ref);
+    });
+
+    it('should fall back to index when lastHandle file is missing', async () => {
+      const externalController = new MlxCacheController({ cacheDir: '/cache' });
+      externalController.bind(mockProcess as any, {});
+
+      // 1回目
+      const handle1 = await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+      });
+
+      // existsSyncを設定: handle1のファイルは存在しない（削除された想定）
+      // ただし新しいキャッシュパスも存在しない
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      // 2回目: lastHandleのファイルが無い → baseCachePathはundefined
+      await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+        data: [{ type: 'text', content: 'message 1' }],
+      });
+
+      const [, , basePath2] = mockProcess.cachePrefill.mock.calls[1];
+      expect(basePath2).toBeUndefined();
+
+      await externalController.close();
+    });
+
+    it('should discover base cache from index on fresh controller', async () => {
+      // インデックスにエントリがある状態でコントローラを作成
+      const instructions = [{ type: 'text', content: 'system prompt' }];
+      const instructionHash = require('node:crypto')
+        .createHash('sha256')
+        .update(JSON.stringify(instructions[0]))
+        .digest('hex');
+
+      const existingKey = require('node:crypto')
+        .createHash('sha256')
+        .update(JSON.stringify({ model: 'test-model', instructions }))
+        .digest('hex');
+
+      const indexData = {
+        version: 1,
+        entries: [{
+          key: existingKey,
+          model: 'test-model',
+          formatterOptionsHash: '',
+          elementHashes: [instructionHash],
+          createdAt: new Date().toISOString(),
+        }],
+      };
+
+      // readFileSyncでインデックスを返す
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(indexData));
+      // existsSyncの設定: indexPathとキャッシュファイルは存在する
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        const pathStr = String(path);
+        if (pathStr.endsWith('cache-index.json')) return true;
+        if (pathStr.endsWith(`${existingKey}.safetensors`)) return true;
+        return false;
+      });
+
+      const freshController = new MlxCacheController({ cacheDir: '/cache' });
+      freshController.bind(mockProcess as any, {});
+
+      // 新しいprepare: instructionsは同じ + data追加 → インデックスからbase cache発見
+      await freshController.prepare({
+        model: 'test-model',
+        instructions,
+        data: [{ type: 'text', content: 'message 1' }],
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const [, , basePath] = mockProcess.cachePrefill.mock.calls[0];
+      expect(basePath).toMatch(new RegExp(`${existingKey}\\.safetensors$`));
+
+      await freshController.close();
+    });
+
+    it('should save index to file after cache creation for external dir', async () => {
+      const externalController = new MlxCacheController({ cacheDir: '/cache' });
+      externalController.bind(mockProcess as any, {});
+
+      await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(writeFile).toHaveBeenCalledWith(
+        '/cache/cache-index.json',
+        expect.any(String),
+      );
+
+      // 保存されたJSONを検証
+      const savedJson = JSON.parse(vi.mocked(writeFile).mock.calls[0][1] as string);
+      expect(savedJson.version).toBe(1);
+      expect(savedJson.entries).toHaveLength(1);
+      expect(savedJson.entries[0].model).toBe('test-model');
+      expect(savedJson.entries[0].elementHashes).toHaveLength(1);
+
+      await externalController.close();
+    });
+
+    it('should not save index for managed temp dir', async () => {
+      // デフォルトコントローラ（managedDir=true）
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(writeFile).not.toHaveBeenCalled();
     });
   });
 });

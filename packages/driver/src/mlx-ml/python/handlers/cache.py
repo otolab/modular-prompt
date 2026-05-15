@@ -12,6 +12,7 @@ def handle_cache_prefill(
     capabilities: dict,
     cache_path: str,
     messages: list,
+    base_cache_path: str | None = None,
 ) -> None:
     tokenizer = backend.get_tokenizer()
 
@@ -25,5 +26,5 @@ def handle_cache_prefill(
         prompt = generate_merged_prompt(messages, capabilities)
 
     sys.stderr.write(f"--- cache_prefill {cache_path}\n")
-    result = backend.cache_prefill(cache_path, prompt)
+    result = backend.cache_prefill(cache_path, prompt, base_cache_path)
     print(json.dumps(result), end="\0", flush=True)
