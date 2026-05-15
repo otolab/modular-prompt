@@ -171,12 +171,17 @@ export class MlxDriver implements AIDriver {
 
         // Bind cache controller if provided and not yet bound
         if (this.cacheController instanceof MlxCacheController && !this.cacheControllerBound) {
-          this.cacheController.bind(
-            this.process,
-            this.formatterOptions,
-            (msgs) => this.modelProcessor.applyChatSpecificProcessing(msgs),
-          );
-          this.cacheControllerBound = true;
+          if (this.runtimeInfo.model_kind === 'vlm') {
+            this.queryLogger.log.info('VLM models do not support prompt caching — cacheController disabled');
+            this.cacheController = undefined;
+          } else {
+            this.cacheController.bind(
+              this.process,
+              this.formatterOptions,
+              (msgs) => this.modelProcessor.applyChatSpecificProcessing(msgs),
+            );
+            this.cacheControllerBound = true;
+          }
         }
       } catch (error) {
         this.queryLogger.log.error('Failed to get MLX runtime info:', error instanceof Error ? error.message : String(error));

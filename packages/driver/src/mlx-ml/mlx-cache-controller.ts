@@ -48,6 +48,9 @@ export class MlxCacheController implements PromptCacheController {
     formatterOptions: FormatterOptions,
     messageProcessor?: (messages: MlxMessage[]) => MlxMessage[],
   ): void {
+    if (this.bound) {
+      throw new Error('MlxCacheController is already bound to a process');
+    }
     this.process = process;
     this.formatterOptions = formatterOptions;
     this.messageProcessor = messageProcessor;
@@ -76,6 +79,9 @@ export class MlxCacheController implements PromptCacheController {
     }
     if (params.data && params.data.length > 0) {
       payload.data = params.data;
+    }
+    if (this.formatterOptions && Object.keys(this.formatterOptions).length > 0) {
+      payload.formatterOptions = this.formatterOptions;
     }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }

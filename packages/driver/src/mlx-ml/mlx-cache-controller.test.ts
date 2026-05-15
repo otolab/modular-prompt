@@ -147,6 +147,28 @@ describe('MlxCacheController', () => {
         instructions: [{ type: 'text', content: 'test' }],
       })).rejects.toThrow('MlxCacheController is not bound to a process');
     });
+
+    it('should produce different cache keys for different formatterOptions', async () => {
+      const controllerA = new MlxCacheController();
+      controllerA.bind(mockProcess as any, { specialTokens: { bosToken: '<s>' } });
+
+      const controllerB = new MlxCacheController();
+      controllerB.bind(mockProcess as any, { specialTokens: { bosToken: '<bos>' } });
+
+      const params = {
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'prompt' }],
+      };
+
+      const handleA = await controllerA.prepare(params);
+      const handleB = await controllerB.prepare(params);
+
+      expect(handleA.ref).not.toBe(handleB.ref);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
+
+      await controllerA.close();
+      await controllerB.close();
+    });
   });
 
   describe('invalidate', () => {
@@ -244,6 +266,15 @@ describe('MlxCacheController', () => {
       });
       expect(handle.ref).toBe('');
       expect(handle.includes.instructions).toBe(false);
+    });
+  });
+
+  describe('bind', () => {
+    it('should throw when bind is called twice', () => {
+      const ctrl = new MlxCacheController();
+      ctrl.bind(mockProcess as any, {});
+      expect(() => ctrl.bind(mockProcess as any, {}))
+        .toThrow('MlxCacheController is already bound to a process');
     });
   });
 
