@@ -224,13 +224,15 @@ describe('MlxCacheController', () => {
   });
 
   describe('error handling', () => {
-    it('should propagate prefill errors', async () => {
+    it('should return empty handle on prefill failure', async () => {
       mockProcess.cachePrefill.mockRejectedValueOnce(new Error('prefill failed'));
 
-      await expect(controller.prepare({
+      const handle = await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'test' }],
-      })).rejects.toThrow('prefill failed');
+      });
+      expect(handle.ref).toBe('');
+      expect(handle.includes.instructions).toBe(false);
     });
   });
 });

@@ -259,7 +259,7 @@ export class MlxDriver implements AIDriver {
       const vlm = this.isVLM();
       let mlxMessages = convertMessages(messages, vlm);
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
-      const nativeTools = this.hasNativeToolSupport() ? tools : undefined;
+      const nativeTools = this.hasNativeToolSupport() && tools?.length ? tools : undefined;
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
@@ -271,7 +271,7 @@ export class MlxDriver implements AIDriver {
       // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
       let cachePath: string | undefined;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
-      if (this.cacheController && !nativeTools?.length && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
+      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
@@ -283,7 +283,7 @@ export class MlxDriver implements AIDriver {
             instructions: prefix.instructions,
             data: prefix.data,
           });
-          cachePath = handle.ref;
+          cachePath = handle.ref || undefined;
         }
       }
 

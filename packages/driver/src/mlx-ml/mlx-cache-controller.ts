@@ -100,7 +100,12 @@ export class MlxCacheController implements PromptCacheController {
 
     const cachePath = this.generateCachePath(cacheKey);
     logger.debug('prefill', cachePath);
-    await this.process.cachePrefill(cachePath, mlxMessages);
+    try {
+      await this.process.cachePrefill(cachePath, mlxMessages);
+    } catch (e) {
+      logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
+      return { ref: '', includes: { instructions: false, dataElementCount: 0, tools: false } };
+    }
 
     const handle: CacheHandle = {
       ref: cachePath,
