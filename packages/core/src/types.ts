@@ -1,6 +1,6 @@
 // 基本型定義
 
-export type CacheHint = 'static' | 'contextual';
+export type CacheHint = 'static' | 'immutable' | 'contextual';
 
 // Attachment定義
 export interface Attachment {

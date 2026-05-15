@@ -57,6 +57,11 @@ describe('isElementCacheable', () => {
     const el: Element = { type: 'chunk', partOf: 'doc', content: 'part', cacheHint: 'static' };
     expect(isElementCacheable(el)).toBe(true);
   });
+
+  it('cacheHint: immutable → cacheable', () => {
+    const el: Element = { type: 'message', role: 'user', content: 'hi', cacheHint: 'immutable' };
+    expect(isElementCacheable(el)).toBe(true);
+  });
 });
 
 describe('partitionPrompt', () => {
@@ -200,5 +205,20 @@ describe('extractCacheablePrefix', () => {
     };
     const result = extractCacheablePrefix(prompt);
     expect(result.data).toHaveLength(1);
+  });
+
+  it('includes immutable elements in cacheable prefix', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'rule', cacheHint: 'static' }],
+      data: [
+        { type: 'message', role: 'user', content: 'old question', cacheHint: 'immutable' },
+        { type: 'message', role: 'assistant', content: 'old answer', cacheHint: 'immutable' },
+        { type: 'message', role: 'user', content: 'new question', cacheHint: 'contextual' },
+      ],
+      output: [],
+    };
+    const result = extractCacheablePrefix(prompt);
+    expect(result.instructions).toHaveLength(1);
+    expect(result.data).toHaveLength(2);
   });
 });

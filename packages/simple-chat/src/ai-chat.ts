@@ -61,7 +61,8 @@ const baseChatModule: PromptModule<ChatContext> = {
       return recentMessages.map(m => ({
         type: 'message' as const,
         role: m.role as 'user' | 'assistant',
-        content: m.content
+        content: m.content,
+        cacheHint: 'immutable' as const,
       }));
     }
   ],

@@ -920,6 +920,34 @@ describe('compile', () => {
       });
     });
 
+    it('should preserve explicit cacheHint from DynamicContent output', () => {
+      const module: PromptModule<{ messages: Array<{ role: string; content: string }> }> = {
+        createContext: () => ({ messages: [] }),
+        messages: [
+          (ctx) => ctx.messages.map(m => ({
+            type: 'message' as const,
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            cacheHint: 'immutable' as const,
+          })),
+          { type: 'message', role: 'user', content: 'latest' },
+        ],
+      };
+      const ctx = createContext(module);
+      ctx.messages = [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'hi' },
+      ];
+      const result = compile(module, ctx);
+
+      // DynamicContent output with explicit immutable should be preserved
+      const messages = result.data.filter(el => el.type === 'message');
+      expect(messages[0]).toMatchObject({ content: 'hello', cacheHint: 'immutable' });
+      expect(messages[1]).toMatchObject({ content: 'hi', cacheHint: 'immutable' });
+      // Static message gets 'static'
+      expect(messages[2]).toMatchObject({ content: 'latest', cacheHint: 'static' });
+    });
+
     it('should independently determine cacheHint per section', () => {
       const module: PromptModule<{ name: string }> = {
         createContext: () => ({ name: 'test' }),
