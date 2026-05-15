@@ -281,12 +281,19 @@ export class MlxDriver implements AIDriver {
           prefix.data.length > 0;
 
         if (hasCacheableContent) {
+          const cacheStart = performance.now();
           const handle = await this.cacheController.prepare({
             model: this.model,
             instructions: prefix.instructions,
             data: prefix.data,
           });
           cachePath = handle.ref || undefined;
+          if (cachePath) {
+            this.queryLogger.log.debug(
+              `cache prepare ${(performance.now() - cacheStart).toFixed(0)}ms`,
+              `(${prefix.instructions.length}i+${prefix.data.length}d)`,
+            );
+          }
         }
       }
 
@@ -332,10 +339,34 @@ export class MlxDriver implements AIDriver {
     this.queryLogger.mark(mlxOptions as Record<string, unknown>);
 
     // Use executeQuery for the actual stream generation
+    const queryStart = performance.now();
     const stream = await this.executeQuery(prompt, mlxOptions, options);
+    this.queryLogger.log.debug(`stream setup ${(performance.now() - queryStart).toFixed(0)}ms`);
 
     // Convert stream to async iterable with collection
     const { iterable, completion } = createStreamIterable(stream);
+
+    // Wrap iterable with TTFT and total time measurement
+    const queryLogger = this.queryLogger;
+    const wrappedIterable: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        const inner = iterable[Symbol.asyncIterator]();
+        let firstChunk = true;
+        return {
+          async next() {
+            const result = await inner.next();
+            if (firstChunk && !result.done) {
+              firstChunk = false;
+              queryLogger.log.debug(`TTFT ${(performance.now() - queryStart).toFixed(0)}ms`);
+            }
+            if (result.done) {
+              queryLogger.log.debug(`generation total ${(performance.now() - queryStart).toFixed(0)}ms`);
+            }
+            return result;
+          },
+        };
+      },
+    };
 
     // Create result promise that waits for stream completion
     const resultPromise = completion.then(({ content, error }) => {
@@ -378,7 +409,7 @@ export class MlxDriver implements AIDriver {
     });
 
     return {
-      stream: iterable,
+      stream: wrappedIterable,
       result: resultPromise
     };
   }

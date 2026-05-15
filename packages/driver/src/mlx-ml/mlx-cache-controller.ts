@@ -237,10 +237,14 @@ export class MlxCacheController implements PromptCacheController {
       return inflight;
     }
 
+    const prepareStart = performance.now();
     const promise = this.createCache(params, cacheKey);
     this.inflightRequests.set(cacheKey, promise);
     try {
-      return await promise;
+      const handle = await promise;
+      logger.debug(`prepare total ${(performance.now() - prepareStart).toFixed(0)}ms`,
+        cacheKey.slice(0, 12));
+      return handle;
     } finally {
       this.inflightRequests.delete(cacheKey);
     }
@@ -288,12 +292,16 @@ export class MlxCacheController implements PromptCacheController {
       }
 
       logger.debug('prefill', cachePath);
+      const prefillStart = performance.now();
       try {
         await this.process!.cachePrefill(cachePath, mlxMessages, baseCachePath);
       } catch (e) {
         logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
         return MlxCacheController.EMPTY_HANDLE;
       }
+      const prefillMs = performance.now() - prefillStart;
+      logger.debug(`prefill completed in ${prefillMs.toFixed(0)}ms`,
+        baseCachePath ? '(incremental)' : '(fresh)');
 
       if (this.closed) {
         await unlink(cachePath).catch(() => {});
