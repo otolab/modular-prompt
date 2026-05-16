@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import json
 import re
 import sys
 
 from backends.base import ModelBackend
 from utils.prompt_builder import generate_merged_prompt, supports_chat_template
+
+
+def _read_cache_token_count(cache_path: str) -> int | None:
+    """Read token count from the sidecar .meta.json file."""
+    meta_path = cache_path + '.meta.json'
+    try:
+        with open(meta_path) as f:
+            meta = json.load(f)
+            count = meta.get('token_count')
+            return int(count) if count is not None else None
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+        return None
 
 
 def _stream_to_stdout(
@@ -81,6 +94,16 @@ def handle_chat(
         return
 
     prompt_cache = backend.load_cache_from_file(cache_path) if cache_path else None
+    cache_tokens = 0
+    if prompt_cache is not None:
+        meta_count = _read_cache_token_count(cache_path) if cache_path else None
+        if meta_count is not None:
+            cache_tokens = meta_count
+        sys.stderr.write(
+            f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
+        )
+    elif cache_path:
+        sys.stderr.write(f"KV cache load FAILED: {cache_path}\n")
 
     if not supports_chat_template(tokenizer):
         prompt = generate_merged_prompt(messages, capabilities)
@@ -138,4 +161,25 @@ def handle_chat(
 
     final_options = dict(options)
     final_options.pop("trust_remote_code", None)
-    _stream_to_stdout(backend, prompt, final_options, primer=primer, prompt_cache=prompt_cache)
+
+    effective_prompt = prompt
+    if prompt_cache is not None and cache_tokens > 0 and isinstance(prompt, str):
+        add_special = tokenizer.bos_token is None or not prompt.startswith(
+            tokenizer.bos_token
+        )
+        full_tokens = tokenizer.encode(prompt, add_special_tokens=add_special)
+
+        if cache_tokens < len(full_tokens):
+            effective_prompt = full_tokens[cache_tokens:]
+            sys.stderr.write(
+                f"Prompt cache: skip {cache_tokens}/{len(full_tokens)} tokens, "
+                f"process {len(effective_prompt)} remaining\n"
+            )
+        else:
+            sys.stderr.write(
+                f"Prompt cache: offset {cache_tokens} >= prompt {len(full_tokens)}, "
+                f"ignoring cache\n"
+            )
+            prompt_cache = None
+
+    _stream_to_stdout(backend, effective_prompt, final_options, primer=primer, prompt_cache=prompt_cache)

@@ -144,28 +144,53 @@ export class MlxCacheController implements PromptCacheController {
     const newHashes = this.computeElementHashes(params);
     const fmtHash = this.computeFormatterOptionsHash();
     let bestPath: string | undefined;
-    let bestLength = 0;
+    let bestMatchLength = 0;
     const staleKeys: string[] = [];
 
     for (const entry of this.cacheIndex.entries) {
-      if (entry.model !== params.model) continue;
-      if (entry.formatterOptionsHash !== fmtHash) continue;
-      if (entry.elementHashes.length >= newHashes.length) continue;
-      const isPrefix = entry.elementHashes.every((h, i) => h === newHashes[i]);
-      if (isPrefix && entry.elementHashes.length > bestLength) {
+      if (entry.model !== params.model) {
+        logger.debug(`findBestBase: skip ${entry.key.slice(0, 8)} (model mismatch)`);
+        continue;
+      }
+      if (entry.formatterOptionsHash !== fmtHash) {
+        logger.debug(`findBestBase: skip ${entry.key.slice(0, 8)} (fmtHash mismatch)`);
+        continue;
+      }
+
+      const maxLen = Math.min(entry.elementHashes.length, newHashes.length);
+      let matchLength = 0;
+      for (let i = 0; i < maxLen; i++) {
+        if (entry.elementHashes[i] !== newHashes[i]) break;
+        matchLength++;
+      }
+
+      if (matchLength === 0) {
+        logger.debug(`findBestBase: skip ${entry.key.slice(0, 8)} (no prefix match)`);
+        continue;
+      }
+
+      logger.debug(
+        `findBestBase: ${entry.key.slice(0, 8)}`,
+        `match ${matchLength}/${entry.elementHashes.length} elements`,
+      );
+
+      if (matchLength > bestMatchLength) {
         const path = this.generateCachePath(entry.key);
         if (existsSync(path)) {
           bestPath = path;
-          bestLength = entry.elementHashes.length;
+          bestMatchLength = matchLength;
         } else {
           staleKeys.push(entry.key);
         }
       }
     }
 
-    // lazy cleanup of stale entries
     if (staleKeys.length > 0) {
       this.cacheIndex.entries = this.cacheIndex.entries.filter(e => !staleKeys.includes(e.key));
+    }
+
+    if (bestPath) {
+      logger.verbose(`findBestBase: best match ${bestMatchLength}/${newHashes.length} elements`);
     }
 
     return bestPath;
@@ -242,7 +267,7 @@ export class MlxCacheController implements PromptCacheController {
     this.inflightRequests.set(cacheKey, promise);
     try {
       const handle = await promise;
-      logger.debug(`prepare total ${(performance.now() - prepareStart).toFixed(0)}ms`,
+      logger.verbose(`prepare total ${(performance.now() - prepareStart).toFixed(0)}ms`,
         cacheKey.slice(0, 12));
       return handle;
     } finally {
@@ -271,8 +296,17 @@ export class MlxCacheController implements PromptCacheController {
       let baseCachePath: string | undefined;
       if (this.lastHandle?.ref && existsSync(this.lastHandle.ref)) {
         baseCachePath = this.lastHandle.ref;
+        logger.debug('base cache: lastHandle', baseCachePath.split('/').pop());
       } else {
+        logger.debug(
+          'base cache: no lastHandle',
+          `(ref=${this.lastHandle?.ref ? 'set' : 'none'},`,
+          `index=${this.cacheIndex.entries.length} entries)`,
+        );
         baseCachePath = this.findBestBase(params);
+        if (!baseCachePath) {
+          logger.debug('base cache: findBestBase returned nothing');
+        }
       }
 
       if (baseCachePath) {
@@ -300,11 +334,12 @@ export class MlxCacheController implements PromptCacheController {
         return MlxCacheController.EMPTY_HANDLE;
       }
       const prefillMs = performance.now() - prefillStart;
-      logger.debug(`prefill completed in ${prefillMs.toFixed(0)}ms`,
+      logger.verbose(`prefill completed in ${prefillMs.toFixed(0)}ms`,
         baseCachePath ? '(incremental)' : '(fresh)');
 
       if (this.closed) {
         await unlink(cachePath).catch(() => {});
+        await unlink(cachePath + '.meta.json').catch(() => {});
         return MlxCacheController.EMPTY_HANDLE;
       }
     }
@@ -330,6 +365,7 @@ export class MlxCacheController implements PromptCacheController {
     logger.debug('invalidate', handle.ref);
     this.removeFromIndex(handle.ref);
     await unlink(handle.ref).catch(() => {});
+    await unlink(handle.ref + '.meta.json').catch(() => {});
     for (const [key, entry] of this.cacheByHash) {
       if (entry.ref === handle.ref) {
         this.cacheByHash.delete(key);
