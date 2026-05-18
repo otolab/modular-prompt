@@ -26,6 +26,8 @@ export interface DialogProfile {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** Speculative decoding用のdraft block size */
+  draftBlockSize?: number;
   /** KVキャッシュディレクトリ。指定するとプロンプトキャッシュが有効になる */
   cacheDir?: string;
   /** チャットログファイルパス（JSON） */
@@ -104,4 +106,6 @@ export interface SimpleChatOptions {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** Speculative decoding用のdraft block size */
+  draftBlockSize?: number;
 }
