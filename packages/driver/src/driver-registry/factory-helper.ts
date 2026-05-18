@@ -26,8 +26,8 @@ import type { TestDriver } from '../test-driver.js';
  */
 function validateAndClampMaxTokens(
   spec: ModelSpec,
-  defaultOptions: any
-): any {
+  defaultOptions: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
   if (!spec.maxOutputTokens || !defaultOptions?.maxTokens) {
     return defaultOptions;
   }

@@ -34,7 +34,7 @@ describe('MlxCacheController', () => {
     vi.mocked(readFileSync).mockReturnValue('');
     mockProcess = createMockProcess();
     controller = new MlxCacheController();
-    controller.bind(mockProcess as any, {});
+    controller.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
   });
 
   afterEach(async () => {
@@ -159,10 +159,10 @@ describe('MlxCacheController', () => {
 
     it('should produce different cache keys for different formatterOptions', async () => {
       const controllerA = new MlxCacheController();
-      controllerA.bind(mockProcess as any, { specialTokens: { bosToken: '<s>' } });
+      controllerA.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { specialTokens: { bosToken: '<s>' } });
 
       const controllerB = new MlxCacheController();
-      controllerB.bind(mockProcess as any, { specialTokens: { bosToken: '<bos>' } });
+      controllerB.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { specialTokens: { bosToken: '<bos>' } });
 
       const params = {
         model: 'test-model',
@@ -281,8 +281,8 @@ describe('MlxCacheController', () => {
   describe('bind', () => {
     it('should throw when bind is called twice', () => {
       const ctrl = new MlxCacheController();
-      ctrl.bind(mockProcess as any, {});
-      expect(() => ctrl.bind(mockProcess as any, {}))
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
+      expect(() => ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {}))
         .toThrow('MlxCacheController is already bound to a process');
     });
   });
@@ -292,7 +292,7 @@ describe('MlxCacheController', () => {
 
     beforeEach(() => {
       externalController = new MlxCacheController({ cacheDir: '/custom/cache/dir' });
-      externalController.bind(mockProcess as any, {});
+      externalController.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
     });
 
     afterEach(async () => {
@@ -346,7 +346,7 @@ describe('MlxCacheController', () => {
       expect(basePath1).toBeUndefined();
 
       // lastHandleのファイルが存在する状態にする
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         return path === handle1.ref;
       });
 
@@ -364,7 +364,7 @@ describe('MlxCacheController', () => {
 
     it('should fall back to index when lastHandle file is missing', async () => {
       const externalController = new MlxCacheController({ cacheDir: '/cache' });
-      externalController.bind(mockProcess as any, {});
+      externalController.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       // 1回目
       await externalController.prepare({
@@ -414,7 +414,7 @@ describe('MlxCacheController', () => {
       // readFileSyncでインデックスを返す
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(indexData));
       // existsSyncの設定: indexPathとキャッシュファイルは存在する
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const pathStr = String(path);
         if (pathStr.endsWith('cache-index.json')) return true;
         if (pathStr.endsWith(`${existingKey}.safetensors`)) return true;
@@ -422,7 +422,7 @@ describe('MlxCacheController', () => {
       });
 
       const freshController = new MlxCacheController({ cacheDir: '/cache' });
-      freshController.bind(mockProcess as any, {});
+      freshController.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       // 新しいprepare: instructionsは同じ + data追加 → インデックスからbase cache発見
       await freshController.prepare({
@@ -440,7 +440,7 @@ describe('MlxCacheController', () => {
 
     it('should save index to file after cache creation for external dir', async () => {
       const externalController = new MlxCacheController({ cacheDir: '/cache' });
-      externalController.bind(mockProcess as any, {});
+      externalController.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       await externalController.prepare({
         model: 'test-model',
@@ -495,7 +495,7 @@ describe('MlxCacheController', () => {
 
     it('should compute char offsets with preamble', async () => {
       const ctrl = new MlxCacheController();
-      ctrl.bind(mockProcess as any, { preamble: 'You are helpful.' });
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { preamble: 'You are helpful.' });
 
       await ctrl.prepare({
         model: 'test-model',
@@ -546,13 +546,13 @@ describe('MlxCacheController', () => {
       const supersetPath = `/cache/${supersetKey}.safetensors`;
       const metaData = { token_count: 3000, element_offsets: [120, 245, 380, 510] };
 
-      vi.mocked(readFileSync).mockImplementation((path: any) => {
+      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === supersetPath) return true;
@@ -560,7 +560,7 @@ describe('MlxCacheController', () => {
       });
 
       const ctrl = new MlxCacheController({ cacheDir: '/cache' });
-      ctrl.bind(mockProcess as any, {});
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       // Request only first 2 elements (inst A, inst B) — subset of superset
       const handle = await ctrl.prepare({
@@ -610,13 +610,13 @@ describe('MlxCacheController', () => {
       const oldPath = `/cache/${oldKey}.safetensors`;
       const metaData = { token_count: 500, element_offsets: [100, 300, 500] };
 
-      vi.mocked(readFileSync).mockImplementation((path: any) => {
+      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === oldPath) return true;
@@ -624,7 +624,7 @@ describe('MlxCacheController', () => {
       });
 
       const ctrl = new MlxCacheController({ cacheDir: '/cache' });
-      ctrl.bind(mockProcess as any, {});
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       // Request with different data[1] — first 2 elements match (inst + data 0)
       await ctrl.prepare({
@@ -668,13 +668,13 @@ describe('MlxCacheController', () => {
       // meta WITHOUT element_offsets
       const metaData = { token_count: 300 };
 
-      vi.mocked(readFileSync).mockImplementation((path: any) => {
+      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === oldPath) return true;
@@ -682,7 +682,7 @@ describe('MlxCacheController', () => {
       });
 
       const ctrl = new MlxCacheController({ cacheDir: '/cache' });
-      ctrl.bind(mockProcess as any, {});
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       // inst matches but data differs — partial match, no offsets → cannot trim
       await ctrl.prepare({
@@ -732,12 +732,12 @@ describe('MlxCacheController', () => {
 
       const toolPath = `/cache/${toolKey}.safetensors`;
 
-      vi.mocked(readFileSync).mockImplementation((path: any) => {
+      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === toolPath) return true;
@@ -745,7 +745,7 @@ describe('MlxCacheController', () => {
       });
 
       const ctrl = new MlxCacheController({ cacheDir: '/cache' });
-      ctrl.bind(mockProcess as any, {});
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       await ctrl.prepare({
         model: 'test-model',
@@ -786,12 +786,12 @@ describe('MlxCacheController', () => {
 
       const highPath = `/cache/${highKey}.safetensors`;
 
-      vi.mocked(readFileSync).mockImplementation((path: any) => {
+      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: any) => {
+      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === highPath) return true;
@@ -799,7 +799,7 @@ describe('MlxCacheController', () => {
       });
 
       const ctrl = new MlxCacheController({ cacheDir: '/cache' });
-      ctrl.bind(mockProcess as any, {});
+      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});
 
       await ctrl.prepare({
         model: 'test-model',

@@ -392,7 +392,6 @@ export class MlxDriver implements AIDriver {
     //   query total: queryStart → last chunk (end-to-end)
     const queryLogger = this.queryLogger;
     let firstChunkTime = 0;
-    let chunkCount = 0;
     const wrappedIterable: AsyncIterable<string> = {
       [Symbol.asyncIterator]() {
         const inner = iterable[Symbol.asyncIterator]();
@@ -401,7 +400,6 @@ export class MlxDriver implements AIDriver {
           async next() {
             const result = await inner.next();
             if (!result.done) {
-              chunkCount++;
               if (firstChunk) {
                 firstChunk = false;
                 firstChunkTime = performance.now();

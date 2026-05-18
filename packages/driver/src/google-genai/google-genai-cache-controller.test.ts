@@ -48,7 +48,7 @@ describe('GoogleGenAICacheController', () => {
         delete: vi.fn().mockResolvedValue({}),
       }
     };
-    controller = new GoogleGenAICacheController(mockClient as any);
+    controller = new GoogleGenAICacheController(mockClient as unknown as import('@google/genai').GoogleGenAI);
   });
 
   describe('prepare', () => {
@@ -87,7 +87,7 @@ describe('GoogleGenAICacheController', () => {
     });
 
     it('should use custom TTL from config', async () => {
-      const customController = new GoogleGenAICacheController(mockClient as any, { ttl: '7200s' });
+      const customController = new GoogleGenAICacheController(mockClient as unknown as import('@google/genai').GoogleGenAI, { ttl: '7200s' });
       await customController.prepare({
         model: 'gemini-2.5-flash',
         instructions: [{ type: 'text', content: 'prompt' }],
@@ -98,7 +98,7 @@ describe('GoogleGenAICacheController', () => {
     });
 
     it('should throw on invalid TTL format', () => {
-      expect(() => new GoogleGenAICacheController(mockClient as any, { ttl: '1h' }))
+      expect(() => new GoogleGenAICacheController(mockClient as unknown as import('@google/genai').GoogleGenAI, { ttl: '1h' }))
         .toThrow('Invalid TTL format');
     });
 
@@ -152,7 +152,7 @@ describe('GoogleGenAICacheController', () => {
     });
 
     it('should re-create cache after TTL expiry', async () => {
-      const shortTtlController = new GoogleGenAICacheController(mockClient as any, { ttl: '1s' });
+      const shortTtlController = new GoogleGenAICacheController(mockClient as unknown as import('@google/genai').GoogleGenAI, { ttl: '1s' });
       const params = {
         model: 'gemini-2.5-flash',
         instructions: [{ type: 'text' as const, content: 'prompt' }],
@@ -280,7 +280,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
       tools: undefined,
     });
 
-    const generateContent = (driver as any).client.models.generateContent;
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const callArgs = generateContent.mock.calls[0][0];
     expect(callArgs.config.cachedContent).toBe('cachedContents/abc');
     expect(callArgs.config.systemInstruction).toBeUndefined();
@@ -295,7 +295,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
     await driver.query(prompt);
 
-    const generateContent = (driver as any).client.models.generateContent;
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const config = generateContent.mock.calls[0][0].config;
     expect(config.cachedContent).toBe('cachedContents/abc');
     expect(config.systemInstruction).toBeUndefined();
@@ -311,7 +311,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
     await driver.query(prompt, { tools });
 
-    const generateContent = (driver as any).client.models.generateContent;
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const config = generateContent.mock.calls[0][0].config;
     expect(config.tools).toBeDefined();
   });
@@ -327,7 +327,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
     await driver.query(prompt);
 
-    const generateContent = (driver as any).client.models.generateContent;
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const contents = generateContent.mock.calls[0][0].contents;
     expect(contents).toHaveLength(2);
   });
@@ -344,7 +344,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
     await driver.query(prompt);
 
-    const generateContent = (driver as any).client.models.generateContent;
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const config = generateContent.mock.calls[0][0].config;
     expect(config.cachedContent).toBe('cachedContents/abc');
     expect(config.systemInstruction).toBeDefined();
@@ -365,7 +365,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
     expect(mockController.prepare).toHaveBeenCalled();
     expect(queryResult.content).toBe('Streamed');
 
-    const generateContentStream = (driver as any).client.models.generateContentStream;
+    const generateContentStream = (driver as unknown as { client: { models: { generateContentStream: vi.Mock } } }).client.models.generateContentStream;
     const config = generateContentStream.mock.calls[0][0].config;
     expect(config.cachedContent).toBe('cachedContents/abc');
   });
@@ -394,7 +394,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
     await partialDriver.query(prompt);
 
-    const generateContent = (partialDriver as any).client.models.generateContent;
+    const generateContent = (partialDriver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const config = generateContent.mock.calls[0][0].config;
     expect(config.cachedContent).toBe('cachedContents/partial');
     expect(config.systemInstruction).toBeDefined();
@@ -429,7 +429,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
     await noDataDriver.query(prompt);
 
-    const generateContent = (noDataDriver as any).client.models.generateContent;
+    const generateContent = (noDataDriver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const contents = generateContent.mock.calls[0][0].contents;
     expect(contents.length).toBeGreaterThanOrEqual(3);
   });
@@ -444,7 +444,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
     await driver.query(prompt);
 
     expect(mockController.prepare).not.toHaveBeenCalled();
-    const generateContent = (driver as any).client.models.generateContent;
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
     const config = generateContent.mock.calls[0][0].config;
     expect(config.cachedContent).toBeUndefined();
     expect(config.systemInstruction).toBeDefined();

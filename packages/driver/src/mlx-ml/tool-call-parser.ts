@@ -125,10 +125,16 @@ function coerceValue(value: string | undefined): unknown {
 /**
  * JSONオブジェクトを正規化してParsedToolCall形式に変換
  */
-function normalizeJsonToolCall(obj: any): ParsedToolCall | null {
+function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
+  if (typeof obj !== 'object' || obj === null) {
+    return null;
+  }
+
+  const objRecord = obj as Record<string, unknown>;
+
   // 標準形式: {"name": "...", "arguments": {...}}
-  if (obj.name) {
-    let args = obj.arguments || obj.parameters || {};
+  if (objRecord.name) {
+    let args = objRecord.arguments || objRecord.parameters || {};
     // argumentsが文字列の場合（OpenAI形式）
     if (typeof args === 'string') {
       try {
@@ -137,28 +143,34 @@ function normalizeJsonToolCall(obj: any): ParsedToolCall | null {
         args = {};
       }
     }
-    return { name: obj.name, arguments: args };
+    return { name: objRecord.name as string, arguments: args as Record<string, unknown> };
   }
 
   // ネスト形式: {"function": {"name": "...", "arguments": {...}}}
-  if (obj.function && typeof obj.function === 'object' && obj.function.name) {
-    let args = obj.function.arguments || obj.function.parameters || {};
-    if (typeof args === 'string') {
-      try {
-        args = JSON.parse(args);
-      } catch {
-        args = {};
+  if (objRecord.function && typeof objRecord.function === 'object' && objRecord.function !== null) {
+    const func = objRecord.function as Record<string, unknown>;
+    if (func.name) {
+      let args = func.arguments || func.parameters || {};
+      if (typeof args === 'string') {
+        try {
+          args = JSON.parse(args);
+        } catch {
+          args = {};
+        }
       }
+      return { name: func.name as string, arguments: args as Record<string, unknown> };
     }
-    return { name: obj.function.name, arguments: args };
   }
 
   // tool wrapping: {"tool": {"name": "...", ...}}
-  if (obj.tool && typeof obj.tool === 'object' && obj.tool.name) {
-    return {
-      name: obj.tool.name,
-      arguments: obj.tool.arguments || obj.tool.parameters || {}
-    };
+  if (objRecord.tool && typeof objRecord.tool === 'object' && objRecord.tool !== null) {
+    const tool = objRecord.tool as Record<string, unknown>;
+    if (tool.name) {
+      return {
+        name: tool.name as string,
+        arguments: (tool.arguments || tool.parameters || {}) as Record<string, unknown>
+      };
+    }
   }
 
   return null;
@@ -604,25 +616,27 @@ function escapeRegExp(str: string): string {
  */
 function formatProperties(
   lines: string[],
-  properties: Record<string, any>,
+  properties: Record<string, unknown>,
   required?: string[],
   depth: number = 1
 ): void {
   const indent = '  '.repeat(depth);
   for (const [name, schema] of Object.entries(properties)) {
+    const schemaObj = schema as Record<string, unknown>;
     const req = required?.includes(name) ? ' (required)' : '';
-    const desc = schema.description ? `: ${schema.description}` : '';
-    const type = schema.type || 'any';
+    const desc = schemaObj.description ? `: ${schemaObj.description}` : '';
+    const type = schemaObj.type || 'any';
 
-    if (type === 'array' && schema.items) {
+    if (type === 'array' && schemaObj.items) {
       lines.push(`${indent}- ${name}: array${req}${desc}`);
-      if (schema.items.properties) {
+      const items = schemaObj.items as Record<string, unknown>;
+      if (items.properties) {
         lines.push(`${indent}  Each item:`);
-        formatProperties(lines, schema.items.properties, schema.items.required, depth + 2);
+        formatProperties(lines, items.properties as Record<string, unknown>, items.required as string[], depth + 2);
       }
-    } else if (type === 'object' && schema.properties) {
+    } else if (type === 'object' && schemaObj.properties) {
       lines.push(`${indent}- ${name}: object${req}${desc}`);
-      formatProperties(lines, schema.properties, schema.required, depth + 1);
+      formatProperties(lines, schemaObj.properties as Record<string, unknown>, schemaObj.required as string[], depth + 1);
     } else {
       lines.push(`${indent}- ${name}: ${type}${req}${desc}`);
     }
@@ -657,7 +671,7 @@ export function formatToolDefinitionsAsText(
     }
     if (tool.parameters) {
       const params = tool.parameters as {
-        properties?: Record<string, any>;
+        properties?: Record<string, unknown>;
         required?: string[];
       };
       if (params.properties) {
