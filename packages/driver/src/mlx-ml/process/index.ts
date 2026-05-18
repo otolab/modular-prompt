@@ -33,6 +33,7 @@ export type {
 export interface MlxProcessOptions {
   textOnly?: boolean;
   drafterModel?: string;
+  draftBlockSize?: number;
 }
 
 export class MlxProcess {

@@ -18,6 +18,7 @@ class MlxVlmBackend(ModelBackend):
         self.processor: Any | None = None
         self.drafter: Any | None = None
         self.drafter_kind: str | None = None
+        self.draft_block_size: int | None = None
 
     def load(self, model_name: str) -> None:
         self.model, self.processor = mlx_vlm_load(model_name)
@@ -55,6 +56,8 @@ class MlxVlmBackend(ModelBackend):
         if self.drafter:
             draft_kwargs["draft_model"] = self.drafter
             draft_kwargs["draft_kind"] = self.drafter_kind
+            if self.draft_block_size is not None:
+                draft_kwargs["draft_block_size"] = self.draft_block_size
 
         yield from mlx_vlm_stream_generate(
             self.model,
