@@ -50,6 +50,8 @@ export interface MlxModelDriverOptions {
   maxImageSize?: number;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** Speculative decoding用のdraft block size */
+  draftBlockSize?: number;
   /** KVキャッシュディレクトリ。指定するとプロンプトキャッシュが有効になる */
   cacheDir?: string;
 }
