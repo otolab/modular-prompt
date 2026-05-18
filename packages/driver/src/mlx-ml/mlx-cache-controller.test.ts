@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MlxCacheController } from './mlx-cache-controller.js';
 
@@ -366,12 +367,12 @@ describe('MlxCacheController', () => {
       externalController.bind(mockProcess as any, {});
 
       // 1回目
-      const handle1 = await externalController.prepare({
+      await externalController.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'system prompt' }],
       });
 
-      // existsSyncを設定: handle1のファイルは存在しない（削除された想定）
+      // existsSyncを設定: lastHandleのファイルは存在しない（削除された想定）
       // ただし新しいキャッシュパスも存在しない
       vi.mocked(existsSync).mockReturnValue(false);
 
@@ -391,13 +392,11 @@ describe('MlxCacheController', () => {
     it('should discover base cache from index on fresh controller', async () => {
       // インデックスにエントリがある状態でコントローラを作成
       const instructions = [{ type: 'text', content: 'system prompt' }];
-      const instructionHash = require('node:crypto')
-        .createHash('sha256')
+      const instructionHash = createHash('sha256')
         .update(JSON.stringify(instructions[0]))
         .digest('hex');
 
-      const existingKey = require('node:crypto')
-        .createHash('sha256')
+      const existingKey = createHash('sha256')
         .update(JSON.stringify({ model: 'test-model', instructions }))
         .digest('hex');
 
@@ -514,7 +513,7 @@ describe('MlxCacheController', () => {
     });
 
     it('should reuse superset base cache without creating new file', async () => {
-      const crypto = require('node:crypto');
+      const crypto = { createHash };
       const instructions = [
         { type: 'text', content: 'inst A' },
         { type: 'text', content: 'inst B' },
@@ -579,7 +578,7 @@ describe('MlxCacheController', () => {
     });
 
     it('should use partial match with trim when element_offsets exist', async () => {
-      const crypto = require('node:crypto');
+      const crypto = { createHash };
       const inst = [{ type: 'text', content: 'inst A' }];
       const dataOld = [
         { type: 'text', content: 'data 0' },
@@ -643,7 +642,7 @@ describe('MlxCacheController', () => {
     });
 
     it('should skip partial match when no element_offsets in meta', async () => {
-      const crypto = require('node:crypto');
+      const crypto = { createHash };
       const inst = [{ type: 'text', content: 'inst A' }];
       const dataOld = [{ type: 'text', content: 'data old' }];
       const dataNew = [{ type: 'text', content: 'data new' }];

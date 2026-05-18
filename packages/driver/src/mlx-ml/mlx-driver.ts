@@ -1,12 +1,12 @@
 import { Readable } from 'stream';
-import type { AIDriver, QueryOptions, QueryResult, StreamResult, ToolDefinition, FinishReason } from '../types.js';
+import type { AIDriver, QueryOptions, QueryResult, StreamResult, FinishReason } from '../types.js';
 import { isToolResult } from '../types.js';
 import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
 import { MlxProcess } from './process/index.js';
 import type { MlxMlModelOptions, MlxModelCapabilities } from './types.js';
-import type { MlxRuntimeInfo, MlxToolDefinition } from './process/types.js';
+import type { MlxRuntimeInfo } from './process/types.js';
 import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
 import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
