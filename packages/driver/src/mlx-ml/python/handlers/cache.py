@@ -170,9 +170,12 @@ def handle_cache_prefill(
     if element_char_offsets and supports_chat_template(tokenizer):
         if not user_header:
             user_header = _compute_user_header(tokenizer)
-        system_content = ""
-        if messages and messages[0].get("role") == "system":
-            system_content = messages[0].get("content", "")
+        # Collect all system messages with "\n\n" separator (matching TS side)
+        system_parts = []
+        for msg in messages or []:
+            if msg.get("role") == "system":
+                system_parts.append(msg.get("content", ""))
+        system_content = "\n\n".join(system_parts) if system_parts else ""
         element_offsets = _compute_element_offsets(
             tokenizer, prompt, system_content, element_char_offsets, user_header,
         )

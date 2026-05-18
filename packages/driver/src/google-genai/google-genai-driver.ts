@@ -289,7 +289,7 @@ export class GoogleGenAIDriver implements AIDriver {
 
       const config = this.buildGenerationConfig(mergedOptions, cacheHandle, systemInstructionParts, prompt);
 
-      this.cacheController?.recordQuery();
+      this.cacheController?.recordQuery?.();
 
       const response = await this.client.models.generateContent({
         model,
@@ -363,7 +363,7 @@ export class GoogleGenAIDriver implements AIDriver {
 
     const config = this.buildGenerationConfig(mergedOptions, cacheHandle, systemInstructionParts, prompt);
 
-    this.cacheController?.recordQuery();
+    this.cacheController?.recordQuery?.();
 
     const streamResponse = await this.client.models.generateContentStream({
       model,

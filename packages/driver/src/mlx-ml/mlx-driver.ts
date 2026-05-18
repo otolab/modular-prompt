@@ -279,6 +279,9 @@ export class MlxDriver implements AIDriver {
       };
     }
 
+    // Record all queries, regardless of API mode or cache usage
+    this.cacheController?.recordQuery?.();
+
     let stream: Readable;
     if (api === 'completion') {
       let formattedPrompt = formatCompletionPrompt(augmentedPrompt, this.formatterOptions);
@@ -290,8 +293,6 @@ export class MlxDriver implements AIDriver {
       let mlxMessages = convertMessages(messages, vlm);
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
       const nativeTools = this.hasNativeToolSupport() && tools?.length ? tools : undefined;
-
-      this.cacheController?.recordQuery();
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];

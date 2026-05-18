@@ -23,7 +23,7 @@ export interface CacheHandle {
 
 export interface PromptCacheController {
   /** Record that a query was issued (regardless of cache usage) */
-  recordQuery(): void;
+  recordQuery?(): void;
   prepare(params: CachePrepareParams): Promise<CacheHandle>;
   invalidate(handle: CacheHandle): Promise<void>;
   close(): Promise<void>;
