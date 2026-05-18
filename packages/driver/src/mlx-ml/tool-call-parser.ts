@@ -683,7 +683,8 @@ export function formatToolDefinitionsAsText(
           exampleToolName = tool.name;
           const argEntries: string[] = [];
           for (const [name, schema] of Object.entries(params.properties)) {
-            const val = schema.type === 'number' ? '0' : schema.type === 'boolean' ? 'true' : `"..."`;
+            const schemaObj = schema as { type?: string };
+            const val = schemaObj.type === 'number' ? '0' : schemaObj.type === 'boolean' ? 'true' : `"..."`;
             argEntries.push(`"${name}": ${val}`);
           }
           exampleArgs = `{${argEntries.join(', ')}}`;

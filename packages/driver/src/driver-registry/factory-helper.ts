@@ -32,9 +32,10 @@ function validateAndClampMaxTokens(
     return defaultOptions;
   }
 
-  if (defaultOptions.maxTokens > spec.maxOutputTokens) {
+  const maxTokens = defaultOptions.maxTokens as number;
+  if (maxTokens > spec.maxOutputTokens) {
     logger.warn(
-      `maxTokens (${defaultOptions.maxTokens}) exceeds model limit ` +
+      `maxTokens (${maxTokens}) exceeds model limit ` +
       `(${spec.maxOutputTokens}) for model "${spec.model}". ` +
       `Clamping to ${spec.maxOutputTokens}.`
     );
