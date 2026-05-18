@@ -19,6 +19,8 @@ interface CacheIndexEntry {
   model: string;
   formatterOptionsHash: string;
   elementHashes: string[];
+  toolNames?: string[];
+  reasoningEffort?: string;
   createdAt: string;
 }
 
@@ -234,6 +236,7 @@ export class MlxCacheController implements PromptCacheController {
     if (newHashes.length === 0) return undefined;
 
     const fmtHash = this.computeFormatterOptionsHash();
+    const newToolNames = params.tools?.map(t => t.name).sort();
 
     interface Candidate {
       path: string;
@@ -245,6 +248,10 @@ export class MlxCacheController implements PromptCacheController {
 
     for (const entry of this.cacheIndex.entries) {
       if (entry.model !== params.model || entry.formatterOptionsHash !== fmtHash) continue;
+      const entryToolStr = entry.toolNames?.join(',') ?? '';
+      const newToolStr = newToolNames?.join(',') ?? '';
+      if (entryToolStr !== newToolStr) continue;
+      if ((entry.reasoningEffort ?? '') !== (params.reasoningEffort ?? '')) continue;
       const path = this.generateCachePath(entry.key);
       if (existsSync(path)) {
         candidates.push({ path, elementHashes: entry.elementHashes, label: entry.key.slice(0, 8) });
@@ -328,6 +335,8 @@ export class MlxCacheController implements PromptCacheController {
       model: params.model,
       formatterOptionsHash: this.computeFormatterOptionsHash(),
       elementHashes: this.computeElementHashes(params),
+      toolNames: params.tools?.map(t => t.name).sort(),
+      reasoningEffort: params.reasoningEffort,
       createdAt: new Date().toISOString(),
     });
   }

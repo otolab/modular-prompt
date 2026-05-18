@@ -134,14 +134,16 @@ class MlxLmBackend(ModelBackend):
                 prompt_cache = load_prompt_cache(base_cache_path)
 
                 if trim_to_tokens is not None:
-                    current_offset = prompt_cache[0].offset
+                    current_offset = int(prompt_cache[0].offset)
                     if current_offset > trim_to_tokens:
                         trim_count = current_offset - trim_to_tokens
                         trim_prompt_cache(prompt_cache, trim_count)
                         sys.stderr.write(
                             f"Trimmed base cache: {current_offset} → {trim_to_tokens} tokens\n"
                         )
-                    cache_offset = trim_to_tokens
+                        cache_offset = trim_to_tokens
+                    else:
+                        cache_offset = current_offset
                 else:
                     cache_offset = self._read_cache_meta(base_cache_path) or 0
 

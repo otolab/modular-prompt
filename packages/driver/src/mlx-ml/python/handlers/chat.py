@@ -111,13 +111,15 @@ def handle_chat(
     cache_tokens = 0
     if prompt_cache is not None:
         if cache_trim_tokens is not None:
-            current_offset = prompt_cache[0].offset
+            current_offset = int(prompt_cache[0].offset)
             if current_offset > cache_trim_tokens:
                 trim_prompt_cache(prompt_cache, current_offset - cache_trim_tokens)
                 sys.stderr.write(
                     f"KV cache trimmed: {current_offset} → {cache_trim_tokens} tokens\n"
                 )
-            cache_tokens = cache_trim_tokens
+                cache_tokens = cache_trim_tokens
+            else:
+                cache_tokens = current_offset
         else:
             meta_count = _read_cache_token_count(cache_path) if cache_path else None
             if meta_count is not None:
