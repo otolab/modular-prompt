@@ -12,7 +12,7 @@ import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
 import { formatToolDefinitionsAsText } from './tool-call-parser.js';
-import { convertMessages, extractImagePaths } from './mlx-message-utils.js';
+import { convertMessages, convertToolDefinitions, extractImagePaths } from './mlx-message-utils.js';
 import { QueryLogger } from '../query-logger.js';
 import type { PromptCacheController } from '../cache-controller.js';
 import { extractCacheablePrefix } from '../cache-utils.js';
@@ -21,20 +21,6 @@ import { MlxCacheController } from './mlx-cache-controller.js';
 // ========================================================================
 // Utility Functions (exported for testing)
 // ========================================================================
-
-/**
- * Convert ToolDefinition to MlxToolDefinition
- */
-function convertToolDefinitions(tools: ToolDefinition[]): MlxToolDefinition[] {
-  return tools.map(tool => ({
-    type: 'function' as const,
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters
-    }
-  }));
-}
 
 /**
  * Check if the prompt contains MessageElement
@@ -77,31 +63,56 @@ export interface MlxDriverConfig {
 /**
  * Creates an async iterable from a readable stream with content collection
  */
+interface StreamMeta {
+  prompt_tokens?: number;
+  generation_tokens?: number;
+}
+
+const META_MARKER = '\n__META__:';
+
+function extractStreamMeta(content: string): { content: string; meta: StreamMeta } {
+  const idx = content.lastIndexOf(META_MARKER);
+  if (idx === -1) return { content, meta: {} };
+  const jsonStr = content.slice(idx + META_MARKER.length);
+  try {
+    return { content: content.slice(0, idx), meta: JSON.parse(jsonStr) };
+  } catch {
+    return { content, meta: {} };
+  }
+}
+
 function createStreamIterable(stream: Readable): {
   iterable: AsyncIterable<string>;
-  completion: Promise<{ content: string; error: Error | null }>;
+  completion: Promise<{ content: string; meta: StreamMeta; error: Error | null }>;
 } {
   const chunks: string[] = [];
-  let resolveCompletion: (value: { content: string; error: Error | null }) => void;
+  let resolveCompletion: (value: { content: string; meta: StreamMeta; error: Error | null }) => void;
 
-  const completion = new Promise<{ content: string; error: Error | null }>((resolve) => {
+  const completion = new Promise<{ content: string; meta: StreamMeta; error: Error | null }>((resolve) => {
     resolveCompletion = resolve;
   });
 
-  // Create async iterable that collects chunks and handles completion
   const iterable = {
     async *[Symbol.asyncIterator](): AsyncIterator<string> {
       try {
         for await (const chunk of stream) {
           const str = chunk.toString();
           chunks.push(str);
-          yield str;
+          const metaIdx = str.indexOf(META_MARKER);
+          if (metaIdx !== -1) {
+            const textPart = str.slice(0, metaIdx);
+            if (textPart) yield textPart;
+          } else {
+            yield str;
+          }
         }
-        // Stream ended successfully
-        resolveCompletion({ content: chunks.join(''), error: null });
+        const raw = chunks.join('');
+        const { content, meta } = extractStreamMeta(raw);
+        resolveCompletion({ content, meta, error: null });
       } catch (error) {
-        // Stream errored
-        resolveCompletion({ content: chunks.join(''), error: error as Error });
+        const raw = chunks.join('');
+        const { content, meta } = extractStreamMeta(raw);
+        resolveCompletion({ content, meta, error: error as Error });
         throw error;
       }
     }
@@ -228,7 +239,7 @@ export class MlxDriver implements AIDriver {
     prompt: CompiledPrompt,
     mlxOptions: MlxMlModelOptions,
     options?: QueryOptions
-  ): Promise<Readable> {
+  ): Promise<{ stream: Readable; cacheTokensUsed: number }> {
     // APIを選択
     const api = this.determineApi(options);
 
@@ -263,18 +274,19 @@ export class MlxDriver implements AIDriver {
       let mlxMessages = convertMessages(messages, vlm);
       mlxMessages = this.modelProcessor.applyChatSpecificProcessing(mlxMessages);
       const nativeTools = this.hasNativeToolSupport() && tools?.length ? tools : undefined;
+
+      this.cacheController?.recordQuery();
       const images = vlm
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
 
       // Cache: chat APIのみ、以下の条件を全て満たす場合にキャッシュを使用
-      // - nativeTools未使用（chat template出力に影響）
-      // - reasoningEffort未指定（apply_chat_templateの出力に影響しうる）
       // - outputSchema未指定（formatPromptAsMessagesがschemaを挿入し、prefixがずれる）
       // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
       let cachePath: string | undefined;
+      let cacheTrimTokens: number | undefined;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
-      if (this.cacheController && !nativeTools && !options?.reasoningEffort && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
+      if (this.cacheController && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
@@ -286,21 +298,31 @@ export class MlxDriver implements AIDriver {
             model: this.model,
             instructions: prefix.instructions,
             data: prefix.data,
+            tools: nativeTools ? options!.tools : undefined,
+            reasoningEffort: options?.reasoningEffort,
           });
           cachePath = handle.ref || undefined;
+          cacheTrimTokens = handle.trimTokens;
           if (cachePath) {
             this.queryLogger.log.debug(
               `cache prepare ${(performance.now() - cacheStart).toFixed(0)}ms`,
               `(${prefix.instructions.length}i+${prefix.data.length}d)`,
+              cacheTrimTokens != null ? `trim=${cacheTrimTokens}` : '',
             );
           }
         }
       }
 
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cachePath);
+      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cachePath, cacheTrimTokens);
+
+      const cacheTokensUsed = cachePath
+        ? (cacheTrimTokens ?? (this.cacheController instanceof MlxCacheController
+          ? this.cacheController.readCacheTokenCount(cachePath) : 0))
+        : 0;
+      return { stream, cacheTokensUsed };
     }
 
-    return stream;
+    return { stream, cacheTokensUsed: 0 };
   }
 
   /**
@@ -340,27 +362,44 @@ export class MlxDriver implements AIDriver {
 
     // Use executeQuery for the actual stream generation
     const queryStart = performance.now();
-    const stream = await this.executeQuery(prompt, mlxOptions, options);
-    this.queryLogger.log.debug(`stream setup ${(performance.now() - queryStart).toFixed(0)}ms`);
+    const { stream, cacheTokensUsed } = await this.executeQuery(prompt, mlxOptions, options);
+    const streamStart = performance.now();
+    this.queryLogger.log.debug(`setup ${(streamStart - queryStart).toFixed(0)}ms`);
 
     // Convert stream to async iterable with collection
     const { iterable, completion } = createStreamIterable(stream);
 
-    // Wrap iterable with TTFT and total time measurement
+    // Wrap iterable with phase-separated timing:
+    //   TTFT: streamStart → first chunk (inference latency, shows cache benefit)
+    //   generation: first chunk → last chunk (output speed, tok/s)
+    //   query total: queryStart → last chunk (end-to-end)
     const queryLogger = this.queryLogger;
     const wrappedIterable: AsyncIterable<string> = {
       [Symbol.asyncIterator]() {
         const inner = iterable[Symbol.asyncIterator]();
         let firstChunk = true;
+        let firstChunkTime = 0;
+        let chunkCount = 0;
         return {
           async next() {
             const result = await inner.next();
-            if (firstChunk && !result.done) {
-              firstChunk = false;
-              queryLogger.log.debug(`TTFT ${(performance.now() - queryStart).toFixed(0)}ms`);
+            if (!result.done) {
+              chunkCount++;
+              if (firstChunk) {
+                firstChunk = false;
+                firstChunkTime = performance.now();
+                queryLogger.log.debug(`TTFT ${(firstChunkTime - streamStart).toFixed(0)}ms`);
+              }
             }
             if (result.done) {
-              queryLogger.log.debug(`generation total ${(performance.now() - queryStart).toFixed(0)}ms`);
+              const now = performance.now();
+              if (firstChunkTime > 0 && chunkCount > 1) {
+                const genMs = now - firstChunkTime;
+                const tps = ((chunkCount - 1) / genMs * 1000).toFixed(1);
+                queryLogger.log.debug(`generation ${genMs.toFixed(0)}ms ~${chunkCount} tok ${tps} tok/s (query total ${(now - queryStart).toFixed(0)}ms)`);
+              } else {
+                queryLogger.log.debug(`query total ${(performance.now() - queryStart).toFixed(0)}ms`);
+              }
             }
             return result;
           },
@@ -369,11 +408,16 @@ export class MlxDriver implements AIDriver {
     };
 
     // Create result promise that waits for stream completion
-    const resultPromise = completion.then(({ content, error }) => {
+    const cacheController = this.cacheController;
+    const resultPromise = completion.then(({ content, meta, error }) => {
       // If there was an error, log and throw it
       if (error) {
         this.queryLogger.log.error('Stream error:', error.message);
         throw error;
+      }
+
+      if (cacheController instanceof MlxCacheController && meta.prompt_tokens) {
+        cacheController.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
       }
 
       // Response post-processing: thinking抽出 + tool call解析
@@ -457,10 +501,36 @@ export class MlxDriver implements AIDriver {
     };
   }
 
+  private logCacheStats(): void {
+    if (!(this.cacheController instanceof MlxCacheController)) return;
+    const s = this.cacheController.getStats();
+    if (s.totalQueries === 0 && s.cached === 0) return;
+
+    const cacheRate = s.totalQueries > 0 ? ((s.cached / s.totalQueries) * 100).toFixed(0) : '0';
+    const hitRate = s.cached > 0 ? (((s.memoryHit + s.diskHit) / s.cached) * 100).toFixed(0) : '0';
+    const parts: string[] = [
+      `cache stats: ${s.totalQueries} queries, ${s.cached} cached (${cacheRate}%)`,
+    ];
+    if (s.cached > 0) {
+      parts.push(`hit ${hitRate}%`);
+    }
+    if (s.totalPromptTokens > 0) {
+      const reuse = ((s.totalCacheTokensUsed / s.totalPromptTokens) * 100).toFixed(0);
+      parts.push(`${s.totalCacheTokensUsed}/${s.totalPromptTokens} prompt tokens from cache (${reuse}%)`);
+    }
+    if (s.prefillTokens > 0) {
+      const reusedRate = ((s.prefillReusedTokens / s.prefillTokens) * 100).toFixed(0);
+      parts.push(`prefill ${s.prefillTokens} tokens, ${s.prefillReusedTokens} reused (${reusedRate}%)`);
+    }
+    parts.push(`(memory=${s.memoryHit} disk=${s.diskHit} incremental=${s.incremental} fresh=${s.fresh})`);
+    this.queryLogger.log.verbose(parts.join(' | '));
+  }
+
   /**
    * Close the process
    */
   async close(): Promise<void> {
+    this.logCacheStats();
     await this.cacheController?.close();
     await this.process.exit();
   }

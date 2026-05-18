@@ -44,7 +44,14 @@ class ModelBackend(ABC):
         """Return whether a drafter model is loaded."""
         return False
 
-    def cache_prefill(self, cache_path: str, prompt: str, base_cache_path: str | None = None) -> dict:
+    def cache_prefill(
+        self,
+        cache_path: str,
+        prompt: str,
+        base_cache_path: str | None = None,
+        trim_to_tokens: int | None = None,
+        element_offsets: list[int] | None = None,
+    ) -> dict:
         """Build a KV cache from a prompt prefix."""
         raise NotImplementedError(
             f"{type(self).__name__} does not support prompt caching"

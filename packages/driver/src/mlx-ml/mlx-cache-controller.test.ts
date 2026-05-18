@@ -101,13 +101,17 @@ describe('MlxCacheController', () => {
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
 
-    it('should reject when tools are provided', async () => {
-      await expect(controller.prepare({
+    it('should accept tools and pass them to cachePrefill', async () => {
+      const handle = await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'prompt' }],
         tools: [{ name: 'get_weather', description: 'Get weather', parameters: {} }],
-      })).rejects.toThrow('MlxCacheController does not support tool-aware caching');
-      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+      });
+      expect(handle.ref).toBeTruthy();
+      expect(handle.includes.tools).toBe(true);
+      const call = mockProcess.cachePrefill.mock.calls[0];
+      expect(call[5]).toBeDefined();
+      expect(call[5][0].function.name).toBe('get_weather');
     });
 
     it('should coalesce concurrent calls with identical params', async () => {
@@ -467,6 +471,234 @@ describe('MlxCacheController', () => {
       });
 
       expect(writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should pass elementCharOffsets to cachePrefill', async () => {
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A' },
+          { type: 'text', content: 'inst B' },
+        ],
+        data: [
+          { type: 'text', content: 'data 0' },
+        ],
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const charOffsets = args[4] as number[];
+      expect(charOffsets).toHaveLength(3);
+      expect(charOffsets[0]).toBeGreaterThan(0);
+      expect(charOffsets[1]).toBeGreaterThan(charOffsets[0]);
+      expect(charOffsets[2]).toBeGreaterThan(charOffsets[1]);
+    });
+
+    it('should compute char offsets with preamble', async () => {
+      const ctrl = new MlxCacheController();
+      ctrl.bind(mockProcess as any, { preamble: 'You are helpful.' });
+
+      await ctrl.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'inst A' }],
+        data: [{ type: 'text', content: 'data 0' }],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const charOffsets = args[4] as number[];
+      expect(charOffsets).toHaveLength(2);
+      expect(charOffsets[0]).toBeGreaterThan(0);
+      expect(charOffsets[1]).toBeGreaterThan(charOffsets[0]);
+
+      await ctrl.close();
+    });
+
+    it('should reuse superset base cache without creating new file', async () => {
+      const crypto = require('node:crypto');
+      const instructions = [
+        { type: 'text', content: 'inst A' },
+        { type: 'text', content: 'inst B' },
+      ];
+      const data = [
+        { type: 'text', content: 'data 0' },
+        { type: 'text', content: 'data 1' },
+      ];
+
+      // Build hash for the superset entry (instructions + all data)
+      const supersetKey = crypto.createHash('sha256')
+        .update(JSON.stringify({ model: 'test-model', instructions, data }))
+        .digest('hex');
+      const instHash0 = crypto.createHash('sha256').update(JSON.stringify(instructions[0])).digest('hex');
+      const instHash1 = crypto.createHash('sha256').update(JSON.stringify(instructions[1])).digest('hex');
+      const dataHash0 = crypto.createHash('sha256').update(JSON.stringify(data[0])).digest('hex');
+      const dataHash1 = crypto.createHash('sha256').update(JSON.stringify(data[1])).digest('hex');
+
+      const indexData = {
+        version: 1,
+        entries: [{
+          key: supersetKey,
+          model: 'test-model',
+          formatterOptionsHash: '',
+          elementHashes: [instHash0, instHash1, dataHash0, dataHash1],
+          createdAt: new Date().toISOString(),
+        }],
+      };
+
+      const supersetPath = `/cache/${supersetKey}.safetensors`;
+      const metaData = { token_count: 3000, element_offsets: [120, 245, 380, 510] };
+
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
+        if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
+        return '';
+      });
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return true;
+        if (p === supersetPath) return true;
+        return false;
+      });
+
+      const ctrl = new MlxCacheController({ cacheDir: '/cache' });
+      ctrl.bind(mockProcess as any, {});
+
+      // Request only first 2 elements (inst A, inst B) — subset of superset
+      const handle = await ctrl.prepare({
+        model: 'test-model',
+        instructions,
+      });
+
+      // Should NOT call cachePrefill — superset reuse
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+      // Handle should reference the superset file with trim
+      expect(handle.ref).toBe(supersetPath);
+      expect(handle.trimTokens).toBe(245); // offsets[1] for 2 elements
+
+      await ctrl.close();
+    });
+
+    it('should use partial match with trim when element_offsets exist', async () => {
+      const crypto = require('node:crypto');
+      const inst = [{ type: 'text', content: 'inst A' }];
+      const dataOld = [
+        { type: 'text', content: 'data 0' },
+        { type: 'text', content: 'data 1 old' },
+      ];
+      const dataNew = [
+        { type: 'text', content: 'data 0' },
+        { type: 'text', content: 'data 1 new' },
+      ];
+
+      const oldKey = crypto.createHash('sha256')
+        .update(JSON.stringify({ model: 'test-model', instructions: inst, data: dataOld }))
+        .digest('hex');
+      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+      const dataHash0 = crypto.createHash('sha256').update(JSON.stringify(dataOld[0])).digest('hex');
+      const dataHash1Old = crypto.createHash('sha256').update(JSON.stringify(dataOld[1])).digest('hex');
+
+      const indexData = {
+        version: 1,
+        entries: [{
+          key: oldKey,
+          model: 'test-model',
+          formatterOptionsHash: '',
+          elementHashes: [instHash, dataHash0, dataHash1Old],
+          createdAt: new Date().toISOString(),
+        }],
+      };
+
+      const oldPath = `/cache/${oldKey}.safetensors`;
+      const metaData = { token_count: 500, element_offsets: [100, 300, 500] };
+
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
+        if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
+        return '';
+      });
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return true;
+        if (p === oldPath) return true;
+        return false;
+      });
+
+      const ctrl = new MlxCacheController({ cacheDir: '/cache' });
+      ctrl.bind(mockProcess as any, {});
+
+      // Request with different data[1] — first 2 elements match (inst + data 0)
+      await ctrl.prepare({
+        model: 'test-model',
+        instructions: inst,
+        data: dataNew,
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const [, , basePath, trimTokens] = mockProcess.cachePrefill.mock.calls[0];
+      expect(basePath).toBe(oldPath);
+      expect(trimTokens).toBe(300); // offsets[1] — trim to 2nd element boundary
+
+      await ctrl.close();
+    });
+
+    it('should skip partial match when no element_offsets in meta', async () => {
+      const crypto = require('node:crypto');
+      const inst = [{ type: 'text', content: 'inst A' }];
+      const dataOld = [{ type: 'text', content: 'data old' }];
+      const dataNew = [{ type: 'text', content: 'data new' }];
+
+      const oldKey = crypto.createHash('sha256')
+        .update(JSON.stringify({ model: 'test-model', instructions: inst, data: dataOld }))
+        .digest('hex');
+      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+      const dataHashOld = crypto.createHash('sha256').update(JSON.stringify(dataOld[0])).digest('hex');
+
+      const indexData = {
+        version: 1,
+        entries: [{
+          key: oldKey,
+          model: 'test-model',
+          formatterOptionsHash: '',
+          elementHashes: [instHash, dataHashOld],
+          createdAt: new Date().toISOString(),
+        }],
+      };
+
+      const oldPath = `/cache/${oldKey}.safetensors`;
+      // meta WITHOUT element_offsets
+      const metaData = { token_count: 300 };
+
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
+        if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
+        return '';
+      });
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return true;
+        if (p === oldPath) return true;
+        return false;
+      });
+
+      const ctrl = new MlxCacheController({ cacheDir: '/cache' });
+      ctrl.bind(mockProcess as any, {});
+
+      // inst matches but data differs — partial match, no offsets → cannot trim
+      await ctrl.prepare({
+        model: 'test-model',
+        instructions: inst,
+        data: dataNew,
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const [, , basePath, trimTokens] = mockProcess.cachePrefill.mock.calls[0];
+      // Should NOT use the old cache as base (no offsets for trim)
+      expect(basePath).toBeUndefined();
+      expect(trimTokens).toBeUndefined();
+
+      await ctrl.close();
     });
   });
 });

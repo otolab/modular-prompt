@@ -246,6 +246,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockController = {
+      recordQuery: vi.fn(),
       prepare: vi.fn().mockResolvedValue({
         ref: 'cachedContents/abc',
         includes: { instructions: true, dataElementCount: 1, tools: false },
@@ -371,6 +372,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
   it('should fall back to sending all instructions when cache excludes them', async () => {
     const controllerNoInstructions: PromptCacheController = {
+      recordQuery: vi.fn(),
       prepare: vi.fn().mockResolvedValue({
         ref: 'cachedContents/partial',
         includes: { instructions: false, dataElementCount: 1, tools: false },
@@ -402,6 +404,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
 
   it('should fall back to sending all data when cache excludes them', async () => {
     const controllerNoData: PromptCacheController = {
+      recordQuery: vi.fn(),
       prepare: vi.fn().mockResolvedValue({
         ref: 'cachedContents/no-data',
         includes: { instructions: true, dataElementCount: 0, tools: false },

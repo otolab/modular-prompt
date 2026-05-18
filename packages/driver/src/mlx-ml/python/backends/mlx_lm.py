@@ -6,7 +6,7 @@ from typing import Any, Iterator
 
 from mlx_lm import load as mlx_lm_load
 from mlx_lm import stream_generate as mlx_lm_stream_generate
-from mlx_lm.models.cache import make_prompt_cache, save_prompt_cache, load_prompt_cache
+from mlx_lm.models.cache import make_prompt_cache, save_prompt_cache, load_prompt_cache, trim_prompt_cache
 from mlx_lm.sample_utils import make_sampler
 
 from backends.base import ModelBackend
@@ -88,11 +88,18 @@ class MlxLmBackend(ModelBackend):
         return self.tokenizer.encode(prompt, add_special_tokens=add_special)
 
     @staticmethod
-    def _write_cache_meta(cache_path: str, token_count: int) -> None:
+    def _write_cache_meta(
+        cache_path: str,
+        token_count: int,
+        element_offsets: list[int] | None = None,
+    ) -> None:
         meta_path = cache_path + '.meta.json'
         try:
+            meta: dict[str, Any] = {"token_count": token_count}
+            if element_offsets:
+                meta["element_offsets"] = element_offsets
             with open(meta_path, 'w') as f:
-                json.dump({"token_count": token_count}, f)
+                json.dump(meta, f)
         except Exception as e:
             sys.stderr.write(f"Failed to write cache meta: {e}\n")
 
@@ -107,7 +114,14 @@ class MlxLmBackend(ModelBackend):
         except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
             return None
 
-    def cache_prefill(self, cache_path: str, prompt: str, base_cache_path: str | None = None) -> dict:
+    def cache_prefill(
+        self,
+        cache_path: str,
+        prompt: str,
+        base_cache_path: str | None = None,
+        trim_to_tokens: int | None = None,
+        element_offsets: list[int] | None = None,
+    ) -> dict:
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded")
 
@@ -118,7 +132,18 @@ class MlxLmBackend(ModelBackend):
         if base_cache_path is not None:
             try:
                 prompt_cache = load_prompt_cache(base_cache_path)
-                cache_offset = self._read_cache_meta(base_cache_path) or 0
+
+                if trim_to_tokens is not None:
+                    current_offset = prompt_cache[0].offset
+                    if current_offset > trim_to_tokens:
+                        trim_count = current_offset - trim_to_tokens
+                        trim_prompt_cache(prompt_cache, trim_count)
+                        sys.stderr.write(
+                            f"Trimmed base cache: {current_offset} → {trim_to_tokens} tokens\n"
+                        )
+                    cache_offset = trim_to_tokens
+                else:
+                    cache_offset = self._read_cache_meta(base_cache_path) or 0
 
                 if cache_offset > 0:
                     if cache_offset < token_count:
@@ -133,7 +158,7 @@ class MlxLmBackend(ModelBackend):
                             f"({cache_offset} >= {token_count}), saving as-is\n"
                         )
                         save_prompt_cache(cache_path, prompt_cache)
-                        self._write_cache_meta(cache_path, token_count)
+                        self._write_cache_meta(cache_path, token_count, element_offsets)
                         return {"cache_path": cache_path, "token_count": token_count}
                 else:
                     sys.stderr.write(f"Incremental prefill from: {base_cache_path}\n")
@@ -152,7 +177,7 @@ class MlxLmBackend(ModelBackend):
             break
 
         save_prompt_cache(cache_path, prompt_cache)
-        self._write_cache_meta(cache_path, token_count)
+        self._write_cache_meta(cache_path, token_count, element_offsets)
         sys.stderr.write(f"Cache created: {cache_path} ({token_count} tokens)\n")
         return {"cache_path": cache_path, "token_count": token_count}
 

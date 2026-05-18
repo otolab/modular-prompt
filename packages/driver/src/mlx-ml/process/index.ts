@@ -87,13 +87,13 @@ export class MlxProcess {
   }
 
   // Cache operations
-  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string): Promise<MlxCachePrefillResult> {
-    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath);
+  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[]): Promise<MlxCachePrefillResult> {
+    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath, trimToTokens, elementCharOffsets, tools);
   }
 
   // API v2.0 Chat
-  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string): Promise<Readable> {
-    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cachePath);
+  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string, cacheTrimTokens?: number): Promise<Readable> {
+    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cachePath, cacheTrimTokens);
   }
 
   // API v2.0 Completion

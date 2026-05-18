@@ -9,7 +9,7 @@ import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { MlxProcess } from './process/index.js';
 import type { MlxMessage } from './process/index.js';
-import { convertMessages } from './mlx-message-utils.js';
+import { convertMessages, convertToolDefinitions } from './mlx-message-utils.js';
 import { Logger } from '@modular-prompt/utils';
 
 const logger = new Logger({ prefix: 'MLX', context: 'cache' });
@@ -32,6 +32,15 @@ export interface MlxCacheControllerOptions {
   cacheDir?: string;
 }
 
+interface BaseCacheInfo {
+  path: string;
+  trimTokens?: number;
+  /** base cacheが新プロンプトの全要素をカバーしているか */
+  coversAll: boolean;
+  /** base cacheファイルが実際に保持している要素ハッシュ */
+  sourceElementHashes: string[];
+}
+
 export class MlxCacheController implements PromptCacheController {
   private cacheByHash = new Map<string, CacheHandle>();
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
@@ -45,8 +54,17 @@ export class MlxCacheController implements PromptCacheController {
   private messageProcessor?: (messages: MlxMessage[]) => MlxMessage[];
   private formatterOptions: FormatterOptions;
   private lastHandle?: CacheHandle;
+  private lastElementHashes?: string[];
   private cacheIndex: CacheIndex = { version: 1, entries: [] };
   private indexLoaded = false;
+  private stats = {
+    totalQueries: 0,
+    memoryHit: 0, diskHit: 0, incremental: 0, fresh: 0,
+    prefillTokens: 0,
+    prefillReusedTokens: 0,
+    totalPromptTokens: 0,
+    totalCacheTokensUsed: 0,
+  };
 
   constructor(options?: MlxCacheControllerOptions) {
     this.formatterOptions = {};
@@ -95,6 +113,79 @@ export class MlxCacheController implements PromptCacheController {
     return join(this.cacheDir, 'cache-index.json');
   }
 
+  private readMetaTokenCount(cachePath: string): number {
+    try {
+      const raw = readFileSync(cachePath + '.meta.json', 'utf-8');
+      const meta = JSON.parse(raw);
+      return typeof meta.token_count === 'number' ? meta.token_count : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private readElementOffsets(cachePath: string): number[] | undefined {
+    try {
+      const raw = readFileSync(cachePath + '.meta.json', 'utf-8');
+      const meta = JSON.parse(raw);
+      return Array.isArray(meta.element_offsets) ? meta.element_offsets : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private computeElementCharOffsets(
+    params: CachePrepareParams,
+    preMergeMessages: MlxMessage[],
+  ): number[] {
+    const boundaryIndices = new Set<number>();
+    let msgIdx = 0;
+    if (this.formatterOptions.preamble) msgIdx++;
+    const instLen = params.instructions?.length ?? 0;
+    const dataLen = params.data?.length ?? 0;
+    if (instLen > 0) {
+      msgIdx++;
+      for (let i = 0; i < instLen; i++) boundaryIndices.add(msgIdx++);
+    }
+    if (dataLen > 0) {
+      msgIdx++;
+      for (let i = 0; i < dataLen; i++) boundaryIndices.add(msgIdx++);
+    }
+
+    if (boundaryIndices.size === 0) return [];
+
+    const offsets: number[] = [];
+    let cumLen = 0;
+    let systemCount = 0;
+
+    for (let i = 0; i < preMergeMessages.length; i++) {
+      const msg = preMergeMessages[i];
+      if (msg.role !== 'system') {
+        if (boundaryIndices.has(i)) return [];
+        continue;
+      }
+
+      let content: string;
+      if (typeof msg.content === 'string') {
+        content = msg.content;
+      } else {
+        content = (msg.content as Array<{ type: string; text?: string }>)
+          .filter(p => p.type === 'text')
+          .map(p => p.text ?? '')
+          .join('\n');
+      }
+
+      if (systemCount > 0) cumLen += 2;
+      cumLen += content.length;
+      systemCount++;
+
+      if (boundaryIndices.has(i)) {
+        offsets.push(cumLen);
+      }
+    }
+
+    return offsets;
+  }
+
   private loadIndexSync(): void {
     try {
       if (existsSync(this.indexPath)) {
@@ -138,50 +229,37 @@ export class MlxCacheController implements PromptCacheController {
     return hashes;
   }
 
-  private findBestBase(params: CachePrepareParams): string | undefined {
-    if (this.cacheIndex.entries.length === 0) return undefined;
-
+  private findBestBase(params: CachePrepareParams): BaseCacheInfo | undefined {
     const newHashes = this.computeElementHashes(params);
+    if (newHashes.length === 0) return undefined;
+
     const fmtHash = this.computeFormatterOptionsHash();
-    let bestPath: string | undefined;
-    let bestMatchLength = 0;
+
+    interface Candidate {
+      path: string;
+      elementHashes: string[];
+      label: string;
+    }
+    const candidates: Candidate[] = [];
     const staleKeys: string[] = [];
 
     for (const entry of this.cacheIndex.entries) {
-      if (entry.model !== params.model) {
-        logger.debug(`findBestBase: skip ${entry.key.slice(0, 8)} (model mismatch)`);
-        continue;
+      if (entry.model !== params.model || entry.formatterOptionsHash !== fmtHash) continue;
+      const path = this.generateCachePath(entry.key);
+      if (existsSync(path)) {
+        candidates.push({ path, elementHashes: entry.elementHashes, label: entry.key.slice(0, 8) });
+      } else {
+        staleKeys.push(entry.key);
       }
-      if (entry.formatterOptionsHash !== fmtHash) {
-        logger.debug(`findBestBase: skip ${entry.key.slice(0, 8)} (fmtHash mismatch)`);
-        continue;
-      }
+    }
 
-      const maxLen = Math.min(entry.elementHashes.length, newHashes.length);
-      let matchLength = 0;
-      for (let i = 0; i < maxLen; i++) {
-        if (entry.elementHashes[i] !== newHashes[i]) break;
-        matchLength++;
-      }
-
-      if (matchLength === 0) {
-        logger.debug(`findBestBase: skip ${entry.key.slice(0, 8)} (no prefix match)`);
-        continue;
-      }
-
-      logger.debug(
-        `findBestBase: ${entry.key.slice(0, 8)}`,
-        `match ${matchLength}/${entry.elementHashes.length} elements`,
-      );
-
-      if (matchLength > bestMatchLength) {
-        const path = this.generateCachePath(entry.key);
-        if (existsSync(path)) {
-          bestPath = path;
-          bestMatchLength = matchLength;
-        } else {
-          staleKeys.push(entry.key);
-        }
+    if (this.lastHandle?.ref && this.lastElementHashes && existsSync(this.lastHandle.ref)) {
+      if (!candidates.some(c => c.path === this.lastHandle!.ref)) {
+        candidates.push({
+          path: this.lastHandle.ref,
+          elementHashes: this.lastElementHashes,
+          label: 'lastHandle',
+        });
       }
     }
 
@@ -189,11 +267,56 @@ export class MlxCacheController implements PromptCacheController {
       this.cacheIndex.entries = this.cacheIndex.entries.filter(e => !staleKeys.includes(e.key));
     }
 
-    if (bestPath) {
-      logger.verbose(`findBestBase: best match ${bestMatchLength}/${newHashes.length} elements`);
+    if (candidates.length === 0) return undefined;
+
+    let bestMatchLength = 0;
+    let bestInfo: BaseCacheInfo | undefined;
+
+    for (const c of candidates) {
+      const maxLen = Math.min(c.elementHashes.length, newHashes.length);
+      let matchLength = 0;
+      for (let i = 0; i < maxLen; i++) {
+        if (c.elementHashes[i] !== newHashes[i]) break;
+        matchLength++;
+      }
+
+      if (matchLength === 0) continue;
+
+      let info: BaseCacheInfo;
+
+      if (matchLength === c.elementHashes.length) {
+        // entry is a prefix of (or equal to) new — no trim needed
+        info = { path: c.path, coversAll: matchLength >= newHashes.length, sourceElementHashes: c.elementHashes };
+      } else {
+        // entry has extra/different elements — need trim via element_offsets
+        const offsets = this.readElementOffsets(c.path);
+        if (!offsets || offsets.length < matchLength) {
+          logger.debug(`findBestBase: skip ${c.label} (partial ${matchLength}/${c.elementHashes.length}, no offsets)`);
+          continue;
+        }
+        info = {
+          path: c.path,
+          trimTokens: offsets[matchLength - 1],
+          coversAll: matchLength >= newHashes.length,
+          sourceElementHashes: c.elementHashes,
+        };
+      }
+
+      if (matchLength > bestMatchLength) {
+        bestMatchLength = matchLength;
+        bestInfo = info;
+      }
     }
 
-    return bestPath;
+    if (bestInfo) {
+      logger.verbose(
+        `findBestBase: ${bestMatchLength}/${newHashes.length} elements`,
+        bestInfo.trimTokens != null ? `(trim to ${bestInfo.trimTokens} tokens)` : '',
+        bestInfo.coversAll ? '(covers all)' : '',
+      );
+    }
+
+    return bestInfo;
   }
 
   private addToIndex(params: CachePrepareParams, cacheKey: string): void {
@@ -227,6 +350,12 @@ export class MlxCacheController implements PromptCacheController {
     if (this.formatterOptions && Object.keys(this.formatterOptions).length > 0) {
       payload.formatterOptions = this.formatterOptions;
     }
+    if (params.tools && params.tools.length > 0) {
+      payload.toolNames = params.tools.map(t => t.name).sort();
+    }
+    if (params.reasoningEffort) {
+      payload.reasoningEffort = params.reasoningEffort;
+    }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }
 
@@ -234,14 +363,37 @@ export class MlxCacheController implements PromptCacheController {
     return join(this.cacheDir, `${cacheKey}.safetensors`);
   }
 
+  recordQuery(): void {
+    this.stats.totalQueries++;
+  }
+
+  recordPromptTokens(promptTokens: number, cacheTokensUsed: number): void {
+    this.stats.totalPromptTokens += promptTokens;
+    this.stats.totalCacheTokensUsed += cacheTokensUsed;
+  }
+
+  readCacheTokenCount(cachePath: string): number {
+    return this.readMetaTokenCount(cachePath);
+  }
+
+  getStats() {
+    const s = this.stats;
+    return {
+      totalQueries: s.totalQueries,
+      cached: s.memoryHit + s.diskHit + s.incremental + s.fresh,
+      memoryHit: s.memoryHit, diskHit: s.diskHit,
+      incremental: s.incremental, fresh: s.fresh,
+      prefillTokens: s.prefillTokens,
+      prefillReusedTokens: s.prefillReusedTokens,
+      totalPromptTokens: s.totalPromptTokens,
+      totalCacheTokensUsed: s.totalCacheTokensUsed,
+    };
+  }
+
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
     if (!this.bound) {
       throw new Error('MlxCacheController is not bound to a process');
     }
-    if (params.tools && params.tools.length > 0) {
-      throw new Error('MlxCacheController does not support tool-aware caching');
-    }
-
     const hasContent =
       (params.instructions?.length ?? 0) > 0 ||
       (params.data?.length ?? 0) > 0;
@@ -253,6 +405,7 @@ export class MlxCacheController implements PromptCacheController {
 
     const existing = this.cacheByHash.get(cacheKey);
     if (existing) {
+      this.stats.memoryHit++;
       logger.verbose('cache hit', cacheKey.slice(0, 12));
       return existing;
     }
@@ -288,29 +441,37 @@ export class MlxCacheController implements PromptCacheController {
     }
 
     const cachePath = this.generateCachePath(cacheKey);
+    const elementHashes = this.computeElementHashes(params);
 
     if (existsSync(cachePath)) {
+      this.stats.diskHit++;
       logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
     } else {
-      // base cacheの探索: セッション内lastHandle → インデックス探索
-      let baseCachePath: string | undefined;
-      if (this.lastHandle?.ref && existsSync(this.lastHandle.ref)) {
-        baseCachePath = this.lastHandle.ref;
-        logger.debug('base cache: lastHandle', baseCachePath.split('/').pop());
-      } else {
-        logger.debug(
-          'base cache: no lastHandle',
-          `(ref=${this.lastHandle?.ref ? 'set' : 'none'},`,
-          `index=${this.cacheIndex.entries.length} entries)`,
-        );
-        baseCachePath = this.findBestBase(params);
-        if (!baseCachePath) {
-          logger.debug('base cache: findBestBase returned nothing');
-        }
+      const base = this.findBestBase(params);
+
+      if (base?.coversAll) {
+        this.stats.diskHit++;
+        logger.verbose('superset reuse', base.path.split('/').pop(),
+          base.trimTokens != null ? `(trim to ${base.trimTokens})` : '');
+
+        const handle: CacheHandle = {
+          ref: base.path,
+          trimTokens: base.trimTokens,
+          includes: {
+            instructions: (params.instructions?.length ?? 0) > 0,
+            dataElementCount: params.data?.length ?? 0,
+            tools: false,
+          },
+        };
+        this.cacheByHash.set(cacheKey, handle);
+        this.lastHandle = handle;
+        this.lastElementHashes = base.sourceElementHashes;
+        return handle;
       }
 
-      if (baseCachePath) {
-        logger.verbose('incremental prefill from', baseCachePath.split('/').pop());
+      if (base) {
+        logger.verbose('incremental prefill from', base.path.split('/').pop(),
+          base.trimTokens != null ? `(trim to ${base.trimTokens})` : '');
       }
 
       const prefillPrompt: CompiledPrompt = {
@@ -320,22 +481,40 @@ export class MlxCacheController implements PromptCacheController {
       };
 
       const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
-      let mlxMessages = convertMessages(chatMessages);
+      const preMergeMessages = convertMessages(chatMessages);
+      let mlxMessages = preMergeMessages;
       if (this.messageProcessor) {
         mlxMessages = this.messageProcessor(mlxMessages);
       }
 
+      const hasTools = params.tools && params.tools.length > 0;
+      const elementCharOffsets = hasTools ? [] : this.computeElementCharOffsets(params, preMergeMessages);
+      const mlxTools = hasTools ? convertToolDefinitions(params.tools!) : undefined;
+
       logger.debug('prefill', cachePath);
       const prefillStart = performance.now();
       try {
-        await this.process!.cachePrefill(cachePath, mlxMessages, baseCachePath);
+        await this.process!.cachePrefill(
+          cachePath, mlxMessages,
+          base?.path, base?.trimTokens,
+          elementCharOffsets,
+          mlxTools,
+        );
       } catch (e) {
         logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
         return MlxCacheController.EMPTY_HANDLE;
       }
       const prefillMs = performance.now() - prefillStart;
-      logger.verbose(`prefill completed in ${prefillMs.toFixed(0)}ms`,
-        baseCachePath ? '(incremental)' : '(fresh)');
+      const newTokens = this.readMetaTokenCount(cachePath);
+      this.stats.prefillTokens += newTokens;
+      if (base) {
+        this.stats.incremental++;
+        this.stats.prefillReusedTokens += base.trimTokens ?? this.readMetaTokenCount(base.path);
+      } else {
+        this.stats.fresh++;
+      }
+      logger.verbose(`prefill ${prefillMs.toFixed(0)}ms`,
+        base ? '(incremental)' : '(fresh)');
 
       if (this.closed) {
         await unlink(cachePath).catch(() => {});
@@ -349,11 +528,12 @@ export class MlxCacheController implements PromptCacheController {
       includes: {
         instructions: (params.instructions?.length ?? 0) > 0,
         dataElementCount: params.data?.length ?? 0,
-        tools: false,
+        tools: (params.tools?.length ?? 0) > 0,
       },
     };
     this.cacheByHash.set(cacheKey, handle);
     this.lastHandle = handle;
+    this.lastElementHashes = elementHashes;
 
     this.addToIndex(params, cacheKey);
     await this.saveIndex();
@@ -374,13 +554,13 @@ export class MlxCacheController implements PromptCacheController {
     }
     if (this.lastHandle?.ref === handle.ref) {
       this.lastHandle = undefined;
+      this.lastElementHashes = undefined;
     }
     await this.saveIndex();
   }
 
   async close(): Promise<void> {
     this.closed = true;
-    logger.debug('close', `entries=${this.cacheByHash.size}`);
     const timeout = new Promise<void>(resolve => {
       const timer = setTimeout(resolve, 30_000);
       timer.unref();
@@ -392,6 +572,7 @@ export class MlxCacheController implements PromptCacheController {
     this.inflightRequests.clear();
     this.cacheByHash.clear();
     this.lastHandle = undefined;
+    this.lastElementHashes = undefined;
     if (this.managedDir && this.cacheDir) {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     } else {

@@ -5,6 +5,7 @@ import re
 import sys
 
 from backends.base import ModelBackend
+from mlx_lm.models.cache import trim_prompt_cache
 from utils.prompt_builder import generate_merged_prompt, supports_chat_template
 
 
@@ -31,10 +32,22 @@ def _stream_to_stdout(
     if primer is not None:
         print(primer, end="", flush=True)
 
+    last_response = None
     for response in backend.stream_generate(prompt, options, images, prompt_cache=prompt_cache):
         print(response.text.replace("\0", ""), end="", flush=True)
+        last_response = response
 
-    print("\n", end="\0", flush=True)
+    meta: dict = {}
+    if last_response is not None:
+        if hasattr(last_response, "prompt_tokens"):
+            meta["prompt_tokens"] = last_response.prompt_tokens
+        if hasattr(last_response, "generation_tokens"):
+            meta["generation_tokens"] = last_response.generation_tokens
+
+    if meta:
+        print(f"\n__META__:{json.dumps(meta)}", end="\0", flush=True)
+    else:
+        print("\n", end="\0", flush=True)
 
 
 def handle_chat(
@@ -48,6 +61,7 @@ def handle_chat(
     max_image_size: int = 768,
     reasoning_effort: str | None = None,
     cache_path: str | None = None,
+    cache_trim_tokens: int | None = None,
 ) -> None:
     """chat API の処理"""
     if options is None:
@@ -96,9 +110,18 @@ def handle_chat(
     prompt_cache = backend.load_cache_from_file(cache_path) if cache_path else None
     cache_tokens = 0
     if prompt_cache is not None:
-        meta_count = _read_cache_token_count(cache_path) if cache_path else None
-        if meta_count is not None:
-            cache_tokens = meta_count
+        if cache_trim_tokens is not None:
+            current_offset = prompt_cache[0].offset
+            if current_offset > cache_trim_tokens:
+                trim_prompt_cache(prompt_cache, current_offset - cache_trim_tokens)
+                sys.stderr.write(
+                    f"KV cache trimmed: {current_offset} → {cache_trim_tokens} tokens\n"
+                )
+            cache_tokens = cache_trim_tokens
+        else:
+            meta_count = _read_cache_token_count(cache_path) if cache_path else None
+            if meta_count is not None:
+                cache_tokens = meta_count
         sys.stderr.write(
             f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
         )

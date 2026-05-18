@@ -69,7 +69,7 @@ export class QueueManager {
     });
   }
 
-  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string): Promise<Readable> {
+  addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string, cacheTrimTokens?: number): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: MlxChatRequest = {
@@ -81,6 +81,7 @@ export class QueueManager {
           ...(images?.length ? { images, maxImageSize } : {}),
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           ...(cachePath ? { cache_path: cachePath } : {}),
+          ...(cacheTrimTokens ? { cache_trim_tokens: cacheTrimTokens } : {}),
         };
         this.queue.push({
           request,
@@ -94,13 +95,16 @@ export class QueueManager {
     });
   }
 
-  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string): Promise<MlxCachePrefillResult> {
+  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[]): Promise<MlxCachePrefillResult> {
     return new Promise((resolve, reject) => {
       const request: MlxCachePrefillRequest = {
         method: 'cache_prefill',
         cache_path: cachePath,
         messages,
         ...(baseCachePath && { base_cache_path: baseCachePath }),
+        ...(trimToTokens != null && { trim_to_tokens: trimToTokens }),
+        ...(elementCharOffsets && { element_char_offsets: elementCharOffsets }),
+        ...(tools && { tools }),
       };
       this.queue.push({
         request,

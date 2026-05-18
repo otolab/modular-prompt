@@ -78,6 +78,7 @@ export interface MlxChatRequest extends MlxBaseRequest {
   maxImageSize?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
   cache_path?: string;
+  cache_trim_tokens?: number;
 }
 
 export interface MlxCompletionRequest extends MlxBaseRequest {
@@ -93,10 +94,15 @@ export interface MlxCachePrefillRequest extends MlxBaseRequest {
   cache_path: string;
   messages: MlxMessage[];
   base_cache_path?: string;
+  trim_to_tokens?: number;
+  element_char_offsets?: number[];
+  tools?: MlxToolDefinition[];
 }
 
 export interface MlxCachePrefillResult {
   cache_path: string;
+  token_count?: number;
+  element_offsets?: number[];
 }
 
 export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest | MlxCachePrefillRequest;
