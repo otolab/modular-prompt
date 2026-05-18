@@ -699,5 +699,113 @@ describe('MlxCacheController', () => {
 
       await ctrl.close();
     });
+
+    it('should not use base cache with different tools', async () => {
+      const crypto = { createHash };
+      const inst = [{ type: 'text', content: 'inst A' }];
+
+      const toolKey = crypto.createHash('sha256')
+        .update(JSON.stringify({
+          model: 'test-model',
+          instructions: inst,
+          toolNames: ['get_weather'],
+        }))
+        .digest('hex');
+      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+
+      const indexData = {
+        version: 1,
+        entries: [{
+          key: toolKey,
+          model: 'test-model',
+          formatterOptionsHash: '',
+          elementHashes: [instHash],
+          toolNames: ['get_weather'],
+          createdAt: new Date().toISOString(),
+        }],
+      };
+
+      const toolPath = `/cache/${toolKey}.safetensors`;
+
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
+        return '';
+      });
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return true;
+        if (p === toolPath) return true;
+        return false;
+      });
+
+      const ctrl = new MlxCacheController({ cacheDir: '/cache' });
+      ctrl.bind(mockProcess as any, {});
+
+      await ctrl.prepare({
+        model: 'test-model',
+        instructions: inst,
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const [, , basePath] = mockProcess.cachePrefill.mock.calls[0];
+      expect(basePath).toBeUndefined();
+
+      await ctrl.close();
+    });
+
+    it('should not use base cache with different reasoningEffort', async () => {
+      const crypto = { createHash };
+      const inst = [{ type: 'text', content: 'inst A' }];
+
+      const highKey = crypto.createHash('sha256')
+        .update(JSON.stringify({
+          model: 'test-model',
+          instructions: inst,
+          reasoningEffort: 'high',
+        }))
+        .digest('hex');
+      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+
+      const indexData = {
+        version: 1,
+        entries: [{
+          key: highKey,
+          model: 'test-model',
+          formatterOptionsHash: '',
+          elementHashes: [instHash],
+          reasoningEffort: 'high',
+          createdAt: new Date().toISOString(),
+        }],
+      };
+
+      const highPath = `/cache/${highKey}.safetensors`;
+
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
+        return '';
+      });
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        const p = String(path);
+        if (p.endsWith('cache-index.json')) return true;
+        if (p === highPath) return true;
+        return false;
+      });
+
+      const ctrl = new MlxCacheController({ cacheDir: '/cache' });
+      ctrl.bind(mockProcess as any, {});
+
+      await ctrl.prepare({
+        model: 'test-model',
+        instructions: inst,
+      });
+
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+      const [, , basePath] = mockProcess.cachePrefill.mock.calls[0];
+      expect(basePath).toBeUndefined();
+
+      await ctrl.close();
+    });
   });
 });
