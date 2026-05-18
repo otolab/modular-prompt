@@ -410,10 +410,9 @@ export class MlxDriver implements AIDriver {
             }
             if (result.done) {
               const now = performance.now();
-              if (firstChunkTime > 0 && chunkCount > 1) {
+              if (firstChunkTime > 0) {
                 const genMs = now - firstChunkTime;
-                const chunksPerSec = ((chunkCount - 1) / genMs * 1000).toFixed(1);
-                queryLogger.log.debug(`generation ${genMs.toFixed(0)}ms, ${chunkCount} chunks, ~${chunksPerSec} chunks/s (query total ${(now - queryStart).toFixed(0)}ms)`);
+                queryLogger.log.debug(`generation ${genMs.toFixed(0)}ms (query total ${(now - queryStart).toFixed(0)}ms)`);
               } else {
                 queryLogger.log.debug(`query total ${(performance.now() - queryStart).toFixed(0)}ms`);
               }
@@ -442,7 +441,7 @@ export class MlxDriver implements AIDriver {
         const genMs = performance.now() - firstChunkTime;
         const actualTps = (meta.generation_tokens / genMs * 1000).toFixed(1);
         this.queryLogger.log.debug(
-          `generation stats: ${meta.generation_tokens} tokens in ${genMs.toFixed(0)}ms = ${actualTps} tok/s (${chunkCount} stream chunks)`
+          `${meta.generation_tokens} tokens, ${actualTps} tok/s`
         );
       }
 
