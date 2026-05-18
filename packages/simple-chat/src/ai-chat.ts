@@ -56,9 +56,7 @@ const baseChatModule: PromptModule<ChatContext> = {
       if (ctx.messages.length === 0) {
         return null;
       }
-      // 最新10件の会話履歴をMessageElementとして返す
-      const recentMessages = ctx.messages.slice(-10);
-      return recentMessages.map(m => ({
+      return ctx.messages.map(m => ({
         type: 'message' as const,
         role: m.role as 'user' | 'assistant',
         content: m.content,
@@ -98,10 +96,11 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   registerFactories(registry, appConfig);
 
   const driverOptions =
-    (profile.textOnly || profile.drafterModel || profile.cacheDir)
+    (profile.textOnly || profile.drafterModel || profile.draftBlockSize !== undefined || profile.cacheDir)
       ? {
           ...(profile.textOnly && { textOnly: true }),
           ...(profile.drafterModel && { drafterModel: profile.drafterModel }),
+          ...(profile.draftBlockSize !== undefined && { draftBlockSize: profile.draftBlockSize }),
           ...(profile.cacheDir && { cacheDir: profile.cacheDir }),
         }
       : undefined;
