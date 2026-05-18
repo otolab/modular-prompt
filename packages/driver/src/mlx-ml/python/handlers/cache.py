@@ -180,7 +180,10 @@ def handle_cache_prefill(
             tokenizer, prompt, system_content, element_char_offsets, user_header,
         )
 
-    sys.stderr.write(f"--- cache_prefill {cache_path}\n")
+    # Only show debug output if MLX_DEBUG environment variable is set
+    import os
+    if os.getenv('MLX_DEBUG'):
+        sys.stderr.write(f"--- cache_prefill {cache_path}\n")
     result = backend.cache_prefill(
         cache_path, prompt, base_cache_path,
         trim_to_tokens=trim_to_tokens,

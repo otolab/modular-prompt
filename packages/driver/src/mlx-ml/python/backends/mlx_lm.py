@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any, Iterator
 
@@ -138,9 +139,10 @@ class MlxLmBackend(ModelBackend):
                     if current_offset > trim_to_tokens:
                         trim_count = current_offset - trim_to_tokens
                         trim_prompt_cache(prompt_cache, trim_count)
-                        sys.stderr.write(
-                            f"Trimmed base cache: {current_offset} → {trim_to_tokens} tokens\n"
-                        )
+                        if os.getenv('MLX_DEBUG'):
+                            sys.stderr.write(
+                                f"Trimmed base cache: {current_offset} → {trim_to_tokens} tokens\n"
+                            )
                         cache_offset = trim_to_tokens
                     else:
                         cache_offset = current_offset
@@ -150,27 +152,31 @@ class MlxLmBackend(ModelBackend):
                 if cache_offset > 0:
                     if cache_offset < token_count:
                         effective_prompt = full_tokens[cache_offset:]
-                        sys.stderr.write(
-                            f"Incremental prefill from: {base_cache_path} "
-                            f"(skip {cache_offset}/{token_count} tokens)\n"
-                        )
+                        if os.getenv('MLX_DEBUG'):
+                            sys.stderr.write(
+                                f"Incremental prefill from: {base_cache_path} "
+                                f"(skip {cache_offset}/{token_count} tokens)\n"
+                            )
                     else:
-                        sys.stderr.write(
-                            f"Base cache covers entire prompt "
-                            f"({cache_offset} >= {token_count}), saving as-is\n"
-                        )
+                        if os.getenv('MLX_DEBUG'):
+                            sys.stderr.write(
+                                f"Base cache covers entire prompt "
+                                f"({cache_offset} >= {token_count}), saving as-is\n"
+                            )
                         save_prompt_cache(cache_path, prompt_cache)
                         self._write_cache_meta(cache_path, token_count, element_offsets)
                         return {"cache_path": cache_path, "token_count": token_count}
                 else:
-                    sys.stderr.write(f"Incremental prefill from: {base_cache_path}\n")
+                    if os.getenv('MLX_DEBUG'):
+                        sys.stderr.write(f"Incremental prefill from: {base_cache_path}\n")
             except Exception as e:
                 sys.stderr.write(f"Base cache load failed, creating fresh: {e}\n")
                 prompt_cache = make_prompt_cache(self.model)
         else:
             prompt_cache = make_prompt_cache(self.model)
 
-        sys.stderr.write(f"Prefill prompt: {token_count} tokens\n")
+        if os.getenv('MLX_DEBUG'):
+            sys.stderr.write(f"Prefill prompt: {token_count} tokens\n")
 
         for _ in mlx_lm_stream_generate(
             self.model, self.tokenizer, effective_prompt,
@@ -180,7 +186,8 @@ class MlxLmBackend(ModelBackend):
 
         save_prompt_cache(cache_path, prompt_cache)
         self._write_cache_meta(cache_path, token_count, element_offsets)
-        sys.stderr.write(f"Cache created: {cache_path} ({token_count} tokens)\n")
+        if os.getenv('MLX_DEBUG'):
+            sys.stderr.write(f"Cache created: {cache_path} ({token_count} tokens)\n")
         return {"cache_path": cache_path, "token_count": token_count}
 
     def load_cache_from_file(self, cache_path: str) -> list | None:

@@ -59,7 +59,9 @@ class MlxVlmBackend(ModelBackend):
             if self.draft_block_size is not None:
                 draft_kwargs["draft_block_size"] = self.draft_block_size
 
-        yield from mlx_vlm_stream_generate(
+        # Generate and collect tokens
+        token_count = 0
+        for result in mlx_vlm_stream_generate(
             self.model,
             self.processor,
             prompt,
@@ -69,7 +71,25 @@ class MlxVlmBackend(ModelBackend):
             top_p=top_p,
             top_k=top_k,
             **draft_kwargs,
-        )
+        ):
+            token_count += 1
+            yield result
+
+        # Output speculative decoding stats if drafter was used
+        if self.drafter and hasattr(self.drafter, 'accept_lens'):
+            accept_lens = self.drafter.accept_lens
+            if accept_lens:
+                avg_accepted = sum(accept_lens) / len(accept_lens)
+                # Only show stats if MLX_DEBUG environment variable is set
+                import os
+                if os.getenv('MLX_DEBUG'):
+                    sys.stderr.write(f"\n[Speculative Decoding Stats]\n")
+                    sys.stderr.write(f"  Rounds: {len(accept_lens)}\n")
+                    sys.stderr.write(f"  Average accepted tokens/round: {avg_accepted:.2f}\n")
+                    sys.stderr.write(f"  Total tokens generated: {token_count}\n")
+                    sys.stderr.write(f"  Speedup factor: {avg_accepted:.2f}x (theoretical)\n")
+                # Clear for next generation
+                self.drafter.accept_lens = []
 
     def supports_vision(self) -> bool:
         return True
