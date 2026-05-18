@@ -71,6 +71,7 @@ class Server:
                     trim_to_tokens=req.get('trim_to_tokens'),
                     element_char_offsets=req.get('element_char_offsets'),
                     tools=req.get('tools'),
+                    reasoning_effort=req.get('reasoning_effort'),
                 )
 
             elif method == 'chat':

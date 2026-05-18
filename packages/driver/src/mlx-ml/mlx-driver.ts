@@ -95,22 +95,22 @@ function createStreamIterable(stream: Readable): {
   const iterable = {
     async *[Symbol.asyncIterator](): AsyncIterator<string> {
       try {
-        let held: string | null = null;
+        const pending: string[] = [];
         for await (const chunk of stream) {
           const str = chunk.toString();
           chunks.push(str);
-          if (held !== null) yield held;
-          held = str;
-        }
-        // 最終チャンクにMETAが含まれる可能性 — METAを除去してyield
-        if (held !== null) {
-          const metaIdx = held.lastIndexOf(META_MARKER);
-          if (metaIdx !== -1) {
-            const text = held.slice(0, metaIdx);
-            if (text) yield text;
-          } else {
-            yield held;
+          pending.push(str);
+          while (pending.length > 2) {
+            yield pending.shift()!;
           }
+        }
+        const tail = pending.join('');
+        const metaIdx = tail.lastIndexOf(META_MARKER);
+        if (metaIdx !== -1) {
+          const text = tail.slice(0, metaIdx);
+          if (text) yield text;
+        } else {
+          if (tail) yield tail;
         }
         const raw = chunks.join('');
         const { content, meta } = extractStreamMeta(raw);

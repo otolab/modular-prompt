@@ -57,6 +57,10 @@ export class MlxCacheController implements PromptCacheController {
   private formatterOptions: FormatterOptions;
   private lastHandle?: CacheHandle;
   private lastElementHashes?: string[];
+  private lastHandleModel?: string;
+  private lastHandleFormatterOptionsHash?: string;
+  private lastHandleToolStr?: string;
+  private lastHandleReasoningEffort?: string;
   private cacheIndex: CacheIndex = { version: 1, entries: [] };
   private indexLoaded = false;
   private stats = {
@@ -220,6 +224,24 @@ export class MlxCacheController implements PromptCacheController {
     return createHash('sha256').update(JSON.stringify(this.formatterOptions)).digest('hex');
   }
 
+  private updateLastCache(handle: CacheHandle, elementHashes: string[], params: CachePrepareParams): void {
+    this.lastHandle = handle;
+    this.lastElementHashes = elementHashes;
+    this.lastHandleModel = params.model;
+    this.lastHandleFormatterOptionsHash = this.computeFormatterOptionsHash();
+    this.lastHandleToolStr = params.tools?.map(t => t.name).sort().join(',') ?? '';
+    this.lastHandleReasoningEffort = params.reasoningEffort ?? '';
+  }
+
+  private clearLastCache(): void {
+    this.lastHandle = undefined;
+    this.lastElementHashes = undefined;
+    this.lastHandleModel = undefined;
+    this.lastHandleFormatterOptionsHash = undefined;
+    this.lastHandleToolStr = undefined;
+    this.lastHandleReasoningEffort = undefined;
+  }
+
   private computeElementHashes(params: CachePrepareParams): string[] {
     const hashes: string[] = [];
     for (const el of params.instructions || []) {
@@ -237,6 +259,7 @@ export class MlxCacheController implements PromptCacheController {
 
     const fmtHash = this.computeFormatterOptionsHash();
     const newToolNames = params.tools?.map(t => t.name).sort();
+    const newToolStr = newToolNames?.join(',') ?? '';
 
     interface Candidate {
       path: string;
@@ -249,7 +272,6 @@ export class MlxCacheController implements PromptCacheController {
     for (const entry of this.cacheIndex.entries) {
       if (entry.model !== params.model || entry.formatterOptionsHash !== fmtHash) continue;
       const entryToolStr = entry.toolNames?.join(',') ?? '';
-      const newToolStr = newToolNames?.join(',') ?? '';
       if (entryToolStr !== newToolStr) continue;
       if ((entry.reasoningEffort ?? '') !== (params.reasoningEffort ?? '')) continue;
       const path = this.generateCachePath(entry.key);
@@ -261,7 +283,12 @@ export class MlxCacheController implements PromptCacheController {
     }
 
     if (this.lastHandle?.ref && this.lastElementHashes && existsSync(this.lastHandle.ref)) {
-      if (!candidates.some(c => c.path === this.lastHandle!.ref)) {
+      const lastCompatible =
+        this.lastHandleModel === params.model &&
+        this.lastHandleFormatterOptionsHash === fmtHash &&
+        (this.lastHandleToolStr ?? '') === newToolStr &&
+        (this.lastHandleReasoningEffort ?? '') === (params.reasoningEffort ?? '');
+      if (lastCompatible && !candidates.some(c => c.path === this.lastHandle!.ref)) {
         candidates.push({
           path: this.lastHandle.ref,
           elementHashes: this.lastElementHashes,
@@ -473,8 +500,7 @@ export class MlxCacheController implements PromptCacheController {
           },
         };
         this.cacheByHash.set(cacheKey, handle);
-        this.lastHandle = handle;
-        this.lastElementHashes = base.sourceElementHashes;
+        this.updateLastCache(handle, base.sourceElementHashes, params);
         return handle;
       }
 
@@ -508,6 +534,7 @@ export class MlxCacheController implements PromptCacheController {
           base?.path, base?.trimTokens,
           elementCharOffsets,
           mlxTools,
+          params.reasoningEffort,
         );
       } catch (e) {
         logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
@@ -541,8 +568,7 @@ export class MlxCacheController implements PromptCacheController {
       },
     };
     this.cacheByHash.set(cacheKey, handle);
-    this.lastHandle = handle;
-    this.lastElementHashes = elementHashes;
+    this.updateLastCache(handle, elementHashes, params);
 
     this.addToIndex(params, cacheKey);
     await this.saveIndex();
@@ -562,8 +588,7 @@ export class MlxCacheController implements PromptCacheController {
       }
     }
     if (this.lastHandle?.ref === handle.ref) {
-      this.lastHandle = undefined;
-      this.lastElementHashes = undefined;
+      this.clearLastCache();
     }
     await this.saveIndex();
   }
@@ -580,8 +605,7 @@ export class MlxCacheController implements PromptCacheController {
     ]);
     this.inflightRequests.clear();
     this.cacheByHash.clear();
-    this.lastHandle = undefined;
-    this.lastElementHashes = undefined;
+    this.clearLastCache();
     if (this.managedDir && this.cacheDir) {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     } else {

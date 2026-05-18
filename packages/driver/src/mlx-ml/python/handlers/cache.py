@@ -113,6 +113,7 @@ def handle_cache_prefill(
     trim_to_tokens: int | None = None,
     element_char_offsets: list[int] | None = None,
     tools: list | None = None,
+    reasoning_effort: str | None = None,
 ) -> None:
     tokenizer = backend.get_tokenizer()
 
@@ -120,6 +121,8 @@ def handle_cache_prefill(
     extra_kwargs = {}
     if tools is not None:
         extra_kwargs["tools"] = tools
+    if reasoning_effort is not None:
+        extra_kwargs["reasoning_effort"] = reasoning_effort
     if supports_chat_template(tokenizer):
         try:
             prompt = tokenizer.apply_chat_template(

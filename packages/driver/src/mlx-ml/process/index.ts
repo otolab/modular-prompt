@@ -87,8 +87,8 @@ export class MlxProcess {
   }
 
   // Cache operations
-  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[]): Promise<MlxCachePrefillResult> {
-    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath, trimToTokens, elementCharOffsets, tools);
+  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxCachePrefillResult> {
+    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath, trimToTokens, elementCharOffsets, tools, reasoningEffort);
   }
 
   // API v2.0 Chat

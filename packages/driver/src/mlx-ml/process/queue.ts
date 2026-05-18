@@ -95,7 +95,7 @@ export class QueueManager {
     });
   }
 
-  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[]): Promise<MlxCachePrefillResult> {
+  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxCachePrefillResult> {
     return new Promise((resolve, reject) => {
       const request: MlxCachePrefillRequest = {
         method: 'cache_prefill',
@@ -105,6 +105,7 @@ export class QueueManager {
         ...(trimToTokens != null && { trim_to_tokens: trimToTokens }),
         ...(elementCharOffsets && { element_char_offsets: elementCharOffsets }),
         ...(tools && { tools }),
+        ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
       };
       this.queue.push({
         request,

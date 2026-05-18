@@ -97,6 +97,7 @@ export interface MlxCachePrefillRequest extends MlxBaseRequest {
   trim_to_tokens?: number;
   element_char_offsets?: number[];
   tools?: MlxToolDefinition[];
+  reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
 export interface MlxCachePrefillResult {
