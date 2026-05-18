@@ -56,6 +56,8 @@ export interface MlxDriverConfig {
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
+  /** Speculative decoding用のdraft block size（デフォルト: モデル依存） */
+  draftBlockSize?: number;
   /** 外部で生成したキャッシュコントローラー */
   cacheController?: PromptCacheController;
 }
@@ -95,23 +97,27 @@ function createStreamIterable(stream: Readable): {
   const iterable = {
     async *[Symbol.asyncIterator](): AsyncIterator<string> {
       try {
-        const pending: string[] = [];
+        let buffer = '';
+        let markerFound = false;
         for await (const chunk of stream) {
           const str = chunk.toString();
           chunks.push(str);
-          pending.push(str);
-          while (pending.length > 2) {
-            yield pending.shift()!;
+          if (markerFound) continue;
+          buffer += str;
+          const markerIdx = buffer.indexOf(META_MARKER);
+          if (markerIdx !== -1) {
+            const text = buffer.slice(0, markerIdx);
+            if (text) yield text;
+            markerFound = true;
+          } else {
+            const safeLen = buffer.length - (META_MARKER.length - 1);
+            if (safeLen > 0) {
+              yield buffer.slice(0, safeLen);
+              buffer = buffer.slice(safeLen);
+            }
           }
         }
-        const tail = pending.join('');
-        const metaIdx = tail.lastIndexOf(META_MARKER);
-        if (metaIdx !== -1) {
-          const text = tail.slice(0, metaIdx);
-          if (text) yield text;
-        } else {
-          if (tail) yield tail;
-        }
+        if (!markerFound && buffer) yield buffer;
         const raw = chunks.join('');
         const { content, meta } = extractStreamMeta(raw);
         resolveCompletion({ content, meta, error: null });
@@ -155,7 +161,11 @@ export class MlxDriver implements AIDriver {
     this._defaultOptions = config.defaultOptions || {};
     this.formatterOptions = config.formatterOptions || {};
     this.maxImageSize = config.maxImageSize ?? 768;
-    this.process = new MlxProcess(config.model, { textOnly: config.textOnly, drafterModel: config.drafterModel });
+    this.process = new MlxProcess(config.model, {
+      textOnly: config.textOnly,
+      drafterModel: config.drafterModel,
+      draftBlockSize: config.draftBlockSize
+    });
     this.modelProcessor = createModelSpecificProcessor(config.model);
     this.cacheController = config.cacheController;
     if (config.drafterModel) {

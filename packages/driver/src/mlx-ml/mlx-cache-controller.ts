@@ -139,9 +139,23 @@ export class MlxCacheController implements PromptCacheController {
     }
   }
 
+  private static extractSystemContent(messages: MlxMessage[]): string {
+    return messages
+      .filter(m => m.role === 'system')
+      .map(m => {
+        if (typeof m.content === 'string') return m.content;
+        return (m.content as Array<{ type: string; text?: string }>)
+          .filter(p => p.type === 'text')
+          .map(p => p.text ?? '')
+          .join('\n');
+      })
+      .join('\n\n');
+  }
+
   private computeElementCharOffsets(
     params: CachePrepareParams,
     preMergeMessages: MlxMessage[],
+    processedMessages: MlxMessage[],
   ): number[] {
     const boundaryIndices = new Set<number>();
     let msgIdx = 0;
@@ -186,6 +200,21 @@ export class MlxCacheController implements PromptCacheController {
 
       if (boundaryIndices.has(i)) {
         offsets.push(cumLen);
+      }
+    }
+
+    if (offsets.length === 0) return [];
+
+    // processorがシステムコンテンツを変更した場合（プレフィックス追加等）、オフセットを補正
+    if (processedMessages !== preMergeMessages) {
+      const preContent = MlxCacheController.extractSystemContent(preMergeMessages);
+      const postContent = MlxCacheController.extractSystemContent(processedMessages);
+      if (preContent !== postContent) {
+        const prefixLen = postContent.indexOf(preContent);
+        if (prefixLen === -1) return [];
+        if (prefixLen > 0) {
+          return offsets.map(o => o + prefixLen);
+        }
       }
     }
 
@@ -497,7 +526,7 @@ export class MlxCacheController implements PromptCacheController {
           includes: {
             instructions: (params.instructions?.length ?? 0) > 0,
             dataElementCount: params.data?.length ?? 0,
-            tools: false,
+            tools: (params.tools?.length ?? 0) > 0,
           },
         };
         this.cacheByHash.set(cacheKey, handle);
@@ -524,7 +553,7 @@ export class MlxCacheController implements PromptCacheController {
       }
 
       const hasTools = params.tools && params.tools.length > 0;
-      const elementCharOffsets = hasTools ? [] : this.computeElementCharOffsets(params, preMergeMessages);
+      const elementCharOffsets = hasTools ? [] : this.computeElementCharOffsets(params, preMergeMessages, mlxMessages);
       const mlxTools = hasTools ? convertToolDefinitions(params.tools!) : undefined;
 
       logger.debug('prefill', cachePath);
@@ -585,7 +614,6 @@ export class MlxCacheController implements PromptCacheController {
     for (const [key, entry] of this.cacheByHash) {
       if (entry.ref === handle.ref) {
         this.cacheByHash.delete(key);
-        break;
       }
     }
     if (this.lastHandle?.ref === handle.ref) {
