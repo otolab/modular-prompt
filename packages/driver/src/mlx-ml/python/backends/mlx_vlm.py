@@ -80,9 +80,9 @@ class MlxVlmBackend(ModelBackend):
             accept_lens = self.drafter.accept_lens
             if accept_lens:
                 avg_accepted = sum(accept_lens) / len(accept_lens)
-                # Only show stats if MLX_DEBUG environment variable is set
+                # Show stats unless MLX_NO_STATS environment variable is set
                 import os
-                if os.getenv('MLX_DEBUG'):
+                if not os.getenv('MLX_NO_STATS'):
                     sys.stderr.write(f"\n[Speculative Decoding Stats]\n")
                     sys.stderr.write(f"  Rounds: {len(accept_lens)}\n")
                     sys.stderr.write(f"  Average accepted tokens/round: {avg_accepted:.2f}\n")
