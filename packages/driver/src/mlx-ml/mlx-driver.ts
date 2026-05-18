@@ -391,12 +391,12 @@ export class MlxDriver implements AIDriver {
     //   generation: first chunk → last chunk (output speed, tok/s)
     //   query total: queryStart → last chunk (end-to-end)
     const queryLogger = this.queryLogger;
+    let firstChunkTime = 0;
+    let chunkCount = 0;
     const wrappedIterable: AsyncIterable<string> = {
       [Symbol.asyncIterator]() {
         const inner = iterable[Symbol.asyncIterator]();
         let firstChunk = true;
-        let firstChunkTime = 0;
-        let chunkCount = 0;
         return {
           async next() {
             const result = await inner.next();
@@ -412,8 +412,8 @@ export class MlxDriver implements AIDriver {
               const now = performance.now();
               if (firstChunkTime > 0 && chunkCount > 1) {
                 const genMs = now - firstChunkTime;
-                const tps = ((chunkCount - 1) / genMs * 1000).toFixed(1);
-                queryLogger.log.debug(`generation ${genMs.toFixed(0)}ms ~${chunkCount} tok ${tps} tok/s (query total ${(now - queryStart).toFixed(0)}ms)`);
+                const chunksPerSec = ((chunkCount - 1) / genMs * 1000).toFixed(1);
+                queryLogger.log.debug(`generation ${genMs.toFixed(0)}ms, ${chunkCount} chunks, ~${chunksPerSec} chunks/s (query total ${(now - queryStart).toFixed(0)}ms)`);
               } else {
                 queryLogger.log.debug(`query total ${(performance.now() - queryStart).toFixed(0)}ms`);
               }
@@ -435,6 +435,15 @@ export class MlxDriver implements AIDriver {
 
       if (cacheController instanceof MlxCacheController && meta.prompt_tokens) {
         cacheController.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
+      }
+
+      // Log accurate generation stats if available
+      if (meta.generation_tokens && firstChunkTime > 0) {
+        const genMs = performance.now() - firstChunkTime;
+        const actualTps = (meta.generation_tokens / genMs * 1000).toFixed(1);
+        this.queryLogger.log.debug(
+          `generation stats: ${meta.generation_tokens} tokens in ${genMs.toFixed(0)}ms = ${actualTps} tok/s (${chunkCount} stream chunks)`
+        );
       }
 
       // Response post-processing: thinking抽出 + tool call解析
