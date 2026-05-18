@@ -65,7 +65,14 @@ class Server:
                 if not cache_path or not messages:
                     self._error_response("'cache_path' and 'messages' fields are required for cache_prefill")
                     return
-                handle_cache_prefill(self.backend, self.capabilities, cache_path, messages)
+                handle_cache_prefill(
+                    self.backend, self.capabilities, cache_path, messages,
+                    base_cache_path=req.get('base_cache_path'),
+                    trim_to_tokens=req.get('trim_to_tokens'),
+                    element_char_offsets=req.get('element_char_offsets'),
+                    tools=req.get('tools'),
+                    reasoning_effort=req.get('reasoning_effort'),
+                )
 
             elif method == 'chat':
                 messages = req.get('messages')
@@ -83,6 +90,7 @@ class Server:
                     max_image_size=req.get('maxImageSize', 768),
                     reasoning_effort=req.get('reasoning_effort'),
                     cache_path=req.get('cache_path'),
+                    cache_trim_tokens=req.get('cache_trim_tokens'),
                 )
 
             elif method == 'completion':

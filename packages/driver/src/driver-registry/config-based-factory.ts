@@ -112,6 +112,7 @@ export function registerFactories(
       textOnly: driverOpts?.textOnly,
       maxImageSize: driverOpts?.maxImageSize,
       drafterModel: driverOpts?.drafterModel,
+      draftBlockSize: driverOpts?.draftBlockSize,
       cacheController,
     });
   });

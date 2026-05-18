@@ -34,6 +34,7 @@ program
   .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
   .option('--text-only', 'Use VLM model in text-only mode')
   .option('--drafter-model <model>', 'Drafter model for speculative decoding')
+  .option('--draft-block-size <size>', 'Draft block size for speculative decoding', parseInt)
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
@@ -76,6 +77,7 @@ program
         images: options.image,
         textOnly: options.textOnly,
         drafterModel: options.drafterModel,
+        draftBlockSize: options.draftBlockSize,
       };
       
       await runChat(chatOptions);

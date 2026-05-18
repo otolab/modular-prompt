@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import json
 import re
 import sys
 
 from backends.base import ModelBackend
+from mlx_lm.models.cache import trim_prompt_cache
 from utils.prompt_builder import generate_merged_prompt, supports_chat_template
+
+
+def _read_cache_token_count(cache_path: str) -> int | None:
+    """Read token count from the sidecar .meta.json file."""
+    meta_path = cache_path + '.meta.json'
+    try:
+        with open(meta_path) as f:
+            meta = json.load(f)
+            count = meta.get('token_count')
+            return int(count) if count is not None else None
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+        return None
 
 
 def _stream_to_stdout(
@@ -18,10 +32,22 @@ def _stream_to_stdout(
     if primer is not None:
         print(primer, end="", flush=True)
 
+    last_response = None
     for response in backend.stream_generate(prompt, options, images, prompt_cache=prompt_cache):
         print(response.text.replace("\0", ""), end="", flush=True)
+        last_response = response
 
-    print("\n", end="\0", flush=True)
+    meta: dict = {}
+    if last_response is not None:
+        if hasattr(last_response, "prompt_tokens"):
+            meta["prompt_tokens"] = last_response.prompt_tokens
+        if hasattr(last_response, "generation_tokens"):
+            meta["generation_tokens"] = last_response.generation_tokens
+
+    if meta:
+        print(f"\n__META__:{json.dumps(meta)}", end="\0", flush=True)
+    else:
+        print("\n", end="\0", flush=True)
 
 
 def handle_chat(
@@ -35,6 +61,7 @@ def handle_chat(
     max_image_size: int = 768,
     reasoning_effort: str | None = None,
     cache_path: str | None = None,
+    cache_trim_tokens: int | None = None,
 ) -> None:
     """chat API の処理"""
     if options is None:
@@ -81,6 +108,27 @@ def handle_chat(
         return
 
     prompt_cache = backend.load_cache_from_file(cache_path) if cache_path else None
+    cache_tokens = 0
+    if prompt_cache is not None:
+        if cache_trim_tokens is not None:
+            current_offset = int(prompt_cache[0].offset)
+            if current_offset > cache_trim_tokens:
+                trim_prompt_cache(prompt_cache, current_offset - cache_trim_tokens)
+                sys.stderr.write(
+                    f"KV cache trimmed: {current_offset} → {cache_trim_tokens} tokens\n"
+                )
+                cache_tokens = cache_trim_tokens
+            else:
+                cache_tokens = current_offset
+        else:
+            meta_count = _read_cache_token_count(cache_path) if cache_path else None
+            if meta_count is not None:
+                cache_tokens = meta_count
+        sys.stderr.write(
+            f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
+        )
+    elif cache_path:
+        sys.stderr.write(f"KV cache load FAILED: {cache_path}\n")
 
     if not supports_chat_template(tokenizer):
         prompt = generate_merged_prompt(messages, capabilities)
@@ -138,4 +186,25 @@ def handle_chat(
 
     final_options = dict(options)
     final_options.pop("trust_remote_code", None)
-    _stream_to_stdout(backend, prompt, final_options, primer=primer, prompt_cache=prompt_cache)
+
+    effective_prompt = prompt
+    if prompt_cache is not None and cache_tokens > 0 and isinstance(prompt, str):
+        add_special = tokenizer.bos_token is None or not prompt.startswith(
+            tokenizer.bos_token
+        )
+        full_tokens = tokenizer.encode(prompt, add_special_tokens=add_special)
+
+        if cache_tokens < len(full_tokens):
+            effective_prompt = full_tokens[cache_tokens:]
+            sys.stderr.write(
+                f"Prompt cache: skip {cache_tokens}/{len(full_tokens)} tokens, "
+                f"process {len(effective_prompt)} remaining\n"
+            )
+        else:
+            sys.stderr.write(
+                f"Prompt cache: offset {cache_tokens} >= prompt {len(full_tokens)}, "
+                f"ignoring cache\n"
+            )
+            prompt_cache = None
+
+    _stream_to_stdout(backend, effective_prompt, final_options, primer=primer, prompt_cache=prompt_cache)

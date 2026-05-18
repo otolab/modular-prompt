@@ -34,6 +34,7 @@ export interface ProcessCommunicationCallbacks {
 export interface ProcessCommunicationOptions {
   textOnly?: boolean;
   drafterModel?: string;
+  draftBlockSize?: number;
 }
 
 export class ProcessCommunication {
@@ -60,6 +61,9 @@ export class ProcessCommunication {
     }
     if (options?.drafterModel) {
       args.push('--drafter', options.drafterModel);
+    }
+    if (options?.draftBlockSize !== undefined) {
+      args.push('--draft-block-size', options.draftBlockSize.toString());
     }
 
     this.process = spawn('uv', args, {

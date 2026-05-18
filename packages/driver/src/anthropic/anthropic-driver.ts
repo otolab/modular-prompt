@@ -223,7 +223,7 @@ export class AnthropicDriver implements AIDriver {
   private static isDataElementCacheable(el: Element): boolean {
     if (el.type === 'message') return true;
     if (el.type === 'chunk') return false;
-    if ('cacheHint' in el && el.cacheHint != null) return el.cacheHint === 'static';
+    if ('cacheHint' in el && el.cacheHint != null) return el.cacheHint === 'static' || el.cacheHint === 'immutable';
     return true;
   }
 

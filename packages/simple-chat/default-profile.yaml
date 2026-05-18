@@ -64,3 +64,27 @@ options:
 # KVキャッシュ（MLX専用、オプション）
 # プロンプトの静的部分をキャッシュして推論を高速化
 # cacheDir: .cache/mlx-kv
+
+# チャットログ（プロファイルまたは -l オプションで指定）
+# 会話履歴をJSONファイルに保存し、次回の実行で継続できます
+# プロファイルからの相対パスで指定。CLIの -l オプションが優先されます
+# logPath: ./chat.log.json
+#
+# ログファイルの構造:
+# {
+#   "sessionId": "abc12345",
+#   "startedAt": "2026-05-15T06:00:00.000Z",
+#   "profile": { ... },
+#   "messages": [
+#     {
+#       "role": "user",
+#       "content": "TypeScriptとは？",
+#       "timestamp": "2026-05-15T06:00:01.000Z"
+#     },
+#     {
+#       "role": "assistant",
+#       "content": "TypeScriptはJavaScriptに静的型付けを追加した言語です。",
+#       "timestamp": "2026-05-15T06:00:03.000Z"
+#     }
+#   ]
+# }
