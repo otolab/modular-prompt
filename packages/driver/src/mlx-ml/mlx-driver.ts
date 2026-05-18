@@ -521,8 +521,8 @@ export class MlxDriver implements AIDriver {
       parts.push(`hit ${hitRate}%`);
     }
     if (s.totalPromptTokens > 0) {
-      const reuse = ((s.totalCacheTokensUsed / s.totalPromptTokens) * 100).toFixed(0);
-      parts.push(`${s.totalCacheTokensUsed}/${s.totalPromptTokens} prompt tokens from cache (${reuse}%)`);
+      const cacheRate = ((s.totalCacheTokensUsed / s.totalPromptTokens) * 100).toFixed(0);
+      parts.push(`prompt ${s.totalPromptTokens} tokens (${cacheRate}% cached)`);
     }
     if (s.prefillTokens > 0) {
       const reusedRate = ((s.prefillReusedTokens / s.prefillTokens) * 100).toFixed(0);

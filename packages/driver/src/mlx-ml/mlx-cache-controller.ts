@@ -63,7 +63,6 @@ export class MlxCacheController implements PromptCacheController {
   private lastHandleToolsHash?: string;
   private lastHandleReasoningEffort?: string;
   private cacheIndex: CacheIndex = { version: 1, entries: [] };
-  private indexLoaded = false;
   private stats = {
     totalQueries: 0,
     memoryHit: 0, diskHit: 0, incremental: 0, fresh: 0,
@@ -205,7 +204,6 @@ export class MlxCacheController implements PromptCacheController {
     } catch {
       // corrupt index — start fresh
     }
-    this.indexLoaded = true;
   }
 
   private async saveIndex(): Promise<void> {
@@ -406,8 +404,8 @@ export class MlxCacheController implements PromptCacheController {
     this.stats.totalQueries++;
   }
 
-  recordPromptTokens(promptTokens: number, cacheTokensUsed: number): void {
-    this.stats.totalPromptTokens += promptTokens;
+  recordPromptTokens(newPromptTokens: number, cacheTokensUsed: number): void {
+    this.stats.totalPromptTokens += newPromptTokens + cacheTokensUsed;
     this.stats.totalCacheTokensUsed += cacheTokensUsed;
   }
 
