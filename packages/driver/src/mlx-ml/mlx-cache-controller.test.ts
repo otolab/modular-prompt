@@ -704,11 +704,16 @@ describe('MlxCacheController', () => {
       const crypto = { createHash };
       const inst = [{ type: 'text', content: 'inst A' }];
 
+      const tools = [{ name: 'get_weather' }];
+      const toolsHash = crypto.createHash('sha256')
+        .update(JSON.stringify(tools))
+        .digest('hex');
+
       const toolKey = crypto.createHash('sha256')
         .update(JSON.stringify({
           model: 'test-model',
           instructions: inst,
-          toolNames: ['get_weather'],
+          tools: tools,
         }))
         .digest('hex');
       const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
@@ -720,7 +725,7 @@ describe('MlxCacheController', () => {
           model: 'test-model',
           formatterOptionsHash: '',
           elementHashes: [instHash],
-          toolNames: ['get_weather'],
+          toolsHash: toolsHash,
           createdAt: new Date().toISOString(),
         }],
       };

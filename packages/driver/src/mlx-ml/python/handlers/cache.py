@@ -133,18 +133,29 @@ def handle_cache_prefill(
             )
         except TypeError:
             try:
+                fallback_kwargs = {}
+                if tools is not None:
+                    fallback_kwargs["tools"] = tools
                 prompt = tokenizer.apply_chat_template(
                     messages,
                     add_generation_prompt=False,
                     tokenize=False,
+                    **fallback_kwargs,
                 )
-            except Exception:
-                user_header = _compute_user_header(tokenizer)
-                prompt = _apply_template_system_only(tokenizer, messages, user_header)
-                sys.stderr.write(
-                    f"--- cache_prefill: used user-header fallback"
-                    f" (header={repr(user_header[:30])})\n"
-                )
+            except TypeError:
+                try:
+                    prompt = tokenizer.apply_chat_template(
+                        messages,
+                        add_generation_prompt=False,
+                        tokenize=False,
+                    )
+                except Exception:
+                    user_header = _compute_user_header(tokenizer)
+                    prompt = _apply_template_system_only(tokenizer, messages, user_header)
+                    sys.stderr.write(
+                        f"--- cache_prefill: used user-header fallback"
+                        f" (header={repr(user_header[:30])})\n"
+                    )
         except Exception:
             user_header = _compute_user_header(tokenizer)
             prompt = _apply_template_system_only(tokenizer, messages, user_header)

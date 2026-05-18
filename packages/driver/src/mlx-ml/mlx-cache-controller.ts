@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { rmSync, existsSync, readFileSync } from 'node:fs';
 import { unlink, mkdir, rm, writeFile } from 'node:fs/promises';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
+import type { ToolDefinition } from '../types.js';
 import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
@@ -19,7 +20,7 @@ interface CacheIndexEntry {
   model: string;
   formatterOptionsHash: string;
   elementHashes: string[];
-  toolNames?: string[];
+  toolsHash?: string;
   reasoningEffort?: string;
   createdAt: string;
 }
@@ -59,7 +60,7 @@ export class MlxCacheController implements PromptCacheController {
   private lastElementHashes?: string[];
   private lastHandleModel?: string;
   private lastHandleFormatterOptionsHash?: string;
-  private lastHandleToolStr?: string;
+  private lastHandleToolsHash?: string;
   private lastHandleReasoningEffort?: string;
   private cacheIndex: CacheIndex = { version: 1, entries: [] };
   private indexLoaded = false;
@@ -224,12 +225,18 @@ export class MlxCacheController implements PromptCacheController {
     return createHash('sha256').update(JSON.stringify(this.formatterOptions)).digest('hex');
   }
 
+  private computeToolsHash(tools?: ToolDefinition[]): string {
+    if (!tools || tools.length === 0) return '';
+    const sorted = [...tools].sort((a, b) => a.name.localeCompare(b.name));
+    return createHash('sha256').update(JSON.stringify(sorted)).digest('hex');
+  }
+
   private updateLastCache(handle: CacheHandle, elementHashes: string[], params: CachePrepareParams): void {
     this.lastHandle = handle;
     this.lastElementHashes = elementHashes;
     this.lastHandleModel = params.model;
     this.lastHandleFormatterOptionsHash = this.computeFormatterOptionsHash();
-    this.lastHandleToolStr = params.tools?.map(t => t.name).sort().join(',') ?? '';
+    this.lastHandleToolsHash = this.computeToolsHash(params.tools);
     this.lastHandleReasoningEffort = params.reasoningEffort ?? '';
   }
 
@@ -238,7 +245,7 @@ export class MlxCacheController implements PromptCacheController {
     this.lastElementHashes = undefined;
     this.lastHandleModel = undefined;
     this.lastHandleFormatterOptionsHash = undefined;
-    this.lastHandleToolStr = undefined;
+    this.lastHandleToolsHash = undefined;
     this.lastHandleReasoningEffort = undefined;
   }
 
@@ -258,8 +265,7 @@ export class MlxCacheController implements PromptCacheController {
     if (newHashes.length === 0) return undefined;
 
     const fmtHash = this.computeFormatterOptionsHash();
-    const newToolNames = params.tools?.map(t => t.name).sort();
-    const newToolStr = newToolNames?.join(',') ?? '';
+    const newToolsHash = this.computeToolsHash(params.tools);
 
     interface Candidate {
       path: string;
@@ -271,8 +277,7 @@ export class MlxCacheController implements PromptCacheController {
 
     for (const entry of this.cacheIndex.entries) {
       if (entry.model !== params.model || entry.formatterOptionsHash !== fmtHash) continue;
-      const entryToolStr = entry.toolNames?.join(',') ?? '';
-      if (entryToolStr !== newToolStr) continue;
+      if ((entry.toolsHash ?? '') !== newToolsHash) continue;
       if ((entry.reasoningEffort ?? '') !== (params.reasoningEffort ?? '')) continue;
       const path = this.generateCachePath(entry.key);
       if (existsSync(path)) {
@@ -286,7 +291,7 @@ export class MlxCacheController implements PromptCacheController {
       const lastCompatible =
         this.lastHandleModel === params.model &&
         this.lastHandleFormatterOptionsHash === fmtHash &&
-        (this.lastHandleToolStr ?? '') === newToolStr &&
+        (this.lastHandleToolsHash ?? '') === newToolsHash &&
         (this.lastHandleReasoningEffort ?? '') === (params.reasoningEffort ?? '');
       if (lastCompatible && !candidates.some(c => c.path === this.lastHandle!.ref)) {
         candidates.push({
@@ -362,17 +367,15 @@ export class MlxCacheController implements PromptCacheController {
       model: params.model,
       formatterOptionsHash: this.computeFormatterOptionsHash(),
       elementHashes: this.computeElementHashes(params),
-      toolNames: params.tools?.map(t => t.name).sort(),
+      toolsHash: this.computeToolsHash(params.tools),
       reasoningEffort: params.reasoningEffort,
       createdAt: new Date().toISOString(),
     });
   }
 
   private removeFromIndex(cachePath: string): void {
-    const key = cachePath.split('/').pop()?.replace('.safetensors', '');
-    if (key) {
-      this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.key !== key);
-    }
+    const key = basename(cachePath, '.safetensors');
+    this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.key !== key);
   }
 
   private computeCacheKey(params: CachePrepareParams): string {
@@ -387,7 +390,7 @@ export class MlxCacheController implements PromptCacheController {
       payload.formatterOptions = this.formatterOptions;
     }
     if (params.tools && params.tools.length > 0) {
-      payload.toolNames = params.tools.map(t => t.name).sort();
+      payload.tools = [...params.tools].sort((a, b) => a.name.localeCompare(b.name));
     }
     if (params.reasoningEffort) {
       payload.reasoningEffort = params.reasoningEffort;
