@@ -287,8 +287,8 @@ describe('compile', () => {
       
       expect(result.data).toHaveLength(2);
       expect(result.data.map(e => e.title)).toEqual([
-        'Current State',
-        'Messages'
+        'Messages',
+        'Current State'
       ]);
       
       expect(result.output).toHaveLength(2);

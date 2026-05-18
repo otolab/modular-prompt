@@ -190,12 +190,12 @@ export const STANDARD_SECTIONS = {
   guidelines: { type: 'instructions' as const, title: 'Guidelines' },
   preparationNote: { type: 'instructions' as const, title: 'Response Preparation Note' },
   
-  // Data
-  state: { type: 'data' as const, title: 'Current State' },
+  // Data (immutable/stable → volatile順。キャッシュプレフィックスを長く保つ)
   inputs: { type: 'data' as const, title: 'Input Data' },
   materials: { type: 'data' as const, title: 'Prepared Materials' },
-  chunks: { type: 'data' as const, title: 'Input Chunks' },
   messages: { type: 'data' as const, title: 'Messages' },
+  chunks: { type: 'data' as const, title: 'Input Chunks' },
+  state: { type: 'data' as const, title: 'Current State' },
   
   // Output
   cue: { type: 'output' as const, title: 'Output' },
