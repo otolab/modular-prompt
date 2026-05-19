@@ -414,7 +414,7 @@ describe('MlxCacheController', () => {
     it('should discover base cache from index on fresh controller', async () => {
       // インデックスにエントリがある状態でコントローラを作成
       const instructions = [{ type: 'text', content: 'system prompt' }];
-      const instructionHash = createHash('sha256')
+      const instructionHash = 'i:' + createHash('sha256')
         .update(JSON.stringify(instructions[0]))
         .digest('hex');
 
@@ -554,10 +554,10 @@ describe('MlxCacheController', () => {
       const supersetKey = crypto.createHash('sha256')
         .update(JSON.stringify({ model: 'test-model', instructions, data }))
         .digest('hex');
-      const instHash0 = crypto.createHash('sha256').update(JSON.stringify(instructions[0])).digest('hex');
-      const instHash1 = crypto.createHash('sha256').update(JSON.stringify(instructions[1])).digest('hex');
-      const dataHash0 = crypto.createHash('sha256').update(JSON.stringify(data[0])).digest('hex');
-      const dataHash1 = crypto.createHash('sha256').update(JSON.stringify(data[1])).digest('hex');
+      const instHash0 = 'i:' + crypto.createHash('sha256').update(JSON.stringify(instructions[0])).digest('hex');
+      const instHash1 = 'i:' + crypto.createHash('sha256').update(JSON.stringify(instructions[1])).digest('hex');
+      const dataHash0 = 'd:' + crypto.createHash('sha256').update(JSON.stringify(data[0])).digest('hex');
+      const dataHash1 = 'd:' + crypto.createHash('sha256').update(JSON.stringify(data[1])).digest('hex');
 
       const indexData = {
         version: 1,
@@ -619,9 +619,9 @@ describe('MlxCacheController', () => {
       const oldKey = crypto.createHash('sha256')
         .update(JSON.stringify({ model: 'test-model', instructions: inst, data: dataOld }))
         .digest('hex');
-      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
-      const dataHash0 = crypto.createHash('sha256').update(JSON.stringify(dataOld[0])).digest('hex');
-      const dataHash1Old = crypto.createHash('sha256').update(JSON.stringify(dataOld[1])).digest('hex');
+      const instHash = 'i:' + crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+      const dataHash0 = 'd:' + crypto.createHash('sha256').update(JSON.stringify(dataOld[0])).digest('hex');
+      const dataHash1Old = 'd:' + crypto.createHash('sha256').update(JSON.stringify(dataOld[1])).digest('hex');
 
       const indexData = {
         version: 1,
@@ -677,8 +677,8 @@ describe('MlxCacheController', () => {
       const oldKey = crypto.createHash('sha256')
         .update(JSON.stringify({ model: 'test-model', instructions: inst, data: dataOld }))
         .digest('hex');
-      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
-      const dataHashOld = crypto.createHash('sha256').update(JSON.stringify(dataOld[0])).digest('hex');
+      const instHash = 'i:' + crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+      const dataHashOld = 'd:' + crypto.createHash('sha256').update(JSON.stringify(dataOld[0])).digest('hex');
 
       const indexData = {
         version: 1,
@@ -743,7 +743,7 @@ describe('MlxCacheController', () => {
           tools: tools,
         }))
         .digest('hex');
-      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+      const instHash = 'i:' + crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
 
       const indexData = {
         version: 1,
@@ -797,7 +797,7 @@ describe('MlxCacheController', () => {
           reasoningEffort: 'high',
         }))
         .digest('hex');
-      const instHash = crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
+      const instHash = 'i:' + crypto.createHash('sha256').update(JSON.stringify(inst[0])).digest('hex');
 
       const indexData = {
         version: 1,

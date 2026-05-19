@@ -279,10 +279,10 @@ export class MlxCacheController implements PromptCacheController {
   private computeElementHashes(params: CachePrepareParams): string[] {
     const hashes: string[] = [];
     for (const el of params.instructions || []) {
-      hashes.push(createHash('sha256').update(JSON.stringify(el)).digest('hex'));
+      hashes.push('i:' + createHash('sha256').update(JSON.stringify(el)).digest('hex'));
     }
     for (const el of params.data || []) {
-      hashes.push(createHash('sha256').update(JSON.stringify(el)).digest('hex'));
+      hashes.push('d:' + createHash('sha256').update(JSON.stringify(el)).digest('hex'));
     }
     return hashes;
   }
@@ -351,8 +351,14 @@ export class MlxCacheController implements PromptCacheController {
       let info: BaseCacheInfo;
 
       if (matchLength === c.elementHashes.length) {
-        // entry is a prefix of (or equal to) new — no trim needed
-        info = { path: c.path, coversAll: matchLength >= newHashes.length, sourceElementHashes: c.elementHashes };
+        if (matchLength >= newHashes.length) {
+          info = { path: c.path, coversAll: true, sourceElementHashes: c.elementHashes };
+        } else if (newHashes[matchLength - 1][0] !== newHashes[matchLength][0]) {
+          info = { path: c.path, coversAll: false, sourceElementHashes: c.elementHashes };
+        } else {
+          logger.debug(`findBestBase: skip ${c.label} (same-section proper prefix, closing tokens differ)`);
+          continue;
+        }
       } else {
         // entry has extra/different elements — need trim via element_offsets
         const offsets = this.readElementOffsets(c.path);
