@@ -130,13 +130,13 @@ class MlxLmBackend(ModelBackend):
                 else:
                     meta_offset = self._read_cache_meta(base_cache_path)
                     if meta_offset is None:
-                        # Legacy cache without meta file - skip it for safety
+                        # Legacy cache without meta file - create fresh cache
                         sys.stderr.write(
                             f"WARNING: Cache file exists but no .meta.json found at {base_cache_path}. "
-                            "Ignoring cache for safety (may be from old implementation).\n"
+                            "Creating fresh cache (may be from old implementation).\n"
                         )
                         cache_offset = 0
-                        prompt_cache = None  # Ignore the loaded cache
+                        prompt_cache = make_prompt_cache(self.model)
                     else:
                         cache_offset = meta_offset
 

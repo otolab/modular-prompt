@@ -45,9 +45,9 @@ def _stream_to_stdout(
             meta["generation_tokens"] = last_response.generation_tokens
 
     if meta:
-        print(f"\n__META__:{json.dumps(meta)}", end="\0", flush=True)
+        print(f"\0__META__:{json.dumps(meta)}", end="", flush=True)
     else:
-        print("\n", end="\0", flush=True)
+        print("\0", end="", flush=True)
 
 
 def handle_chat(
@@ -141,7 +141,9 @@ def handle_chat(
 
     if not supports_chat_template(tokenizer):
         prompt = generate_merged_prompt(messages, capabilities)
-        _stream_to_stdout(backend, prompt, options, primer=primer, prompt_cache=prompt_cache)
+        if prompt_cache is not None:
+            sys.stderr.write("KV cache ignored: model does not support chat template\n")
+        _stream_to_stdout(backend, prompt, options, primer=primer)
         return
 
     add_generation_prompt = True
