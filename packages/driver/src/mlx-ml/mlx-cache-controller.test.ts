@@ -320,10 +320,11 @@ describe('MlxCacheController', () => {
     });
 
     it('should skip prefill when cache file already exists', async () => {
-      // Both .safetensors and .meta.json need to exist to skip prefill
+      // Both .safetensors and .meta.json need to exist with valid token_count
       vi.mocked(existsSync)
         .mockReturnValueOnce(true)  // .safetensors check
         .mockReturnValueOnce(true); // .meta.json check
+      vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({ token_count: 100 }));
 
       const handle = await externalController.prepare({
         model: 'test-model',

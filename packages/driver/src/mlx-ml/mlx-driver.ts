@@ -70,14 +70,11 @@ interface StreamMeta {
   generation_tokens?: number;
 }
 
-const META_MARKER = '\0__META__:';
+const META_MARKER = '\x1e__META__:';
 
 function extractStreamMeta(content: string): { content: string; meta: StreamMeta } {
   const idx = content.lastIndexOf(META_MARKER);
-  if (idx === -1) {
-    const nullIdx = content.lastIndexOf('\0');
-    return { content: nullIdx !== -1 ? content.slice(0, nullIdx) : content, meta: {} };
-  }
+  if (idx === -1) return { content, meta: {} };
   const jsonStr = content.slice(idx + META_MARKER.length);
   try {
     return { content: content.slice(0, idx), meta: JSON.parse(jsonStr) };

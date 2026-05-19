@@ -34,7 +34,7 @@ def _stream_to_stdout(
 
     last_response = None
     for response in backend.stream_generate(prompt, options, images, prompt_cache=prompt_cache):
-        print(response.text.replace("\0", ""), end="", flush=True)
+        print(response.text.replace("\0", "").replace("\x1e", ""), end="", flush=True)
         last_response = response
 
     meta: dict = {}
@@ -45,9 +45,9 @@ def _stream_to_stdout(
             meta["generation_tokens"] = last_response.generation_tokens
 
     if meta:
-        print(f"\0__META__:{json.dumps(meta)}", end="", flush=True)
+        print(f"\x1e__META__:{json.dumps(meta)}", end="\0", flush=True)
     else:
-        print("\0", end="", flush=True)
+        print("", end="\0", flush=True)
 
 
 def handle_chat(
