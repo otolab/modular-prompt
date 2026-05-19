@@ -368,8 +368,9 @@ describe('MlxCacheController', () => {
 
       // lastHandleのファイルが存在する状態にする
       vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
-        return path === handle1.ref;
+        return path === handle1.ref || path === handle1.ref + '.meta.json';
       });
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ token_count: 100 }));
 
       // 2回目: 異なるparams → lastHandleがbaseCachePathとして渡される
       await controller.prepare({
@@ -432,13 +433,18 @@ describe('MlxCacheController', () => {
         }],
       };
 
-      // readFileSyncでインデックスを返す
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(indexData));
+      // readFileSyncでインデックスまたはmeta.jsonを返す
+      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+        const pathStr = String(path);
+        if (pathStr.endsWith('.meta.json')) return JSON.stringify({ token_count: 100 });
+        return JSON.stringify(indexData);
+      });
       // existsSyncの設定: indexPathとキャッシュファイルは存在する
       vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
         const pathStr = String(path);
         if (pathStr.endsWith('cache-index.json')) return true;
         if (pathStr.endsWith(`${existingKey}.safetensors`)) return true;
+        if (pathStr.endsWith(`${existingKey}.safetensors.meta.json`)) return true;
         return false;
       });
 

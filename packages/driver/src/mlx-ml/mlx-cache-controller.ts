@@ -307,14 +307,14 @@ export class MlxCacheController implements PromptCacheController {
       if ((entry.toolsHash ?? '') !== newToolsHash) continue;
       if ((entry.reasoningEffort ?? '') !== (params.reasoningEffort ?? '')) continue;
       const path = this.generateCachePath(entry.key);
-      if (existsSync(path)) {
+      if (existsSync(path) && this.readMetaTokenCount(path) > 0) {
         candidates.push({ path, elementHashes: entry.elementHashes, label: entry.key.slice(0, 8) });
       } else {
         staleKeys.push(entry.key);
       }
     }
 
-    if (this.lastHandle?.ref && this.lastElementHashes && existsSync(this.lastHandle.ref)) {
+    if (this.lastHandle?.ref && this.lastElementHashes && existsSync(this.lastHandle.ref) && this.readMetaTokenCount(this.lastHandle.ref) > 0) {
       const lastCompatible =
         this.lastHandleModel === params.model &&
         this.lastHandleFormatterOptionsHash === fmtHash &&
