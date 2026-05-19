@@ -124,9 +124,18 @@ def handle_chat(
             meta_count = _read_cache_token_count(cache_path) if cache_path else None
             if meta_count is not None:
                 cache_tokens = meta_count
-        sys.stderr.write(
-            f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
-        )
+            else:
+                # Legacy cache without meta file - skip it for safety
+                sys.stderr.write(
+                    f"WARNING: Cache file exists but no .meta.json found at {cache_path}. "
+                    "Ignoring cache for safety (may be from old implementation).\n"
+                )
+                prompt_cache = None
+                cache_tokens = 0
+        if prompt_cache is not None:
+            sys.stderr.write(
+                f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
+            )
     elif cache_path:
         sys.stderr.write(f"KV cache load FAILED: {cache_path}\n")
 

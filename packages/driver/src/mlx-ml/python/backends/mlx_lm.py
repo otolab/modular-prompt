@@ -147,9 +147,19 @@ class MlxLmBackend(ModelBackend):
                     else:
                         cache_offset = current_offset
                 else:
-                    cache_offset = self._read_cache_meta(base_cache_path) or 0
+                    meta_offset = self._read_cache_meta(base_cache_path)
+                    if meta_offset is None:
+                        # Legacy cache without meta file - skip it for safety
+                        logger.warning(
+                            f"Cache file exists but no .meta.json found at {base_cache_path}. "
+                            "Ignoring cache for safety (may be from old implementation)."
+                        )
+                        cache_offset = 0
+                        prompt_cache = None  # Ignore the loaded cache
+                    else:
+                        cache_offset = meta_offset
 
-                if cache_offset > 0:
+                if cache_offset > 0 and prompt_cache is not None:
                     if cache_offset < token_count:
                         effective_prompt = full_tokens[cache_offset:]
                         if os.getenv('MLX_DEBUG'):
