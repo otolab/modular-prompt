@@ -320,7 +320,10 @@ describe('MlxCacheController', () => {
     });
 
     it('should skip prefill when cache file already exists', async () => {
-      vi.mocked(existsSync).mockReturnValueOnce(true);
+      // Both .safetensors and .meta.json need to exist to skip prefill
+      vi.mocked(existsSync)
+        .mockReturnValueOnce(true)  // .safetensors check
+        .mockReturnValueOnce(true); // .meta.json check
 
       const handle = await externalController.prepare({
         model: 'test-model',
@@ -330,6 +333,23 @@ describe('MlxCacheController', () => {
       expect(handle.ref).toMatch(/\.safetensors$/);
       expect(handle.includes.instructions).toBe(true);
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+    });
+
+    it('should regenerate cache when .meta.json is missing (legacy cache)', async () => {
+      // .safetensors exists but .meta.json does not
+      vi.mocked(existsSync)
+        .mockReturnValueOnce(true)   // .safetensors check
+        .mockReturnValueOnce(false); // .meta.json check
+
+      const handle = await externalController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'test' }],
+      });
+
+      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.includes.instructions).toBe(true);
+      // Should regenerate the cache with metadata
+      expect(mockProcess.cachePrefill).toHaveBeenCalled();
     });
   });
 
