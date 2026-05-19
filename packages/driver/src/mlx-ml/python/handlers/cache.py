@@ -37,28 +37,42 @@ def _compute_user_header(tokenizer) -> str:
     return prefix[len(bos):] if bos and prefix.startswith(bos) else prefix
 
 
-def _apply_template_system_only(tokenizer, messages: list, user_header: str) -> str:
+def _apply_template_system_only(
+    tokenizer, messages: list, user_header: str, extra_kwargs: dict | None = None,
+) -> str:
     """system-onlyメッセージにapply_chat_templateを適用する。
 
     テンプレートがuserメッセージを要求する場合、ダミーuserを追加して
     テンプレート出力からuser部分を除去したsystemプレフィクスを返す。
     """
+    kwargs = extra_kwargs or {}
     try:
         return tokenizer.apply_chat_template(
-            messages, add_generation_prompt=False, tokenize=False,
+            messages, add_generation_prompt=False, tokenize=False, **kwargs,
         )
-    except Exception:
+    except (Exception, TypeError):
         pass
 
-    content_a, content_b = "ALPHA", "BRAVO"
-    prompt_a = tokenizer.apply_chat_template(
-        messages + [{"role": "user", "content": content_a}],
-        add_generation_prompt=False, tokenize=False,
-    )
-    prompt_b = tokenizer.apply_chat_template(
-        messages + [{"role": "user", "content": content_b}],
-        add_generation_prompt=False, tokenize=False,
-    )
+    try:
+        content_a, content_b = "ALPHA", "BRAVO"
+        prompt_a = tokenizer.apply_chat_template(
+            messages + [{"role": "user", "content": content_a}],
+            add_generation_prompt=False, tokenize=False, **kwargs,
+        )
+        prompt_b = tokenizer.apply_chat_template(
+            messages + [{"role": "user", "content": content_b}],
+            add_generation_prompt=False, tokenize=False, **kwargs,
+        )
+    except TypeError:
+        content_a, content_b = "ALPHA", "BRAVO"
+        prompt_a = tokenizer.apply_chat_template(
+            messages + [{"role": "user", "content": content_a}],
+            add_generation_prompt=False, tokenize=False,
+        )
+        prompt_b = tokenizer.apply_chat_template(
+            messages + [{"role": "user", "content": content_b}],
+            add_generation_prompt=False, tokenize=False,
+        )
 
     diverge = 0
     for i in range(min(len(prompt_a), len(prompt_b))):
@@ -75,7 +89,8 @@ def _apply_template_system_only(tokenizer, messages: list, user_header: str) -> 
 
 
 def _compute_element_offsets(
-    tokenizer, full_prompt: str, system_content: str, char_offsets: list[int], user_header: str,
+    tokenizer, full_prompt: str, system_content: str, char_offsets: list[int],
+    user_header: str, extra_kwargs: dict | None = None,
 ) -> list[int]:
     """各要素境界でのcumulativeトークン数を計算"""
     add_special = tokenizer.bos_token is None or not full_prompt.startswith(
@@ -88,7 +103,7 @@ def _compute_element_offsets(
         truncated = system_content[:char_offset]
         truncated_msgs = [{"role": "system", "content": truncated}]
         truncated_prompt = _apply_template_system_only(
-            tokenizer, truncated_msgs, user_header,
+            tokenizer, truncated_msgs, user_header, extra_kwargs,
         )
         add_special_trunc = tokenizer.bos_token is None or not truncated_prompt.startswith(
             tokenizer.bos_token or ""
@@ -177,7 +192,8 @@ def handle_cache_prefill(
                 system_parts.append(msg.get("content", ""))
         system_content = "\n\n".join(system_parts) if system_parts else ""
         element_offsets = _compute_element_offsets(
-            tokenizer, prompt, system_content, element_char_offsets, user_header,
+            tokenizer, prompt, system_content, element_char_offsets,
+            user_header, extra_kwargs,
         )
 
     # Only show debug output if MLX_DEBUG environment variable is set

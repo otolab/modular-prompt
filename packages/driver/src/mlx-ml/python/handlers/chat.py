@@ -111,7 +111,7 @@ def handle_chat(
     cache_tokens = 0
     if prompt_cache is not None:
         if cache_trim_tokens is not None:
-            current_offset = int(prompt_cache[0].offset)
+            current_offset = backend.get_cache_offset(prompt_cache)
             if current_offset > cache_trim_tokens:
                 trim_prompt_cache(prompt_cache, current_offset - cache_trim_tokens)
                 sys.stderr.write(

@@ -81,7 +81,7 @@ export class QueueManager {
           ...(images?.length ? { images, maxImageSize } : {}),
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           ...(cachePath ? { cache_path: cachePath } : {}),
-          ...(cacheTrimTokens ? { cache_trim_tokens: cacheTrimTokens } : {}),
+          ...(cacheTrimTokens != null ? { cache_trim_tokens: cacheTrimTokens } : {}),
         };
         this.queue.push({
           request,

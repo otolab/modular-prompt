@@ -509,7 +509,7 @@ export class MlxCacheController implements PromptCacheController {
     const cachePath = this.generateCachePath(cacheKey);
     const elementHashes = this.computeElementHashes(params);
 
-    if (existsSync(cachePath)) {
+    if (existsSync(cachePath) && existsSync(cachePath + '.meta.json')) {
       this.stats.diskHit++;
       logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
     } else {

@@ -60,3 +60,24 @@ class ModelBackend(ABC):
     def load_cache_from_file(self, cache_path: str) -> list | None:
         """Load a prompt cache from file, or None."""
         return None
+
+    def get_cache_offset(self, prompt_cache: list) -> int:
+        """Get the number of tokens stored in a loaded prompt cache."""
+        if not prompt_cache:
+            return 0
+        layer0 = prompt_cache[0]
+        if hasattr(layer0, 'offset'):
+            off = layer0.offset
+            return int(off.item() if hasattr(off, 'item') else off)
+        if hasattr(layer0, 'caches'):
+            for c in layer0.caches:
+                if hasattr(c, 'offset'):
+                    off = c.offset
+                    return int(off.item() if hasattr(off, 'item') else off)
+        try:
+            return int(layer0[0].shape[2])
+        except Exception:
+            pass
+        if hasattr(layer0, 'keys') and layer0.keys is not None:
+            return int(layer0.keys.shape[2])
+        return 0

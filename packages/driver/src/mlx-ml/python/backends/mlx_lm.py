@@ -60,26 +60,7 @@ class MlxLmBackend(ModelBackend):
                 break
             yield response
 
-    def _get_cache_offset(self, prompt_cache: list) -> int:
-        """Get the number of tokens stored in a loaded prompt cache."""
-        if not prompt_cache:
-            return 0
-        layer0 = prompt_cache[0]
-        if hasattr(layer0, 'offset'):
-            off = layer0.offset
-            return int(off.item() if hasattr(off, 'item') else off)
-        if hasattr(layer0, 'caches'):
-            for c in layer0.caches:
-                if hasattr(c, 'offset'):
-                    off = c.offset
-                    return int(off.item() if hasattr(off, 'item') else off)
-        try:
-            return int(layer0[0].shape[2])
-        except Exception:
-            pass
-        if hasattr(layer0, 'keys') and layer0.keys is not None:
-            return int(layer0.keys.shape[2])
-        return 0
+    # get_cache_offset is inherited from ModelBackend base class
 
     def _tokenize_prompt(self, prompt: str) -> list[int]:
         """Tokenize a prompt string using the same logic as stream_generate."""
@@ -135,7 +116,7 @@ class MlxLmBackend(ModelBackend):
                 prompt_cache = load_prompt_cache(base_cache_path)
 
                 if trim_to_tokens is not None:
-                    current_offset = int(prompt_cache[0].offset)
+                    current_offset = self.get_cache_offset(prompt_cache)
                     if current_offset > trim_to_tokens:
                         trim_count = current_offset - trim_to_tokens
                         trim_prompt_cache(prompt_cache, trim_count)
@@ -150,9 +131,9 @@ class MlxLmBackend(ModelBackend):
                     meta_offset = self._read_cache_meta(base_cache_path)
                     if meta_offset is None:
                         # Legacy cache without meta file - skip it for safety
-                        logger.warning(
-                            f"Cache file exists but no .meta.json found at {base_cache_path}. "
-                            "Ignoring cache for safety (may be from old implementation)."
+                        sys.stderr.write(
+                            f"WARNING: Cache file exists but no .meta.json found at {base_cache_path}. "
+                            "Ignoring cache for safety (may be from old implementation).\n"
                         )
                         cache_offset = 0
                         prompt_cache = None  # Ignore the loaded cache
