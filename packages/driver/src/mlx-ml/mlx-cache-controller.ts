@@ -354,7 +354,18 @@ export class MlxCacheController implements PromptCacheController {
         if (matchLength >= newHashes.length) {
           info = { path: c.path, coversAll: true, sourceElementHashes: c.elementHashes };
         } else if (newHashes[matchLength - 1][0] !== newHashes[matchLength][0]) {
-          info = { path: c.path, coversAll: false, sourceElementHashes: c.elementHashes };
+          // cross-section境界 (e.g., instructions→data): element_offsetsを使ってトリム
+          const offsets = this.readElementOffsets(c.path);
+          if (!offsets || offsets.length < matchLength) {
+            logger.debug(`findBestBase: skip ${c.label} (cross-section boundary, no offsets)`);
+            continue;
+          }
+          info = {
+            path: c.path,
+            trimTokens: offsets[matchLength - 1],
+            coversAll: false,
+            sourceElementHashes: c.elementHashes,
+          };
         } else {
           logger.debug(`findBestBase: skip ${c.label} (same-section proper prefix, closing tokens differ)`);
           continue;

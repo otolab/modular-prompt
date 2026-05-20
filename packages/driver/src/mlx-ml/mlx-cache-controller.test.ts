@@ -159,10 +159,10 @@ describe('MlxCacheController', () => {
 
     it('should produce different cache keys for different formatterOptions', async () => {
       const controllerA = new MlxCacheController();
-      controllerA.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { specialTokens: { bosToken: '<s>' } });
+      controllerA.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { specialTokens: { bosToken: { text: '<s>', id: 1 } } });
 
       const controllerB = new MlxCacheController();
-      controllerB.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { specialTokens: { bosToken: '<bos>' } });
+      controllerB.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { specialTokens: { bosToken: { text: '<bos>', id: 1 } } });
 
       const params = {
         model: 'test-model',
@@ -324,7 +324,7 @@ describe('MlxCacheController', () => {
       vi.mocked(existsSync)
         .mockReturnValueOnce(true)  // .safetensors check
         .mockReturnValueOnce(true); // .meta.json check
-      vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({ token_count: 100 }));
+      vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({ token_count: 100, element_offsets: [0, 100] }));
 
       const handle = await externalController.prepare({
         model: 'test-model',
@@ -367,16 +367,16 @@ describe('MlxCacheController', () => {
       expect(basePath1).toBeUndefined();
 
       // lastHandleのファイルが存在する状態にする
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         return path === handle1.ref || path === handle1.ref + '.meta.json';
       });
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ token_count: 100 }));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ token_count: 100, element_offsets: [0, 100] }));
 
       // 2回目: 異なるparams → lastHandleがbaseCachePathとして渡される
       await controller.prepare({
         model: 'test-model',
-        instructions: [{ type: 'text', content: 'system prompt' }],
-        data: [{ type: 'text', content: 'message 1' }],
+        instructions: [{ type: 'text' as const, content: 'system prompt' }],
+        data: [{ type: 'text' as const, content: 'message 1' }],
       });
 
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
@@ -401,8 +401,8 @@ describe('MlxCacheController', () => {
       // 2回目: lastHandleのファイルが無い → baseCachePathはundefined
       await externalController.prepare({
         model: 'test-model',
-        instructions: [{ type: 'text', content: 'system prompt' }],
-        data: [{ type: 'text', content: 'message 1' }],
+        instructions: [{ type: 'text' as const, content: 'system prompt' }],
+        data: [{ type: 'text' as const, content: 'message 1' }],
       });
 
       const [, , basePath2] = mockProcess.cachePrefill.mock.calls[1];
@@ -413,7 +413,7 @@ describe('MlxCacheController', () => {
 
     it('should discover base cache from index on fresh controller', async () => {
       // インデックスにエントリがある状態でコントローラを作成
-      const instructions = [{ type: 'text', content: 'system prompt' }];
+      const instructions = [{ type: 'text' as const, content: 'system prompt' }];
       const instructionHash = 'i:' + createHash('sha256')
         .update(JSON.stringify(instructions[0]))
         .digest('hex');
@@ -434,13 +434,13 @@ describe('MlxCacheController', () => {
       };
 
       // readFileSyncでインデックスまたはmeta.jsonを返す
-      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
         const pathStr = String(path);
-        if (pathStr.endsWith('.meta.json')) return JSON.stringify({ token_count: 100 });
+        if (pathStr.endsWith('.meta.json')) return JSON.stringify({ token_count: 100, element_offsets: [0, 100] });
         return JSON.stringify(indexData);
       });
       // existsSyncの設定: indexPathとキャッシュファイルは存在する
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         const pathStr = String(path);
         if (pathStr.endsWith('cache-index.json')) return true;
         if (pathStr.endsWith(`${existingKey}.safetensors`)) return true;
@@ -455,7 +455,7 @@ describe('MlxCacheController', () => {
       await freshController.prepare({
         model: 'test-model',
         instructions,
-        data: [{ type: 'text', content: 'message 1' }],
+        data: [{ type: 'text' as const, content: 'message 1' }],
       });
 
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
@@ -526,8 +526,8 @@ describe('MlxCacheController', () => {
 
       await ctrl.prepare({
         model: 'test-model',
-        instructions: [{ type: 'text', content: 'inst A' }],
-        data: [{ type: 'text', content: 'data 0' }],
+        instructions: [{ type: 'text' as const, content: 'inst A' }],
+        data: [{ type: 'text' as const, content: 'data 0' }],
       });
 
       const args = mockProcess.cachePrefill.mock.calls[0];
@@ -542,12 +542,12 @@ describe('MlxCacheController', () => {
     it('should reuse superset base cache without creating new file', async () => {
       const crypto = { createHash };
       const instructions = [
-        { type: 'text', content: 'inst A' },
-        { type: 'text', content: 'inst B' },
+        { type: 'text' as const, content: 'inst A' },
+        { type: 'text' as const, content: 'inst B' },
       ];
       const data = [
-        { type: 'text', content: 'data 0' },
-        { type: 'text', content: 'data 1' },
+        { type: 'text' as const, content: 'data 0' },
+        { type: 'text' as const, content: 'data 1' },
       ];
 
       // Build hash for the superset entry (instructions + all data)
@@ -573,13 +573,13 @@ describe('MlxCacheController', () => {
       const supersetPath = `/cache/${supersetKey}.safetensors`;
       const metaData = { token_count: 3000, element_offsets: [120, 245, 380, 510] };
 
-      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === supersetPath) return true;
@@ -606,14 +606,14 @@ describe('MlxCacheController', () => {
 
     it('should use partial match with trim when element_offsets exist', async () => {
       const crypto = { createHash };
-      const inst = [{ type: 'text', content: 'inst A' }];
+      const inst = [{ type: 'text' as const, content: 'inst A' }];
       const dataOld = [
-        { type: 'text', content: 'data 0' },
-        { type: 'text', content: 'data 1 old' },
+        { type: 'text' as const, content: 'data 0' },
+        { type: 'text' as const, content: 'data 1 old' },
       ];
       const dataNew = [
-        { type: 'text', content: 'data 0' },
-        { type: 'text', content: 'data 1 new' },
+        { type: 'text' as const, content: 'data 0' },
+        { type: 'text' as const, content: 'data 1 new' },
       ];
 
       const oldKey = crypto.createHash('sha256')
@@ -637,13 +637,13 @@ describe('MlxCacheController', () => {
       const oldPath = `/cache/${oldKey}.safetensors`;
       const metaData = { token_count: 500, element_offsets: [100, 300, 500] };
 
-      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === oldPath) return true;
@@ -670,9 +670,9 @@ describe('MlxCacheController', () => {
 
     it('should skip partial match when no element_offsets in meta', async () => {
       const crypto = { createHash };
-      const inst = [{ type: 'text', content: 'inst A' }];
-      const dataOld = [{ type: 'text', content: 'data old' }];
-      const dataNew = [{ type: 'text', content: 'data new' }];
+      const inst = [{ type: 'text' as const, content: 'inst A' }];
+      const dataOld = [{ type: 'text' as const, content: 'data old' }];
+      const dataNew = [{ type: 'text' as const, content: 'data new' }];
 
       const oldKey = crypto.createHash('sha256')
         .update(JSON.stringify({ model: 'test-model', instructions: inst, data: dataOld }))
@@ -695,13 +695,13 @@ describe('MlxCacheController', () => {
       // meta WITHOUT element_offsets
       const metaData = { token_count: 300 };
 
-      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         if (p.endsWith('.meta.json')) return JSON.stringify(metaData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === oldPath) return true;
@@ -729,7 +729,7 @@ describe('MlxCacheController', () => {
 
     it('should not use base cache with different tools', async () => {
       const crypto = { createHash };
-      const inst = [{ type: 'text', content: 'inst A' }];
+      const inst = [{ type: 'text' as const, content: 'inst A' }];
 
       const tools = [{ name: 'get_weather' }];
       const toolsHash = crypto.createHash('sha256')
@@ -759,12 +759,12 @@ describe('MlxCacheController', () => {
 
       const toolPath = `/cache/${toolKey}.safetensors`;
 
-      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === toolPath) return true;
@@ -788,7 +788,7 @@ describe('MlxCacheController', () => {
 
     it('should not use base cache with different reasoningEffort', async () => {
       const crypto = { createHash };
-      const inst = [{ type: 'text', content: 'inst A' }];
+      const inst = [{ type: 'text' as const, content: 'inst A' }];
 
       const highKey = crypto.createHash('sha256')
         .update(JSON.stringify({
@@ -813,12 +813,12 @@ describe('MlxCacheController', () => {
 
       const highPath = `/cache/${highKey}.safetensors`;
 
-      vi.mocked(readFileSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return JSON.stringify(indexData);
         return '';
       });
-      vi.mocked(existsSync).mockImplementation((path: string | Buffer | URL) => {
+      vi.mocked(existsSync).mockImplementation((path: any) => {
         const p = String(path);
         if (p.endsWith('cache-index.json')) return true;
         if (p === highPath) return true;
