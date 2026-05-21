@@ -133,9 +133,8 @@ function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
   const objRecord = obj as Record<string, unknown>;
 
   // 標準形式: {"name": "...", "arguments": {...}}
-  if (objRecord.name) {
+  if (objRecord.name && typeof objRecord.name === 'string') {
     let args = objRecord.arguments || objRecord.parameters || {};
-    // argumentsが文字列の場合（OpenAI形式）
     if (typeof args === 'string') {
       try {
         args = JSON.parse(args);
@@ -143,13 +142,14 @@ function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
         args = {};
       }
     }
-    return { name: objRecord.name as string, arguments: args as Record<string, unknown> };
+    if (typeof args !== 'object' || args === null) args = {};
+    return { name: objRecord.name, arguments: args as Record<string, unknown> };
   }
 
   // ネスト形式: {"function": {"name": "...", "arguments": {...}}}
   if (objRecord.function && typeof objRecord.function === 'object' && objRecord.function !== null) {
     const func = objRecord.function as Record<string, unknown>;
-    if (func.name) {
+    if (func.name && typeof func.name === 'string') {
       let args = func.arguments || func.parameters || {};
       if (typeof args === 'string') {
         try {
@@ -158,17 +158,20 @@ function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
           args = {};
         }
       }
-      return { name: func.name as string, arguments: args as Record<string, unknown> };
+      if (typeof args !== 'object' || args === null) args = {};
+      return { name: func.name, arguments: args as Record<string, unknown> };
     }
   }
 
   // tool wrapping: {"tool": {"name": "...", ...}}
   if (objRecord.tool && typeof objRecord.tool === 'object' && objRecord.tool !== null) {
     const tool = objRecord.tool as Record<string, unknown>;
-    if (tool.name) {
+    if (tool.name && typeof tool.name === 'string') {
+      let args = tool.arguments || tool.parameters || {};
+      if (typeof args !== 'object' || args === null) args = {};
       return {
-        name: tool.name as string,
-        arguments: (tool.arguments || tool.parameters || {}) as Record<string, unknown>
+        name: tool.name,
+        arguments: args as Record<string, unknown>
       };
     }
   }

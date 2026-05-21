@@ -86,13 +86,6 @@ function displayChatLog(chatLog: ChatLog): void {
  * Run chat session
  */
 export async function runChat(options: SimpleChatOptions): Promise<void> {
-  // Show log only mode
-  if (options.showLogOnly && options.logPath) {
-    const chatLog = await loadChatLog(options.logPath);
-    displayChatLog(chatLog);
-    return;
-  }
-
   // Load or create profile
   let profile: DialogProfile;
   if (options.profilePath) {
@@ -131,6 +124,13 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
         ? resolve(dirname(resolve(options.profilePath)), profile.logPath)
         : resolve(profile.logPath))
     : undefined);
+
+  // Show log only mode
+  if (options.showLogOnly && logPath) {
+    const chatLog = await loadChatLog(logPath);
+    displayChatLog(chatLog);
+    return;
+  }
 
   // Load or create chat log
   let chatLog: ChatLog;
