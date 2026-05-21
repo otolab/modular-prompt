@@ -61,7 +61,7 @@ class Server:
 
             elif method == 'tokenize':
                 messages = req.get('messages')
-                if not messages:
+                if messages is None:
                     self._error_response("'messages' field is required for tokenize method")
                     return
                 handle_tokenize(

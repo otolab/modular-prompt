@@ -118,8 +118,9 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.cacheDir = resolve(base, profile.cacheDir);
   }
 
-  // Resolve log path: CLI -l overrides profile.logPath
-  const logPath = options.logPath ?? (profile.logPath
+  // Resolve log path: CLI -l overrides profile.logPath (Commander may pass true for -l without value)
+  const cliLogPath = typeof options.logPath === 'string' ? options.logPath : undefined;
+  const logPath = cliLogPath ?? (profile.logPath
     ? (options.profilePath
         ? resolve(dirname(resolve(options.profilePath)), profile.logPath)
         : resolve(profile.logPath))
