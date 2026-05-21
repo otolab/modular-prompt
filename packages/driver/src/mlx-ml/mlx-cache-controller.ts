@@ -332,6 +332,7 @@ export class MlxCacheController implements PromptCacheController {
 
     if (staleKeys.length > 0) {
       this.cacheIndex.entries = this.cacheIndex.entries.filter(e => !staleKeys.includes(e.key));
+      this.saveIndex().catch(() => {});
     }
 
     if (candidates.length === 0) return undefined;

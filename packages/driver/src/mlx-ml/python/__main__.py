@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     if drafter_model:
         backend.load_drafter(drafter_model)
-        if draft_block_size and hasattr(backend, 'draft_block_size'):
+        if draft_block_size is not None and hasattr(backend, 'draft_block_size'):
             backend.draft_block_size = draft_block_size
 
     capabilities = get_capabilities(backend.get_tokenizer())
