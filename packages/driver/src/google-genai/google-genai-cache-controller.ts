@@ -60,6 +60,10 @@ export class GoogleGenAICacheController implements PromptCacheController {
     }
   }
 
+  recordQuery(): void {
+    // no-op: GoogleGenAI cache controller does not track query stats
+  }
+
   async prepare(params: CachePrepareParams): Promise<CacheHandle> {
     this.sweepExpired();
     const cacheKey = this.computeCacheKey(params);

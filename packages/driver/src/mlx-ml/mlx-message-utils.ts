@@ -1,9 +1,22 @@
 import type { ChatMessage } from '../formatter/types.js';
 import { hasToolCalls, isToolResult } from '../types.js';
+import type { ToolDefinition } from '../types.js';
 import type { MlxMessage, MlxContentPart } from './types.js';
+import type { MlxToolDefinition } from './process/types.js';
 import { contentToString, extractImagePaths } from '../content-utils.js';
 
 export { extractImagePaths };
+
+export function convertToolDefinitions(tools: ToolDefinition[]): MlxToolDefinition[] {
+  return tools.map(tool => ({
+    type: 'function' as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters
+    }
+  }));
+}
 
 export function convertMessages(messages: ChatMessage[], vlm: boolean = false): MlxMessage[] {
   return messages.map(msg => {

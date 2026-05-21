@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
 import sys
 from typing import Any, Iterator
 
 from mlx_lm import load as mlx_lm_load
 from mlx_lm import stream_generate as mlx_lm_stream_generate
-from mlx_lm.models.cache import make_prompt_cache, save_prompt_cache, load_prompt_cache
+from mlx_lm.models.cache import make_prompt_cache, save_prompt_cache, load_prompt_cache, trim_prompt_cache
 from mlx_lm.sample_utils import make_sampler
 
 from backends.base import ModelBackend
@@ -58,19 +60,129 @@ class MlxLmBackend(ModelBackend):
                 break
             yield response
 
-    def cache_prefill(self, cache_path: str, prompt: str) -> dict:
+    # get_cache_offset is inherited from ModelBackend base class
+
+    def _tokenize_prompt(self, prompt: str) -> list[int]:
+        """Tokenize a prompt string using the same logic as stream_generate."""
+        add_special = self.tokenizer.bos_token is None or not prompt.startswith(
+            self.tokenizer.bos_token
+        )
+        return self.tokenizer.encode(prompt, add_special_tokens=add_special)
+
+    @staticmethod
+    def _write_cache_meta(
+        cache_path: str,
+        token_count: int,
+        prefix_offsets: list[int] | None = None,
+        prefix_hashes: list[str] | None = None,
+    ) -> None:
+        meta_path = cache_path + '.meta.json'
+        try:
+            meta: dict[str, Any] = {"token_count": token_count}
+            if prefix_offsets and prefix_hashes:
+                meta["prefix_offsets"] = prefix_offsets
+                meta["prefix_hashes"] = prefix_hashes
+            with open(meta_path, 'w') as f:
+                json.dump(meta, f)
+        except Exception as e:
+            sys.stderr.write(f"Failed to write cache meta: {e}\n")
+
+    @staticmethod
+    def _read_cache_meta(cache_path: str) -> int | None:
+        meta_path = cache_path + '.meta.json'
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+                count = meta.get('token_count')
+                return int(count) if count is not None else None
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+            return None
+
+    def cache_prefill(
+        self,
+        cache_path: str,
+        prompt: str,
+        base_cache_path: str | None = None,
+        trim_to_tokens: int | None = None,
+        prefix_offsets: list[int] | None = None,
+        prefix_hashes: list[str] | None = None,
+    ) -> dict:
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded")
 
-        prompt_cache = make_prompt_cache(self.model)
+        full_tokens = self._tokenize_prompt(prompt)
+        token_count = len(full_tokens)
+        effective_prompt: str | list[int] = prompt
+
+        if base_cache_path is not None:
+            try:
+                prompt_cache = load_prompt_cache(base_cache_path)
+
+                if trim_to_tokens is not None:
+                    current_offset = self.get_cache_offset(prompt_cache)
+                    if current_offset > trim_to_tokens:
+                        trim_count = current_offset - trim_to_tokens
+                        trim_prompt_cache(prompt_cache, trim_count)
+                        if os.getenv('MLX_DEBUG'):
+                            sys.stderr.write(
+                                f"Trimmed base cache: {current_offset} → {trim_to_tokens} tokens\n"
+                            )
+                        cache_offset = trim_to_tokens
+                    else:
+                        cache_offset = current_offset
+                else:
+                    meta_offset = self._read_cache_meta(base_cache_path)
+                    if meta_offset is None:
+                        # Legacy cache without meta file - create fresh cache
+                        sys.stderr.write(
+                            f"WARNING: Cache file exists but no .meta.json found at {base_cache_path}. "
+                            "Creating fresh cache (may be from old implementation).\n"
+                        )
+                        cache_offset = 0
+                        prompt_cache = make_prompt_cache(self.model)
+                    else:
+                        cache_offset = meta_offset
+
+                if cache_offset > 0 and prompt_cache is not None:
+                    if cache_offset < token_count:
+                        effective_prompt = full_tokens[cache_offset:]
+                        if os.getenv('MLX_DEBUG'):
+                            sys.stderr.write(
+                                f"Incremental prefill from: {base_cache_path} "
+                                f"(skip {cache_offset}/{token_count} tokens)\n"
+                            )
+                    else:
+                        if os.getenv('MLX_DEBUG'):
+                            sys.stderr.write(
+                                f"Base cache covers entire prompt "
+                                f"({cache_offset} >= {token_count}), saving as-is\n"
+                            )
+                        save_prompt_cache(cache_path, prompt_cache)
+                        self._write_cache_meta(cache_path, token_count, prefix_offsets, prefix_hashes)
+                        return {"cache_path": cache_path, "token_count": token_count}
+                else:
+                    if os.getenv('MLX_DEBUG'):
+                        sys.stderr.write(f"Incremental prefill from: {base_cache_path}\n")
+            except Exception as e:
+                sys.stderr.write(f"Base cache load failed, creating fresh: {e}\n")
+                prompt_cache = make_prompt_cache(self.model)
+        else:
+            prompt_cache = make_prompt_cache(self.model)
+
+        if os.getenv('MLX_DEBUG'):
+            sys.stderr.write(f"Prefill prompt: {token_count} tokens\n")
+
         for _ in mlx_lm_stream_generate(
-            self.model, self.tokenizer, prompt,
+            self.model, self.tokenizer, effective_prompt,
             prompt_cache=prompt_cache, max_tokens=1,
         ):
             break
+
         save_prompt_cache(cache_path, prompt_cache)
-        sys.stderr.write(f"Cache created: {cache_path}\n")
-        return {"cache_path": cache_path}
+        self._write_cache_meta(cache_path, token_count, prefix_offsets, prefix_hashes)
+        if os.getenv('MLX_DEBUG'):
+            sys.stderr.write(f"Cache created: {cache_path} ({token_count} tokens)\n")
+        return {"cache_path": cache_path, "token_count": token_count}
 
     def load_cache_from_file(self, cache_path: str) -> list | None:
         try:

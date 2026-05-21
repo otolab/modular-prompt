@@ -3,7 +3,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import chalk from 'chalk';
 import type {
   DialogProfile,
@@ -86,13 +86,6 @@ function displayChatLog(chatLog: ChatLog): void {
  * Run chat session
  */
 export async function runChat(options: SimpleChatOptions): Promise<void> {
-  // Show log only mode
-  if (options.showLogOnly && options.logPath) {
-    const chatLog = await loadChatLog(options.logPath);
-    displayChatLog(chatLog);
-    return;
-  }
-
   // Load or create profile
   let profile: DialogProfile;
   if (options.profilePath) {
@@ -116,16 +109,37 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.drafterModel = options.drafterModel;
     logger.info(chalk.gray(`⚡ Drafter model: ${options.drafterModel}`));
   }
+  if (options.draftBlockSize !== undefined && Number.isInteger(options.draftBlockSize) && options.draftBlockSize > 0) {
+    profile.draftBlockSize = options.draftBlockSize;
+    logger.info(chalk.gray(`⚡ Draft block size: ${options.draftBlockSize}`));
+  }
+  if (profile.cacheDir) {
+    const base = options.profilePath ? dirname(resolve(options.profilePath)) : process.cwd();
+    profile.cacheDir = resolve(base, profile.cacheDir);
+  }
+
+  // Resolve log path: CLI -l overrides profile.logPath (Commander may pass true for -l without value)
+  const cliLogPath = typeof options.logPath === 'string' ? options.logPath : undefined;
+  const logPath = cliLogPath ?? (profile.logPath
+    ? (options.profilePath
+        ? resolve(dirname(resolve(options.profilePath)), profile.logPath)
+        : resolve(profile.logPath))
+    : undefined);
+
+  // Show log only mode
+  if (options.showLogOnly && logPath) {
+    const chatLog = await loadChatLog(logPath);
+    displayChatLog(chatLog);
+    return;
+  }
 
   // Load or create chat log
   let chatLog: ChatLog;
-  if (options.logPath) {
+  if (logPath) {
     try {
-      chatLog = await loadChatLog(options.logPath);
-      // Update profile in existing log
+      chatLog = await loadChatLog(logPath);
       chatLog.profile = profile;
     } catch {
-      // Create new log if file doesn't exist
       chatLog = createChatLog(profile);
     }
   } else {
@@ -193,9 +207,9 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   addMessage(chatLog, 'assistant', response);
 
   // Save chat log if path is specified
-  if (options.logPath) {
-    await saveChatLog(chatLog, options.logPath);
-    logger.info(chalk.gray(`💾 Chat log saved to: ${options.logPath}`));
+  if (logPath) {
+    await saveChatLog(chatLog, logPath);
+    logger.info(chalk.gray(`💾 Chat log saved to: ${logPath}`));
   }
 
   // Close driver

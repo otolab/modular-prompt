@@ -26,15 +26,16 @@ import type { TestDriver } from '../test-driver.js';
  */
 function validateAndClampMaxTokens(
   spec: ModelSpec,
-  defaultOptions: any
-): any {
-  if (!spec.maxOutputTokens || !defaultOptions?.maxTokens) {
+  defaultOptions: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (spec.maxOutputTokens == null || defaultOptions?.maxTokens == null) {
     return defaultOptions;
   }
 
-  if (defaultOptions.maxTokens > spec.maxOutputTokens) {
+  const maxTokens = defaultOptions.maxTokens as number;
+  if (maxTokens > spec.maxOutputTokens) {
     logger.warn(
-      `maxTokens (${defaultOptions.maxTokens}) exceeds model limit ` +
+      `maxTokens (${maxTokens}) exceeds model limit ` +
       `(${spec.maxOutputTokens}) for model "${spec.model}". ` +
       `Clamping to ${spec.maxOutputTokens}.`
     );
@@ -77,7 +78,8 @@ export function registerStandardDriverFactories(
           spec.defaultOptions
         ) as Partial<import('../mlx-ml/types.js').MlxMlModelOptions>,
         textOnly: spec.metadata?.textOnly as boolean | undefined,
-        drafterModel: spec.metadata?.drafterModel as string | undefined
+        drafterModel: spec.metadata?.drafterModel as string | undefined,
+        draftBlockSize: spec.metadata?.draftBlockSize as number | undefined
       });
     });
   }

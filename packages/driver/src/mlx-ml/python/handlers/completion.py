@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 
@@ -20,9 +21,10 @@ def handle_completion(
     final_options = dict(options)
     if images:
         final_options["max_image_size"] = max_image_size
-        display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', prompt)
-        sys.stderr.write(f"--- vlm completion (images: {len(images)}, max_size: {max_image_size})\n{display_prompt}\n")
-    else:
+        if os.getenv('MLX_DEBUG'):
+            display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', prompt)
+            sys.stderr.write(f"--- vlm completion (images: {len(images)}, max_size: {max_image_size})\n{display_prompt}\n")
+    elif os.getenv('MLX_DEBUG'):
         if isinstance(prompt, list):
             sys.stderr.write(f"--- prompt: len={len(prompt)}\n")
         else:

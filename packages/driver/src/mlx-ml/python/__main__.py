@@ -14,6 +14,16 @@ if "--drafter" in sys.argv:
     if idx + 1 < len(sys.argv):
         drafter_model = sys.argv[idx + 1]
 
+draft_block_size = None
+if "--draft-block-size" in sys.argv:
+    idx = sys.argv.index("--draft-block-size")
+    if idx + 1 < len(sys.argv):
+        try:
+            draft_block_size = int(sys.argv[idx + 1])
+        except ValueError:
+            sys.stderr.write(f"Invalid --draft-block-size value: {sys.argv[idx + 1]}\n")
+            sys.exit(1)
+
 
 def create_backend(model_name: str, text_only: bool = False):
     model_kind = "lm" if text_only else detect_model_kind(model_name)
@@ -36,6 +46,8 @@ if __name__ == "__main__":
 
     if drafter_model:
         backend.load_drafter(drafter_model)
+        if draft_block_size is not None and hasattr(backend, 'draft_block_size'):
+            backend.draft_block_size = draft_block_size
 
     capabilities = get_capabilities(backend.get_tokenizer())
     capabilities["model_kind"] = model_kind

@@ -48,6 +48,7 @@ export const EXECUTION_TASK_DEFS: Record<string, ExecutionTaskDef> = {
       '- You will perform reasoning, analysis, or processing as instructed.',
       '- You may call tools if needed to gather information or perform actions.',
       '- If additional tasks are needed to complete the objective, use `__replan` to request re-planning.',
+      '- Focus solely on logical reasoning in this phase. Language refinement and phrasing decisions will be handled during the output generation stage.',
     ],
     driverRole: 'thinking',
     defaults: { withoutInputs: false, withoutMessages: false, withoutMaterials: false },

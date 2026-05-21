@@ -2,7 +2,7 @@ import type { CompiledPrompt, Element } from '@modular-prompt/core';
 
 export function isElementCacheable(el: Element): boolean {
   if ('cacheHint' in el) {
-    return el.cacheHint === 'static';
+    return el.cacheHint === 'static' || el.cacheHint === 'immutable';
   }
   switch (el.type) {
     case 'message':

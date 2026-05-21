@@ -183,7 +183,7 @@ function wrapInSection(
       } else {
         // DynamicElement (message, material, text, chunk, json) を直接追加
         if (dynamicIndices) {
-          elements.push({ ...item, cacheHint: (isDynamic ? 'contextual' : 'static') as CacheHint });
+          elements.push({ ...item, cacheHint: item.cacheHint ?? (isDynamic ? 'contextual' : 'static') as CacheHint });
         } else {
           elements.push(item);
         }

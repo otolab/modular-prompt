@@ -12,6 +12,7 @@ import type {
   MlxMessage,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxTokenizeResult,
   MlxCachePrefillResult,
   MlxToolDefinition
 } from './types.js';
@@ -26,6 +27,7 @@ export type {
   MlxMessage,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxTokenizeResult,
   MlxCachePrefillResult,
   MlxToolDefinition
 };
@@ -33,6 +35,7 @@ export type {
 export interface MlxProcessOptions {
   textOnly?: boolean;
   drafterModel?: string;
+  draftBlockSize?: number;
 }
 
 export class MlxProcess {
@@ -86,14 +89,19 @@ export class MlxProcess {
     return this.queueManager.addFormatTestRequest(messages, options);
   }
 
+  // API v2.0 Tokenize
+  async tokenize(messages: MlxMessage[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxTokenizeResult> {
+    return this.queueManager.addTokenizeRequest(messages, tools, reasoningEffort);
+  }
+
   // Cache operations
-  async cachePrefill(cachePath: string, messages: MlxMessage[]): Promise<MlxCachePrefillResult> {
-    return this.queueManager.addCachePrefillRequest(cachePath, messages);
+  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, prefixOffsets?: number[], prefixHashes?: string[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxCachePrefillResult> {
+    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath, trimToTokens, prefixOffsets, prefixHashes, tools, reasoningEffort);
   }
 
   // API v2.0 Chat
-  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string): Promise<Readable> {
-    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cachePath);
+  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string, cacheTrimTokens?: number): Promise<Readable> {
+    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cachePath, cacheTrimTokens);
   }
 
   // API v2.0 Completion
