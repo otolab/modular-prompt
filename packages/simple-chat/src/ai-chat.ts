@@ -56,11 +56,11 @@ const baseChatModule: PromptModule<ChatContext> = {
       if (ctx.messages.length === 0) {
         return null;
       }
-      return ctx.messages.map((m, i) => ({
+      return ctx.messages.map((m) => ({
         type: 'message' as const,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        ...(i < ctx.messages.length - 1 ? { cacheHint: 'immutable' as const } : {}),
+        cacheHint: 'immutable' as const,
       }));
     }
   ],
