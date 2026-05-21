@@ -531,9 +531,9 @@ describe('MlxCacheController', () => {
       const args = mockProcess.cachePrefill.mock.calls[0];
       const prefixOffsets = args[4] as number[];
       const prefixHashes = args[5] as string[];
-      // 3 elements → 2 intermediate boundaries + 1 full sequence = 3 entries
-      expect(prefixOffsets).toHaveLength(3);
-      expect(prefixHashes).toHaveLength(3);
+      // 2 inst + 1 data → 1 section boundary (inst→data) + 1 full sequence = 2 entries
+      expect(prefixOffsets).toHaveLength(2);
+      expect(prefixHashes).toHaveLength(2);
       // Full sequence hash is the last entry
       expect(prefixOffsets[prefixOffsets.length - 1]).toBe(MOCK_TOKEN_COUNT);
       expect(prefixHashes[prefixHashes.length - 1]).toBe(testPrefixHash(MOCK_TOKEN_COUNT));
