@@ -228,11 +228,20 @@ export class MlxCacheController implements PromptCacheController {
     const offsets: number[] = [];
     const hashes: string[] = [];
 
-    // Only compute hashes at section boundaries (instructions→data transition)
-    // to keep tokenize IPC calls bounded regardless of element count.
+    const allElements = [...instructions, ...data];
     const boundaryIndices = new Set<number>();
+
     if (instructions.length > 0 && data.length > 0) {
       boundaryIndices.add(instructions.length - 1);
+    }
+
+    for (let i = allElements.length - 1; i >= 0; i--) {
+      if (allElements[i].cacheHint === 'immutable') {
+        if (i < allElements.length - 1) {
+          boundaryIndices.add(i);
+        }
+        break;
+      }
     }
 
     for (const boundaryIdx of boundaryIndices) {

@@ -539,6 +539,49 @@ describe('MlxCacheController', () => {
       expect(prefixHashes[prefixHashes.length - 1]).toBe(testPrefixHash(MOCK_TOKEN_COUNT));
     });
 
+    it('should include immutable boundary hash in prefix info', async () => {
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A' },
+        ],
+        data: [
+          { type: 'message', role: 'user' as const, content: 'msg 1', cacheHint: 'immutable' as const },
+          { type: 'message', role: 'assistant' as const, content: 'msg 2', cacheHint: 'immutable' as const },
+          { type: 'message', role: 'user' as const, content: 'msg 3' },
+        ],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // 1 inst + 3 data → section boundary (idx 0) + last immutable (idx 2) + full sequence = 3 entries
+      // But section boundary idx=0 and last immutable idx=2 are different, so 3 entries
+      expect(prefixOffsets).toHaveLength(3);
+      expect(prefixHashes).toHaveLength(3);
+      expect(prefixOffsets[prefixOffsets.length - 1]).toBe(MOCK_TOKEN_COUNT);
+    });
+
+    it('should deduplicate when section boundary equals immutable boundary', async () => {
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A', cacheHint: 'immutable' as const },
+        ],
+        data: [
+          { type: 'message', role: 'user' as const, content: 'msg 1' },
+        ],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // section boundary idx=0, last immutable idx=0 → same, deduplicated by Set
+      // Result: 1 boundary + 1 full sequence = 2 entries
+      expect(prefixOffsets).toHaveLength(2);
+      expect(prefixHashes).toHaveLength(2);
+    });
+
     it('should include full sequence hash even for single element', async () => {
       await controller.prepare({
         model: 'test-model',
