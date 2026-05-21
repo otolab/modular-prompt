@@ -4,7 +4,7 @@
  * Simple Chat CLI
  */
 
-import { program } from 'commander';
+import { program, InvalidArgumentError } from 'commander';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -34,7 +34,13 @@ program
   .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
   .option('--text-only', 'Use VLM model in text-only mode')
   .option('--drafter-model <model>', 'Drafter model for speculative decoding')
-  .option('--draft-block-size <size>', 'Draft block size for speculative decoding', parseInt)
+  .option('--draft-block-size <size>', 'Draft block size for speculative decoding', (v: string) => {
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n) || n < 1) {
+      throw new InvalidArgumentError('must be a positive integer');
+    }
+    return n;
+  })
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')

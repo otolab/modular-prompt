@@ -116,7 +116,7 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.drafterModel = options.drafterModel;
     logger.info(chalk.gray(`⚡ Drafter model: ${options.drafterModel}`));
   }
-  if (options.draftBlockSize !== undefined) {
+  if (options.draftBlockSize !== undefined && Number.isInteger(options.draftBlockSize) && options.draftBlockSize > 0) {
     profile.draftBlockSize = options.draftBlockSize;
     logger.info(chalk.gray(`⚡ Draft block size: ${options.draftBlockSize}`));
   }

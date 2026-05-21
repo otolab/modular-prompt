@@ -417,6 +417,12 @@ export class MlxDriver implements AIDriver {
             }
             return result;
           },
+          async return(value?: string) {
+            return inner.return?.(value) ?? { done: true as const, value: undefined };
+          },
+          async throw(e?: unknown) {
+            return inner.throw?.(e) ?? { done: true as const, value: undefined };
+          },
         };
       },
     };

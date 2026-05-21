@@ -18,7 +18,11 @@ draft_block_size = None
 if "--draft-block-size" in sys.argv:
     idx = sys.argv.index("--draft-block-size")
     if idx + 1 < len(sys.argv):
-        draft_block_size = int(sys.argv[idx + 1])
+        try:
+            draft_block_size = int(sys.argv[idx + 1])
+        except ValueError:
+            sys.stderr.write(f"Invalid --draft-block-size value: {sys.argv[idx + 1]}\n")
+            sys.exit(1)
 
 
 def create_backend(model_name: str, text_only: bool = False):
