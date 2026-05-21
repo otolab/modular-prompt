@@ -43,7 +43,7 @@ export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxT
 
 // API v2.0 リクエスト型定義
 export interface MlxBaseRequest {
-  method: 'capabilities' | 'format_test' | 'chat' | 'completion' | 'cache_prefill';
+  method: 'capabilities' | 'format_test' | 'chat' | 'completion' | 'cache_prefill' | 'tokenize';
 }
 
 export interface MlxCapabilitiesRequest extends MlxBaseRequest {
@@ -56,6 +56,13 @@ export interface MlxFormatTestRequest extends MlxBaseRequest {
   options?: {
     primer?: string;
   };
+}
+
+export interface MlxTokenizeRequest extends MlxBaseRequest {
+  method: 'tokenize';
+  messages: MlxMessage[];
+  tools?: MlxToolDefinition[];
+  reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
 /** HuggingFace apply_chat_template 互換のtool定義 */
@@ -95,7 +102,8 @@ export interface MlxCachePrefillRequest extends MlxBaseRequest {
   messages: MlxMessage[];
   base_cache_path?: string;
   trim_to_tokens?: number;
-  element_char_offsets?: number[];
+  prefix_offsets?: number[];
+  prefix_hashes?: string[];
   tools?: MlxToolDefinition[];
   reasoning_effort?: 'low' | 'medium' | 'high';
 }
@@ -103,10 +111,11 @@ export interface MlxCachePrefillRequest extends MlxBaseRequest {
 export interface MlxCachePrefillResult {
   cache_path: string;
   token_count?: number;
-  element_offsets?: number[];
+  prefix_offsets?: number[];
+  prefix_hashes?: string[];
 }
 
-export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxChatRequest | MlxCompletionRequest | MlxCachePrefillRequest;
+export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxTokenizeRequest | MlxChatRequest | MlxCompletionRequest | MlxCachePrefillRequest;
 
 /** MLX-LMが認識するtool_parser_type */
 export type KnownToolParserType =
@@ -168,6 +177,12 @@ export interface MlxFormatTestResult {
   error: string | null;
 }
 
+export interface MlxTokenizeResult {
+  token_ids: number[] | null;
+  token_count: number;
+  error: string | null;
+}
+
 // レガシー互換性のための型
 export interface LegacyMlxRequest {
   messages: MlxMessage[];
@@ -197,6 +212,13 @@ export interface FormatTestQueueItem extends BaseQueueItem {
   expectJsonResponse: true;
 }
 
+export interface TokenizeQueueItem extends BaseQueueItem {
+  request: MlxTokenizeRequest;
+  resolve: (value: MlxTokenizeResult) => void;
+  reject: (reason: Error) => void;
+  expectJsonResponse: true;
+}
+
 export interface CachePrefillQueueItem extends BaseQueueItem {
   request: MlxCachePrefillRequest;
   resolve: (value: MlxCachePrefillResult) => void;
@@ -211,7 +233,7 @@ export interface StreamingQueueItem extends BaseQueueItem {
   expectJsonResponse?: false;
 }
 
-export type QueueItem = CapabilitiesQueueItem | FormatTestQueueItem | CachePrefillQueueItem | StreamingQueueItem;
+export type QueueItem = CapabilitiesQueueItem | FormatTestQueueItem | TokenizeQueueItem | CachePrefillQueueItem | StreamingQueueItem;
 
 // Node.js stream import
 import { Readable } from 'stream';

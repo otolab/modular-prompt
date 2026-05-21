@@ -8,7 +8,7 @@ import type { ToolDefinition } from '../types.js';
 import type { FormatterOptions } from '../formatter/types.js';
 import { formatPromptAsMessages } from '../formatter/converter.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
-import type { MlxProcess } from './process/index.js';
+import type { MlxProcess, MlxToolDefinition } from './process/index.js';
 import type { MlxMessage } from './process/index.js';
 import { convertMessages, convertToolDefinitions } from './mlx-message-utils.js';
 import { Logger } from '@modular-prompt/utils';
@@ -129,98 +129,6 @@ export class MlxCacheController implements PromptCacheController {
     }
   }
 
-  private readElementOffsets(cachePath: string): number[] | undefined {
-    try {
-      const raw = readFileSync(cachePath + '.meta.json', 'utf-8');
-      const meta = JSON.parse(raw);
-      return Array.isArray(meta.element_offsets) ? meta.element_offsets : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private static extractSystemContent(messages: MlxMessage[]): string {
-    return messages
-      .filter(m => m.role === 'system')
-      .map(m => {
-        if (typeof m.content === 'string') return m.content;
-        return (m.content as Array<{ type: string; text?: string }>)
-          .filter(p => p.type === 'text')
-          .map(p => p.text ?? '')
-          .join('\n');
-      })
-      .join('\n\n');
-  }
-
-  private computeElementCharOffsets(
-    params: CachePrepareParams,
-    preMergeMessages: MlxMessage[],
-    processedMessages: MlxMessage[],
-  ): number[] {
-    const boundaryIndices = new Set<number>();
-    let msgIdx = 0;
-    if (this.formatterOptions.preamble) msgIdx++;
-    const instLen = params.instructions?.length ?? 0;
-    const dataLen = params.data?.length ?? 0;
-    if (instLen > 0) {
-      msgIdx++;
-      for (let i = 0; i < instLen; i++) boundaryIndices.add(msgIdx++);
-    }
-    if (dataLen > 0) {
-      msgIdx++;
-      for (let i = 0; i < dataLen; i++) boundaryIndices.add(msgIdx++);
-    }
-
-    if (boundaryIndices.size === 0) return [];
-
-    const offsets: number[] = [];
-    let cumLen = 0;
-    let systemCount = 0;
-
-    for (let i = 0; i < preMergeMessages.length; i++) {
-      const msg = preMergeMessages[i];
-      if (msg.role !== 'system') {
-        if (boundaryIndices.has(i)) return [];
-        continue;
-      }
-
-      let content: string;
-      if (typeof msg.content === 'string') {
-        content = msg.content;
-      } else {
-        content = (msg.content as Array<{ type: string; text?: string }>)
-          .filter(p => p.type === 'text')
-          .map(p => p.text ?? '')
-          .join('\n');
-      }
-
-      if (systemCount > 0) cumLen += 2;
-      cumLen += content.length;
-      systemCount++;
-
-      if (boundaryIndices.has(i)) {
-        offsets.push(cumLen);
-      }
-    }
-
-    if (offsets.length === 0) return [];
-
-    // processorがシステムコンテンツを変更した場合（プレフィックス追加等）、オフセットを補正
-    if (processedMessages !== preMergeMessages) {
-      const preContent = MlxCacheController.extractSystemContent(preMergeMessages);
-      const postContent = MlxCacheController.extractSystemContent(processedMessages);
-      if (preContent !== postContent) {
-        const prefixLen = postContent.indexOf(preContent);
-        if (prefixLen === -1) return [];
-        if (prefixLen > 0) {
-          return offsets.map(o => o + prefixLen);
-        }
-      }
-    }
-
-    return offsets;
-  }
-
   private loadIndexSync(): void {
     try {
       if (existsSync(this.indexPath)) {
@@ -287,7 +195,92 @@ export class MlxCacheController implements PromptCacheController {
     return hashes;
   }
 
-  private findBestBase(params: CachePrepareParams): BaseCacheInfo | undefined {
+  private readPrefixMeta(cachePath: string): { tokenCount: number; prefixOffsets: number[]; prefixHashes: string[] } | undefined {
+    try {
+      const raw = readFileSync(cachePath + '.meta.json', 'utf-8');
+      const meta = JSON.parse(raw);
+      if (!Array.isArray(meta.prefix_offsets) || !Array.isArray(meta.prefix_hashes)) return undefined;
+      return {
+        tokenCount: typeof meta.token_count === 'number' ? meta.token_count : 0,
+        prefixOffsets: meta.prefix_offsets,
+        prefixHashes: meta.prefix_hashes,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private computeTokenPrefixHash(tokens: number[], length: number): string {
+    const buffer = Buffer.alloc(length * 4);
+    for (let i = 0; i < length; i++) buffer.writeInt32LE(tokens[i], i * 4);
+    return createHash('sha256').update(buffer).digest('hex');
+  }
+
+  private async computePrefixInfo(
+    params: CachePrepareParams,
+    fullTokens: number[],
+    mlxTools: MlxToolDefinition[] | undefined,
+  ): Promise<{ offsets: number[]; hashes: string[] }> {
+    const instructions = params.instructions || [];
+    const data = params.data || [];
+    const totalElements = instructions.length + data.length;
+
+    const offsets: number[] = [];
+    const hashes: string[] = [];
+
+    // Intermediate element boundaries (not including the last element)
+    for (let boundaryIdx = 0; boundaryIdx < totalElements - 1; boundaryIdx++) {
+      const partialInst = boundaryIdx < instructions.length
+        ? instructions.slice(0, boundaryIdx + 1)
+        : instructions;
+      const partialData = boundaryIdx >= instructions.length
+        ? data.slice(0, boundaryIdx - instructions.length + 1)
+        : [];
+
+      const partialPrompt: CompiledPrompt = {
+        instructions: partialInst,
+        data: partialData,
+        output: [],
+      };
+
+      const chatMessages = formatPromptAsMessages(partialPrompt, this.formatterOptions);
+      let mlxMessages = convertMessages(chatMessages);
+      if (this.messageProcessor) {
+        mlxMessages = this.messageProcessor(mlxMessages);
+      }
+
+      try {
+        const result = await this.process!.tokenize(mlxMessages, mlxTools, params.reasoningEffort as 'low' | 'medium' | 'high' | undefined);
+        if (result.error || !result.token_ids) continue;
+
+        const partialTokens = result.token_ids;
+        let commonLen = 0;
+        const maxLen = Math.min(partialTokens.length, fullTokens.length);
+        for (let i = 0; i < maxLen; i++) {
+          if (partialTokens[i] !== fullTokens[i]) break;
+          commonLen = i + 1;
+        }
+
+        if (commonLen > 0) {
+          offsets.push(commonLen);
+          hashes.push(this.computeTokenPrefixHash(fullTokens, commonLen));
+        }
+      } catch {
+        // tokenize failure for this boundary — skip
+      }
+    }
+
+    // Always include the full sequence hash for base cache verification
+    offsets.push(fullTokens.length);
+    hashes.push(this.computeTokenPrefixHash(fullTokens, fullTokens.length));
+
+    return { offsets, hashes };
+  }
+
+  private async findBestBase(
+    params: CachePrepareParams,
+    fullTokens: number[],
+  ): Promise<BaseCacheInfo | undefined> {
     const newHashes = this.computeElementHashes(params);
     if (newHashes.length === 0) return undefined;
 
@@ -335,9 +328,8 @@ export class MlxCacheController implements PromptCacheController {
 
     if (candidates.length === 0) return undefined;
 
-    let bestMatchLength = 0;
-    let bestInfo: BaseCacheInfo | undefined;
-
+    // Filter candidates by element hash prefix match
+    const matchedCandidates: Array<{ candidate: Candidate; elementMatchLength: number }> = [];
     for (const c of candidates) {
       const maxLen = Math.min(c.elementHashes.length, newHashes.length);
       let matchLength = 0;
@@ -345,55 +337,64 @@ export class MlxCacheController implements PromptCacheController {
         if (c.elementHashes[i] !== newHashes[i]) break;
         matchLength++;
       }
+      if (matchLength > 0) {
+        matchedCandidates.push({ candidate: c, elementMatchLength: matchLength });
+      }
+    }
 
-      if (matchLength === 0) continue;
+    if (matchedCandidates.length === 0) return undefined;
 
-      let info: BaseCacheInfo;
+    // Verify token-level prefix match using prefix_hashes
+    let bestMatchOffset = 0;
+    let bestInfo: BaseCacheInfo | undefined;
 
-      if (matchLength === c.elementHashes.length) {
-        if (matchLength >= newHashes.length) {
-          info = { path: c.path, coversAll: true, sourceElementHashes: c.elementHashes };
-        } else if (newHashes[matchLength - 1][0] !== newHashes[matchLength][0]) {
-          // cross-section境界 (e.g., instructions→data): element_offsetsを使ってトリム
-          const offsets = this.readElementOffsets(c.path);
-          if (!offsets || offsets.length < matchLength) {
-            logger.debug(`findBestBase: skip ${c.label} (cross-section boundary, no offsets)`);
-            continue;
-          }
-          info = {
+    for (const { candidate: c, elementMatchLength } of matchedCandidates) {
+      const meta = this.readPrefixMeta(c.path);
+
+      if (elementMatchLength === c.elementHashes.length && elementMatchLength >= newHashes.length) {
+        // All elements match — full cache hit
+        const tokenCount = meta?.tokenCount ?? this.readMetaTokenCount(c.path);
+        if (tokenCount > bestMatchOffset) {
+          bestMatchOffset = tokenCount;
+          bestInfo = {
             path: c.path,
-            trimTokens: offsets[matchLength - 1],
-            coversAll: false,
+            coversAll: true,
             sourceElementHashes: c.elementHashes,
           };
-        } else {
-          logger.debug(`findBestBase: skip ${c.label} (same-section proper prefix, closing tokens differ)`);
-          continue;
         }
-      } else {
-        // entry has extra/different elements — need trim via element_offsets
-        const offsets = this.readElementOffsets(c.path);
-        if (!offsets || offsets.length < matchLength) {
-          logger.debug(`findBestBase: skip ${c.label} (partial ${matchLength}/${c.elementHashes.length}, no offsets)`);
-          continue;
-        }
-        info = {
-          path: c.path,
-          trimTokens: offsets[matchLength - 1],
-          coversAll: matchLength >= newHashes.length,
-          sourceElementHashes: c.elementHashes,
-        };
+        continue;
       }
 
-      if (matchLength > bestMatchLength) {
-        bestMatchLength = matchLength;
-        bestInfo = info;
+      // Partial match — need prefix_hashes to verify token-level prefix
+      if (!meta || meta.prefixOffsets.length === 0) {
+        logger.debug(`findBestBase: skip ${c.label} (no prefix meta)`);
+        continue;
+      }
+
+      // Find the longest prefix hash match
+      let matchOffset = 0;
+      for (let i = 0; i < meta.prefixHashes.length; i++) {
+        const offset = meta.prefixOffsets[i];
+        if (offset > fullTokens.length) break;
+        const hash = this.computeTokenPrefixHash(fullTokens, offset);
+        if (hash !== meta.prefixHashes[i]) break;
+        matchOffset = offset;
+      }
+
+      if (matchOffset > 0 && matchOffset > bestMatchOffset) {
+        bestMatchOffset = matchOffset;
+        bestInfo = {
+          path: c.path,
+          trimTokens: matchOffset,
+          coversAll: elementMatchLength >= newHashes.length,
+          sourceElementHashes: c.elementHashes,
+        };
       }
     }
 
     if (bestInfo) {
       logger.verbose(
-        `findBestBase: ${bestMatchLength}/${newHashes.length} elements`,
+        `findBestBase: match at ${bestMatchOffset} tokens`,
         bestInfo.trimTokens != null ? `(trim to ${bestInfo.trimTokens} tokens)` : '',
         bestInfo.coversAll ? '(covers all)' : '',
       );
@@ -526,11 +527,46 @@ export class MlxCacheController implements PromptCacheController {
     const cachePath = this.generateCachePath(cacheKey);
     const elementHashes = this.computeElementHashes(params);
 
+    // Disk hit check (exact same cache already exists)
     if (existsSync(cachePath) && existsSync(cachePath + '.meta.json') && this.readMetaTokenCount(cachePath) > 0) {
       this.stats.diskHit++;
       logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
     } else {
-      const base = this.findBestBase(params);
+      // Build messages early (needed for tokenize + findBestBase)
+      const prefillPrompt: CompiledPrompt = {
+        instructions: params.instructions || [],
+        data: params.data || [],
+        output: [],
+      };
+
+      const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
+      const preMergeMessages = convertMessages(chatMessages);
+      let mlxMessages = preMergeMessages;
+      if (this.messageProcessor) {
+        mlxMessages = this.messageProcessor(mlxMessages);
+      }
+
+      const hasTools = params.tools && params.tools.length > 0;
+      const mlxTools = hasTools ? convertToolDefinitions(params.tools!) : undefined;
+
+      // Tokenize to get full token IDs (for findBestBase + prefix computation)
+      let fullTokens: number[] | null = null;
+      try {
+        const tokenResult = await this.process!.tokenize(
+          mlxMessages, mlxTools,
+          params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
+        );
+        if (!tokenResult.error && tokenResult.token_ids) {
+          fullTokens = tokenResult.token_ids;
+        }
+      } catch {
+        // tokenize failure — proceed without prefix matching
+      }
+
+      // Find best base cache
+      const base = fullTokens
+        ? await this.findBestBase(params, fullTokens)
+        : undefined;
 
       if (base?.coversAll) {
         this.stats.diskHit++;
@@ -556,22 +592,16 @@ export class MlxCacheController implements PromptCacheController {
           base.trimTokens != null ? `(trim to ${base.trimTokens})` : '');
       }
 
-      const prefillPrompt: CompiledPrompt = {
-        instructions: params.instructions || [],
-        data: params.data || [],
-        output: [],
-      };
-
-      const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
-      const preMergeMessages = convertMessages(chatMessages);
-      let mlxMessages = preMergeMessages;
-      if (this.messageProcessor) {
-        mlxMessages = this.messageProcessor(mlxMessages);
+      // Compute prefix info if we have full tokens
+      let prefixOffsets: number[] | undefined;
+      let prefixHashes: string[] | undefined;
+      if (fullTokens) {
+        const prefixInfo = await this.computePrefixInfo(params, fullTokens, mlxTools);
+        if (prefixInfo.offsets.length > 0) {
+          prefixOffsets = prefixInfo.offsets;
+          prefixHashes = prefixInfo.hashes;
+        }
       }
-
-      const hasTools = params.tools && params.tools.length > 0;
-      const elementCharOffsets = hasTools ? [] : this.computeElementCharOffsets(params, preMergeMessages, mlxMessages);
-      const mlxTools = hasTools ? convertToolDefinitions(params.tools!) : undefined;
 
       logger.debug('prefill', cachePath);
       const prefillStart = performance.now();
@@ -579,7 +609,7 @@ export class MlxCacheController implements PromptCacheController {
         await this.process!.cachePrefill(
           cachePath, mlxMessages,
           base?.path, base?.trimTokens,
-          elementCharOffsets,
+          prefixOffsets, prefixHashes,
           mlxTools,
           params.reasoningEffort,
         );

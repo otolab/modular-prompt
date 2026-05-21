@@ -73,13 +73,15 @@ class MlxLmBackend(ModelBackend):
     def _write_cache_meta(
         cache_path: str,
         token_count: int,
-        element_offsets: list[int] | None = None,
+        prefix_offsets: list[int] | None = None,
+        prefix_hashes: list[str] | None = None,
     ) -> None:
         meta_path = cache_path + '.meta.json'
         try:
             meta: dict[str, Any] = {"token_count": token_count}
-            if element_offsets:
-                meta["element_offsets"] = element_offsets
+            if prefix_offsets and prefix_hashes:
+                meta["prefix_offsets"] = prefix_offsets
+                meta["prefix_hashes"] = prefix_hashes
             with open(meta_path, 'w') as f:
                 json.dump(meta, f)
         except Exception as e:
@@ -102,7 +104,8 @@ class MlxLmBackend(ModelBackend):
         prompt: str,
         base_cache_path: str | None = None,
         trim_to_tokens: int | None = None,
-        element_offsets: list[int] | None = None,
+        prefix_offsets: list[int] | None = None,
+        prefix_hashes: list[str] | None = None,
     ) -> dict:
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded")
@@ -155,7 +158,7 @@ class MlxLmBackend(ModelBackend):
                                 f"({cache_offset} >= {token_count}), saving as-is\n"
                             )
                         save_prompt_cache(cache_path, prompt_cache)
-                        self._write_cache_meta(cache_path, token_count, element_offsets)
+                        self._write_cache_meta(cache_path, token_count, prefix_offsets, prefix_hashes)
                         return {"cache_path": cache_path, "token_count": token_count}
                 else:
                     if os.getenv('MLX_DEBUG'):
@@ -176,7 +179,7 @@ class MlxLmBackend(ModelBackend):
             break
 
         save_prompt_cache(cache_path, prompt_cache)
-        self._write_cache_meta(cache_path, token_count, element_offsets)
+        self._write_cache_meta(cache_path, token_count, prefix_offsets, prefix_hashes)
         if os.getenv('MLX_DEBUG'):
             sys.stderr.write(f"Cache created: {cache_path} ({token_count} tokens)\n")
         return {"cache_path": cache_path, "token_count": token_count}

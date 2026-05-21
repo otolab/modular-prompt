@@ -18,9 +18,25 @@ vi.mock('node:fs/promises', () => ({
 import { unlink, mkdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 
+/** Sequential token IDs [0, 1, 2, ...] for consistent mock data */
+const MOCK_TOKEN_COUNT = 5000;
+const MOCK_TOKENS = Array.from({ length: MOCK_TOKEN_COUNT }, (_, i) => i);
+
+/** Compute SHA256 hash of token prefix [0, 1, ..., length-1] matching computeTokenPrefixHash */
+function testPrefixHash(length: number): string {
+  const buffer = Buffer.alloc(length * 4);
+  for (let i = 0; i < length; i++) buffer.writeInt32LE(i, i * 4);
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
 function createMockProcess() {
   return {
     cachePrefill: vi.fn().mockResolvedValue({ cache_path: '/tmp/mlx-prompt-cache-abc/test.safetensors' }),
+    tokenize: vi.fn().mockResolvedValue({
+      token_ids: MOCK_TOKENS,
+      token_count: MOCK_TOKEN_COUNT,
+      error: null,
+    }),
   };
 }
 
@@ -111,8 +127,8 @@ describe('MlxCacheController', () => {
       expect(handle.ref).toBeTruthy();
       expect(handle.includes.tools).toBe(true);
       const call = mockProcess.cachePrefill.mock.calls[0];
-      expect(call[5]).toBeDefined();
-      expect(call[5][0].function.name).toBe('get_weather');
+      expect(call[6]).toBeDefined();
+      expect(call[6][0].function.name).toBe('get_weather');
     });
 
     it('should coalesce concurrent calls with identical params', async () => {
@@ -324,7 +340,7 @@ describe('MlxCacheController', () => {
       vi.mocked(existsSync)
         .mockReturnValueOnce(true)  // .safetensors check
         .mockReturnValueOnce(true); // .meta.json check
-      vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({ token_count: 100, element_offsets: [0, 100] }));
+      vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({ token_count: 100, prefix_offsets: [100], prefix_hashes: [testPrefixHash(100)] }));
 
       const handle = await externalController.prepare({
         model: 'test-model',
@@ -370,7 +386,7 @@ describe('MlxCacheController', () => {
       vi.mocked(existsSync).mockImplementation((path: any) => {
         return path === handle1.ref || path === handle1.ref + '.meta.json';
       });
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ token_count: 100, element_offsets: [0, 100] }));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ token_count: 100, prefix_offsets: [100], prefix_hashes: [testPrefixHash(100)] }));
 
       // 2回目: 異なるparams → lastHandleがbaseCachePathとして渡される
       await controller.prepare({
@@ -436,7 +452,7 @@ describe('MlxCacheController', () => {
       // readFileSyncでインデックスまたはmeta.jsonを返す
       vi.mocked(readFileSync).mockImplementation((path: any) => {
         const pathStr = String(path);
-        if (pathStr.endsWith('.meta.json')) return JSON.stringify({ token_count: 100, element_offsets: [0, 100] });
+        if (pathStr.endsWith('.meta.json')) return JSON.stringify({ token_count: 100, prefix_offsets: [100], prefix_hashes: [testPrefixHash(100)] });
         return JSON.stringify(indexData);
       });
       // existsSyncの設定: indexPathとキャッシュファイルは存在する
@@ -499,7 +515,7 @@ describe('MlxCacheController', () => {
       expect(writeFile).not.toHaveBeenCalled();
     });
 
-    it('should pass elementCharOffsets to cachePrefill', async () => {
+    it('should pass prefixOffsets and prefixHashes to cachePrefill', async () => {
       await controller.prepare({
         model: 'test-model',
         instructions: [
@@ -513,30 +529,30 @@ describe('MlxCacheController', () => {
 
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
       const args = mockProcess.cachePrefill.mock.calls[0];
-      const charOffsets = args[4] as number[];
-      expect(charOffsets).toHaveLength(3);
-      expect(charOffsets[0]).toBeGreaterThan(0);
-      expect(charOffsets[1]).toBeGreaterThan(charOffsets[0]);
-      expect(charOffsets[2]).toBeGreaterThan(charOffsets[1]);
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // 3 elements → 2 intermediate boundaries + 1 full sequence = 3 entries
+      expect(prefixOffsets).toHaveLength(3);
+      expect(prefixHashes).toHaveLength(3);
+      // Full sequence hash is the last entry
+      expect(prefixOffsets[prefixOffsets.length - 1]).toBe(MOCK_TOKEN_COUNT);
+      expect(prefixHashes[prefixHashes.length - 1]).toBe(testPrefixHash(MOCK_TOKEN_COUNT));
     });
 
-    it('should compute char offsets with preamble', async () => {
-      const ctrl = new MlxCacheController();
-      ctrl.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, { preamble: 'You are helpful.' });
-
-      await ctrl.prepare({
+    it('should include full sequence hash even for single element', async () => {
+      await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text' as const, content: 'inst A' }],
-        data: [{ type: 'text' as const, content: 'data 0' }],
       });
 
       const args = mockProcess.cachePrefill.mock.calls[0];
-      const charOffsets = args[4] as number[];
-      expect(charOffsets).toHaveLength(2);
-      expect(charOffsets[0]).toBeGreaterThan(0);
-      expect(charOffsets[1]).toBeGreaterThan(charOffsets[0]);
-
-      await ctrl.close();
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // 1 element → 0 intermediate + 1 full sequence = 1 entry
+      expect(prefixOffsets).toHaveLength(1);
+      expect(prefixHashes).toHaveLength(1);
+      expect(prefixOffsets[0]).toBe(MOCK_TOKEN_COUNT);
+      expect(prefixHashes[0]).toBe(testPrefixHash(MOCK_TOKEN_COUNT));
     });
 
     it('should reuse superset base cache without creating new file', async () => {
@@ -571,7 +587,14 @@ describe('MlxCacheController', () => {
       };
 
       const supersetPath = `/cache/${supersetKey}.safetensors`;
-      const metaData = { token_count: 3000, element_offsets: [120, 245, 380, 510] };
+      const metaData = {
+        token_count: 3000,
+        prefix_offsets: [120, 245, 380, 3000],
+        prefix_hashes: [
+          testPrefixHash(120), testPrefixHash(245),
+          'diverged_at_380', 'diverged_at_3000',
+        ],
+      };
 
       vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
@@ -604,7 +627,7 @@ describe('MlxCacheController', () => {
       await ctrl.close();
     });
 
-    it('should use partial match with trim when element_offsets exist', async () => {
+    it('should use partial match with trim when prefix hashes match', async () => {
       const crypto = { createHash };
       const inst = [{ type: 'text' as const, content: 'inst A' }];
       const dataOld = [
@@ -635,7 +658,11 @@ describe('MlxCacheController', () => {
       };
 
       const oldPath = `/cache/${oldKey}.safetensors`;
-      const metaData = { token_count: 500, element_offsets: [100, 300, 500] };
+      const metaData = {
+        token_count: 500,
+        prefix_offsets: [100, 300, 500],
+        prefix_hashes: [testPrefixHash(100), testPrefixHash(300), 'diverged_at_500'],
+      };
 
       vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
@@ -668,7 +695,7 @@ describe('MlxCacheController', () => {
       await ctrl.close();
     });
 
-    it('should skip partial match when no element_offsets in meta', async () => {
+    it('should skip partial match when no prefix meta', async () => {
       const crypto = { createHash };
       const inst = [{ type: 'text' as const, content: 'inst A' }];
       const dataOld = [{ type: 'text' as const, content: 'data old' }];

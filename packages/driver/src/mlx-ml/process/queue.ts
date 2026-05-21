@@ -10,10 +10,12 @@ import type {
   QueueItem,
   CapabilitiesQueueItem,
   FormatTestQueueItem,
+  TokenizeQueueItem,
   CachePrefillQueueItem,
   StreamingQueueItem,
   MlxCapabilitiesRequest,
   MlxFormatTestRequest,
+  MlxTokenizeRequest,
   MlxChatRequest,
   MlxCompletionRequest,
   MlxCachePrefillRequest,
@@ -21,6 +23,7 @@ import type {
   MlxMlModelOptions,
   MlxRuntimeInfo,
   MlxFormatTestResult,
+  MlxTokenizeResult,
   MlxCachePrefillResult,
   MlxToolDefinition
 } from './types.js';
@@ -69,6 +72,24 @@ export class QueueManager {
     });
   }
 
+  addTokenizeRequest(messages: MlxMessage[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxTokenizeResult> {
+    return new Promise((resolve, reject) => {
+      const request: MlxTokenizeRequest = {
+        method: 'tokenize',
+        messages,
+        ...(tools && { tools }),
+        ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
+      };
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true
+      } as TokenizeQueueItem);
+      this.processNext();
+    });
+  }
+
   addChatRequest(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string, cacheTrimTokens?: number): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
@@ -95,7 +116,7 @@ export class QueueManager {
     });
   }
 
-  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, elementCharOffsets?: number[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxCachePrefillResult> {
+  addCachePrefillRequest(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, prefixOffsets?: number[], prefixHashes?: string[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxCachePrefillResult> {
     return new Promise((resolve, reject) => {
       const request: MlxCachePrefillRequest = {
         method: 'cache_prefill',
@@ -103,7 +124,7 @@ export class QueueManager {
         messages,
         ...(baseCachePath && { base_cache_path: baseCachePath }),
         ...(trimToTokens != null && { trim_to_tokens: trimToTokens }),
-        ...(elementCharOffsets && { element_char_offsets: elementCharOffsets }),
+        ...(prefixOffsets && prefixHashes && { prefix_offsets: prefixOffsets, prefix_hashes: prefixHashes }),
         ...(tools && { tools }),
         ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
       };
@@ -179,6 +200,16 @@ export class QueueManager {
                 error: jsonResponse.error || 'Malformed format_test response'
               });
             }
+          } else if (queueItem.request.method === 'tokenize') {
+            if ('token_count' in jsonResponse) {
+              (queueItem as TokenizeQueueItem).resolve(jsonResponse);
+            } else {
+              (queueItem as TokenizeQueueItem).resolve({
+                token_ids: null,
+                token_count: 0,
+                error: jsonResponse.error || 'Malformed tokenize response'
+              });
+            }
           } else if (jsonResponse.error) {
             queueItem.reject?.(new Error(jsonResponse.error));
           } else if (queueItem.request.method === 'capabilities') {
@@ -198,6 +229,12 @@ export class QueueManager {
               formatted_prompt: null,
               template_applied: false,
               model_specific_processing: null,
+              error: e instanceof Error ? e.message : 'Unknown error'
+            });
+          } else if (queueItem.request.method === 'tokenize') {
+            (queueItem as TokenizeQueueItem).resolve({
+              token_ids: null,
+              token_count: 0,
               error: e instanceof Error ? e.message : 'Unknown error'
             });
           } else if (queueItem.request.method === 'cache_prefill') {

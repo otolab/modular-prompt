@@ -430,12 +430,12 @@ export class MlxDriver implements AIDriver {
         throw error;
       }
 
-      if (cacheController instanceof MlxCacheController && meta.prompt_tokens) {
+      if (cacheController instanceof MlxCacheController && meta.prompt_tokens != null) {
         cacheController.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
       }
 
       // Log accurate generation stats if available
-      if (meta.generation_tokens && firstChunkTime > 0) {
+      if (meta.generation_tokens != null && firstChunkTime > 0) {
         const genMs = performance.now() - firstChunkTime;
         const actualTps = (meta.generation_tokens / genMs * 1000).toFixed(1);
         this.queryLogger.log.debug(

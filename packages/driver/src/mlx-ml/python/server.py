@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test
+from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test, handle_tokenize
 
 
 MAX_READ_LINES = 10000
@@ -59,6 +59,17 @@ class Server:
                     return
                 handle_format_test(self.backend, self.capabilities, messages, req.get('options', {}), req.get('tools'))
 
+            elif method == 'tokenize':
+                messages = req.get('messages')
+                if not messages:
+                    self._error_response("'messages' field is required for tokenize method")
+                    return
+                handle_tokenize(
+                    self.backend, self.capabilities, messages,
+                    tools=req.get('tools'),
+                    reasoning_effort=req.get('reasoning_effort'),
+                )
+
             elif method == 'cache_prefill':
                 cache_path = req.get('cache_path')
                 messages = req.get('messages')
@@ -69,7 +80,8 @@ class Server:
                     self.backend, self.capabilities, cache_path, messages,
                     base_cache_path=req.get('base_cache_path'),
                     trim_to_tokens=req.get('trim_to_tokens'),
-                    element_char_offsets=req.get('element_char_offsets'),
+                    prefix_offsets=req.get('prefix_offsets'),
+                    prefix_hashes=req.get('prefix_hashes'),
                     tools=req.get('tools'),
                     reasoning_effort=req.get('reasoning_effort'),
                 )

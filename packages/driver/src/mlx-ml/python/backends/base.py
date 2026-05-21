@@ -50,7 +50,8 @@ class ModelBackend(ABC):
         prompt: str,
         base_cache_path: str | None = None,
         trim_to_tokens: int | None = None,
-        element_offsets: list[int] | None = None,
+        prefix_offsets: list[int] | None = None,
+        prefix_hashes: list[str] | None = None,
     ) -> dict:
         """Build a KV cache from a prompt prefix."""
         raise NotImplementedError(
