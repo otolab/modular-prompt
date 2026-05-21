@@ -21,7 +21,6 @@ def handle_cache_prefill(
 ) -> None:
     tokenizer = backend.get_tokenizer()
 
-    user_header = ""
     extra_kwargs = {}
     if tools is not None:
         extra_kwargs["tools"] = tools
@@ -54,18 +53,14 @@ def handle_cache_prefill(
                         tokenize=False,
                     )
                 except Exception:
-                    user_header = _compute_user_header(tokenizer)
-                    prompt = _apply_template_system_only(tokenizer, messages, user_header)
+                    prompt = generate_merged_prompt(messages, capabilities)
                     sys.stderr.write(
-                        f"--- cache_prefill: used user-header fallback"
-                        f" (header={repr(user_header[:30])})\n"
+                        "--- cache_prefill: fallback to generate_merged_prompt\n"
                     )
         except Exception:
-            user_header = _compute_user_header(tokenizer)
-            prompt = _apply_template_system_only(tokenizer, messages, user_header)
+            prompt = generate_merged_prompt(messages, capabilities)
             sys.stderr.write(
-                f"--- cache_prefill: used user-header fallback"
-                f" (header={repr(user_header[:30])})\n"
+                "--- cache_prefill: fallback to generate_merged_prompt\n"
             )
     else:
         prompt = generate_merged_prompt(messages, capabilities)

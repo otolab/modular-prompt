@@ -28,7 +28,7 @@ function validateAndClampMaxTokens(
   spec: ModelSpec,
   defaultOptions: Record<string, unknown> | undefined
 ): Record<string, unknown> | undefined {
-  if (!spec.maxOutputTokens || !defaultOptions?.maxTokens) {
+  if (spec.maxOutputTokens == null || defaultOptions?.maxTokens == null) {
     return defaultOptions;
   }
 

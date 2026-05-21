@@ -165,7 +165,7 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       if (element.id) {
         materialLines.push(`ID: ${element.id}`);
       }
-      if (element.usage) {
+      if (element.usage != null) {
         materialLines.push(`Usage: ${element.usage} tokens`);
       }
       materialLines.push('', materialContent);
