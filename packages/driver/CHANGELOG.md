@@ -1,5 +1,49 @@
 # @modular-prompt/driver
 
+## 0.13.0
+
+### Minor Changes
+
+- bbe70b8: Anthropic ドライバーにプロンプトキャッシング（cache_control）サポートを追加。
+  QueryOptions に`cache: true`を指定することで、静的なシステムプロンプトやメッセージ履歴に ephemeral キャッシュコントロールを適用。
+- e7ef1cb: Google GenAI ドライバーにプロンプトキャッシング対応を追加。
+  PromptCacheController インターフェースと GoogleGenAICacheController 実装を提供。
+  Element 変換ロジックを element-converter.ts に抽出し、ドライバーと CacheController で共有。
+- 16e5111: feat: @google/genai v2 アップグレード + Gemini 3 thoughtSignature 対応
+- 0687267: CacheHint に'immutable'値を追加。DynamicContent 出力の既存 cacheHint を compile()が尊重するように変更。MlxCacheController を外部注入パターンに統一し、キャッシュディレクトリの外部指定に対応。simple-chat プロファイルから cacheDir と logPath で設定可能に。会話履歴メッセージに immutable ヒントを付与しキャッシュ対象に。
+
+  インクリメンタル KV キャッシュを実装。cache_prefill が base_cache_path を受け取り、既存キャッシュをロードして差分トークンのみ処理。セッション内は lastHandle、cross-session は cache-index.json による prefix match で base cache を自動探索。
+
+  element_char_offsets によるインクリメンタル trim。mergeSystemMessages 後のインデックスずれを文字オフセット+共有プレフィクス比較で解決し、既存キャッシュの部分再利用に対応。
+
+  キャッシュゲート緩和。nativeTools と reasoningEffort の制約を撤廃し、ツール名ハッシュと reasoningEffort をキャッシュキーに含める方式に変更。ツール定義を cachePrefill IPC パイプラインに通す。
+
+  ストリームメタデータによる統計改善。Python→TS の**META**プロトコルで prompt_tokens を伝搬し、ドライバとキャッシュコントローラの連携で正確なトークン統計を集計。PromptCacheController に recordQuery()を追加し、全クエリ数とキャッシュ利用数を区別。
+
+  STANDARD_SECTIONS の data 順序を immutable→volatile 順に変更し、KV キャッシュプレフィックス一致長を最大化。
+
+  VLM backend: drafter loading を batch_generate から stream_generate ベースに統一。
+
+- 0bd3ef4: MLX ドライバーに PromptCacheController 対応を追加。PromptCacheController インターフェースを実装した MlxCacheController により、cacheable 要素の KV キャッシュプレフィルと再利用が可能に。
+- bd0467f: MLX Python バックエンドのリファクタリング: ファイル分割・バックエンド抽象化・テスト追加。speculative decoding 用の drafterModel オプションを追加。
+- d402ded: refactor: レスポンスプロセッサを capabilities 駆動に統合
+
+  - selectResponseProcessor が常に ResponseProcessor を返すように変更（null 返却を廃止）
+  - createDefaultProcessor ファクトリを追加（thinking 抽出 + ツールコール解析を合成）
+  - Gemma-4 の`<|channel>thought...<channel|>`形式の thinking 抽出をサポート
+  - mlx-driver の post-processing 分岐を統合（if/else → 一本道）
+  - model-handlers.ts の内部関数 11 個を unexport 化（公開 API を整理）
+
+### Patch Changes
+
+- aaa5d19: element_char_offsets によるインクリメンタル trim、キャッシュゲート緩和（ツール・reasoningEffort 対応）、ストリームメタデータによる統計改善、STANDARD_SECTIONS の data 順序最適化、VLM backend drafter loading 修正。
+- 2a5a092: fix: MLX Python プロセスの異常終了時にキュー内のリクエストを適切に reject する
+- Updated dependencies [3f065b8]
+- Updated dependencies [aaa5d19]
+- Updated dependencies [0687267]
+  - @modular-prompt/core@0.3.0
+  - @modular-prompt/utils@0.3.5
+
 ## 0.12.0
 
 ### Minor Changes
