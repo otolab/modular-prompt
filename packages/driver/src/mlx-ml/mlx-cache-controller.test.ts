@@ -539,6 +539,96 @@ describe('MlxCacheController', () => {
       expect(prefixHashes[prefixHashes.length - 1]).toBe(testPrefixHash(MOCK_TOKEN_COUNT));
     });
 
+    it('should include immutable boundary hash in prefix info', async () => {
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A' },
+        ],
+        data: [
+          { type: 'message', role: 'user' as const, content: 'msg 1', cacheHint: 'immutable' as const },
+          { type: 'message', role: 'assistant' as const, content: 'msg 2', cacheHint: 'immutable' as const },
+          { type: 'message', role: 'user' as const, content: 'msg 3' },
+        ],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // 1 inst + 3 data → section boundary (idx 0) + last immutable (idx 2) + full sequence = 3 entries
+      // But section boundary idx=0 and last immutable idx=2 are different, so 3 entries
+      expect(prefixOffsets).toHaveLength(3);
+      expect(prefixHashes).toHaveLength(3);
+      expect(prefixOffsets[prefixOffsets.length - 1]).toBe(MOCK_TOKEN_COUNT);
+    });
+
+    it('should deduplicate when section boundary equals immutable boundary', async () => {
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A', cacheHint: 'immutable' as const },
+        ],
+        data: [
+          { type: 'message', role: 'user' as const, content: 'msg 1' },
+        ],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // data[0]はcacheHintなし → immutableではないのでimmutable境界は追加されない
+      // Result: section boundary + full sequence = 2 entries
+      expect(prefixOffsets).toHaveLength(2);
+      expect(prefixHashes).toHaveLength(2);
+    });
+
+    it('should include immutable boundary when all data elements are immutable', async () => {
+      // 全dataがimmutableの場合、最後のdata要素がimmutable境界になる
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A' },
+        ],
+        data: [
+          { type: 'message', role: 'user' as const, content: 'msg 1', cacheHint: 'immutable' as const },
+          { type: 'message', role: 'assistant' as const, content: 'msg 2', cacheHint: 'immutable' as const },
+        ],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // section boundary (instructions.length - 1) + immutable境界 (最後のimmutable data) + full sequence = 3 entries
+      expect(prefixOffsets).toHaveLength(3);
+      expect(prefixHashes).toHaveLength(3);
+    });
+
+    it('should stop immutable boundary at first non-immutable data element', async () => {
+      // data: [static, immutable, contextual, static, immutable]
+      // 前方走査で idx=0 (static≠immutable) → break → lastImmutableIdx=-1
+      // immutable境界は追加されない → section boundary + full = 2 entries
+      await controller.prepare({
+        model: 'test-model',
+        instructions: [
+          { type: 'text', content: 'inst A' },
+        ],
+        data: [
+          { type: 'message', role: 'user' as const, content: 'msg 1', cacheHint: 'static' as const },
+          { type: 'message', role: 'user' as const, content: 'msg 2', cacheHint: 'immutable' as const },
+          { type: 'message', role: 'user' as const, content: 'msg 3', cacheHint: 'contextual' as const },
+          { type: 'message', role: 'user' as const, content: 'msg 4', cacheHint: 'static' as const },
+          { type: 'message', role: 'user' as const, content: 'msg 5', cacheHint: 'immutable' as const },
+        ],
+      });
+
+      const args = mockProcess.cachePrefill.mock.calls[0];
+      const prefixOffsets = args[4] as number[];
+      const prefixHashes = args[5] as string[];
+      // static is not immutable → immutable continuity never starts → no immutable boundary
+      expect(prefixOffsets).toHaveLength(2);
+      expect(prefixHashes).toHaveLength(2);
+    });
+
     it('should include full sequence hash even for single element', async () => {
       await controller.prepare({
         model: 'test-model',
