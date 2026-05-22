@@ -576,14 +576,14 @@ describe('MlxCacheController', () => {
       const args = mockProcess.cachePrefill.mock.calls[0];
       const prefixOffsets = args[4] as number[];
       const prefixHashes = args[5] as string[];
-      // section boundary idx=0, last immutable idx=0 → same, deduplicated by Set
-      // Result: 1 boundary + 1 full sequence = 2 entries
+      // data[0]はcacheHintなし → immutableではないのでimmutable境界は追加されない
+      // Result: section boundary + full sequence = 2 entries
       expect(prefixOffsets).toHaveLength(2);
       expect(prefixHashes).toHaveLength(2);
     });
 
     it('should include immutable boundary when all data elements are immutable', async () => {
-      // output section (not in instructions/data) makes full hash different from immutable boundary hash
+      // 全dataがimmutableの場合、最後のdata要素がimmutable境界になる
       await controller.prepare({
         model: 'test-model',
         instructions: [
@@ -598,7 +598,7 @@ describe('MlxCacheController', () => {
       const args = mockProcess.cachePrefill.mock.calls[0];
       const prefixOffsets = args[4] as number[];
       const prefixHashes = args[5] as string[];
-      // section boundary (idx 0) + last immutable (idx 2, = allElements end) + full sequence = 3 entries
+      // section boundary (instructions.length - 1) + immutable境界 (最後のimmutable data) + full sequence = 3 entries
       expect(prefixOffsets).toHaveLength(3);
       expect(prefixHashes).toHaveLength(3);
     });

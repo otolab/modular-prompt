@@ -56,11 +56,13 @@ const baseChatModule: PromptModule<ChatContext> = {
       if (ctx.messages.length === 0) {
         return null;
       }
-      return ctx.messages.map((m) => ({
+      return ctx.messages.map((m, i) => ({
         type: 'message' as const,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        cacheHint: 'immutable' as const,
+        // 最後のメッセージ（現在のユーザー入力）はimmutableにしない
+        // そうしないと毎回hashが変わってキャッシュが効かなくなる
+        cacheHint: i < ctx.messages.length - 1 ? ('immutable' as const) : undefined,
       }));
     }
   ],

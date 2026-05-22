@@ -223,13 +223,10 @@ export class MlxCacheController implements PromptCacheController {
   ): Promise<{ offsets: number[]; hashes: string[] }> {
     const instructions = params.instructions || [];
     const data = params.data || [];
-    const totalElements = instructions.length + data.length;
 
     const offsets: number[] = [];
     const hashes: string[] = [];
 
-    // instructions + data のみ。output は full hash でカバーされる
-    const allElements = [...instructions, ...data];
     const boundaryIndices = new Set<number>();
 
     if (instructions.length > 0 && data.length > 0) {
@@ -250,7 +247,10 @@ export class MlxCacheController implements PromptCacheController {
       boundaryIndices.add(lastImmutableIdx);
     }
 
-    for (const boundaryIdx of boundaryIndices) {
+    // SetからArrayに変換してソート（prefixOffsetsが昇順になることを保証）
+    const sortedBoundaries = Array.from(boundaryIndices).sort((a, b) => a - b);
+
+    for (const boundaryIdx of sortedBoundaries) {
 
       const partialInst = boundaryIdx < instructions.length
         ? instructions.slice(0, boundaryIdx + 1)
