@@ -228,6 +228,7 @@ export class MlxCacheController implements PromptCacheController {
     const offsets: number[] = [];
     const hashes: string[] = [];
 
+    // instructions + data のみ。output は full hash でカバーされる
     const allElements = [...instructions, ...data];
     const boundaryIndices = new Set<number>();
 
@@ -235,17 +236,21 @@ export class MlxCacheController implements PromptCacheController {
       boundaryIndices.add(instructions.length - 1);
     }
 
-    for (let i = allElements.length - 1; i >= 0; i--) {
-      if (allElements[i].cacheHint === 'immutable') {
-        if (i < allElements.length - 1) {
-          boundaryIndices.add(i);
-        }
+    // data部分を前方から走査し、連続するimmutableの最後の位置を境界にする
+    // instructionsはcacheHint不問でsection境界が既にカバーしている
+    let lastImmutableIdx = -1;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i].cacheHint === 'immutable') {
+        lastImmutableIdx = instructions.length + i;
+      } else {
         break;
       }
     }
+    if (lastImmutableIdx >= 0) {
+      boundaryIndices.add(lastImmutableIdx);
+    }
 
     for (const boundaryIdx of boundaryIndices) {
-      if (boundaryIdx >= totalElements - 1) continue;
 
       const partialInst = boundaryIdx < instructions.length
         ? instructions.slice(0, boundaryIdx + 1)
@@ -482,13 +487,10 @@ export class MlxCacheController implements PromptCacheController {
     const s = this.stats;
     return {
       totalQueries: s.totalQueries,
-      cached: s.memoryHit + s.diskHit + s.incremental + s.fresh,
-      memoryHit: s.memoryHit, diskHit: s.diskHit,
       incremental: s.incremental, fresh: s.fresh,
-      prefillTokens: s.prefillTokens,
-      prefillReusedTokens: s.prefillReusedTokens,
       totalPromptTokens: s.totalPromptTokens,
-      totalCacheTokensUsed: s.totalCacheTokensUsed,
+      prefillReusedTokens: s.prefillReusedTokens,
+      cacheGrowthTokens: s.prefillTokens - s.prefillReusedTokens,
     };
   }
 
