@@ -1,5 +1,32 @@
 # @modular-prompt/process
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [d1d029a]
+  - @modular-prompt/driver@0.13.1
+
+## 0.5.1
+
+### Patch Changes
+
+- b55ad82: fix: agentic ワークフローのプランニングプロンプトでツール可視性を改善
+- 226b787: selfPromptingProcess を deprecated に変更（agenticProcess に統合予定）
+- Updated dependencies [bbe70b8]
+- Updated dependencies [3f065b8]
+- Updated dependencies [aaa5d19]
+- Updated dependencies [e7ef1cb]
+- Updated dependencies [16e5111]
+- Updated dependencies [0687267]
+- Updated dependencies [2a5a092]
+- Updated dependencies [0bd3ef4]
+- Updated dependencies [bd0467f]
+- Updated dependencies [d402ded]
+  - @modular-prompt/driver@0.13.0
+  - @modular-prompt/core@0.3.0
+  - @modular-prompt/utils@0.3.5
+
 ## 0.5.0
 
 ### Minor Changes

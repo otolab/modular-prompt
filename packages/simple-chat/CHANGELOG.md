@@ -1,5 +1,52 @@
 # @modular-prompt/simple-chat
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [d1d029a]
+  - @modular-prompt/driver@0.13.1
+  - @modular-prompt/process@0.5.2
+
+## 0.4.0
+
+### Minor Changes
+
+- c5f9028: --drafter-model オプションを追加: speculative decoding の drafter モデルを CLI から指定可能に
+- 0687267: CacheHint に'immutable'値を追加。DynamicContent 出力の既存 cacheHint を compile()が尊重するように変更。MlxCacheController を外部注入パターンに統一し、キャッシュディレクトリの外部指定に対応。simple-chat プロファイルから cacheDir と logPath で設定可能に。会話履歴メッセージに immutable ヒントを付与しキャッシュ対象に。
+
+  インクリメンタル KV キャッシュを実装。cache_prefill が base_cache_path を受け取り、既存キャッシュをロードして差分トークンのみ処理。セッション内は lastHandle、cross-session は cache-index.json による prefix match で base cache を自動探索。
+
+  element_char_offsets によるインクリメンタル trim。mergeSystemMessages 後のインデックスずれを文字オフセット+共有プレフィクス比較で解決し、既存キャッシュの部分再利用に対応。
+
+  キャッシュゲート緩和。nativeTools と reasoningEffort の制約を撤廃し、ツール名ハッシュと reasoningEffort をキャッシュキーに含める方式に変更。ツール定義を cachePrefill IPC パイプラインに通す。
+
+  ストリームメタデータによる統計改善。Python→TS の**META**プロトコルで prompt_tokens を伝搬し、ドライバとキャッシュコントローラの連携で正確なトークン統計を集計。PromptCacheController に recordQuery()を追加し、全クエリ数とキャッシュ利用数を区別。
+
+  STANDARD_SECTIONS の data 順序を immutable→volatile 順に変更し、KV キャッシュプレフィックス一致長を最大化。
+
+  VLM backend: drafter loading を batch_generate から stream_generate ベースに統一。
+
+### Patch Changes
+
+- a06ff31: performAIChat から未使用の images パラメータを削除し、VLM 画像入力の使い方ドキュメントを README に追加
+- Updated dependencies [b55ad82]
+- Updated dependencies [bbe70b8]
+- Updated dependencies [3f065b8]
+- Updated dependencies [aaa5d19]
+- Updated dependencies [226b787]
+- Updated dependencies [e7ef1cb]
+- Updated dependencies [16e5111]
+- Updated dependencies [0687267]
+- Updated dependencies [2a5a092]
+- Updated dependencies [0bd3ef4]
+- Updated dependencies [bd0467f]
+- Updated dependencies [d402ded]
+  - @modular-prompt/process@0.5.1
+  - @modular-prompt/driver@0.13.0
+  - @modular-prompt/core@0.3.0
+  - @modular-prompt/utils@0.3.5
+
 ## 0.3.7
 
 ### Patch Changes
