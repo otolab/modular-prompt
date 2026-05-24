@@ -1,5 +1,15 @@
 # @modular-prompt/driver
 
+## 0.13.1
+
+### Patch Changes
+
+- d1d029a: fix: computePrefixInfo で immutable Element 境界の prefix hash を追加
+
+  section 境界のみだった prefix hash 計算に、最後の immutable Element の位置での hash を追加。
+  チャット履歴の immutable メッセージ部分が incremental キャッシュで再利用されるようになり、
+  prefill の reuse 率が大幅に向上する。
+
 ## 0.13.0
 
 ### Minor Changes
