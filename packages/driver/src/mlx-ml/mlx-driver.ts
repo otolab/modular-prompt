@@ -533,25 +533,21 @@ export class MlxDriver implements AIDriver {
   private logCacheStats(): void {
     if (!(this.cacheController instanceof MlxCacheController)) return;
     const s = this.cacheController.getStats();
-    if (s.totalQueries === 0 && s.cached === 0) return;
+    if (s.totalQueries === 0) return;
 
-    const cacheRate = s.totalQueries > 0 ? ((s.cached / s.totalQueries) * 100).toFixed(0) : '0';
-    const hitRate = s.cached > 0 ? (((s.memoryHit + s.diskHit) / s.cached) * 100).toFixed(0) : '0';
+    const queryBreakdown = s.incremental + s.fresh > 0
+      ? ` (incremental ${s.incremental}, fresh ${s.fresh})`
+      : '';
     const parts: string[] = [
-      `cache stats: ${s.totalQueries} queries, ${s.cached} cached (${cacheRate}%)`,
+      `cache stats: ${s.totalQueries} queries${queryBreakdown}`,
     ];
-    if (s.cached > 0) {
-      parts.push(`hit ${hitRate}%`);
-    }
     if (s.totalPromptTokens > 0) {
-      const cacheRate = ((s.totalCacheTokensUsed / s.totalPromptTokens) * 100).toFixed(0);
-      parts.push(`prompt ${s.totalPromptTokens} tokens (${cacheRate}% cached)`);
+      const reusedRate = ((s.prefillReusedTokens / s.totalPromptTokens) * 100).toFixed(0);
+      parts.push(`prompt ${s.totalPromptTokens} tokens, ${s.prefillReusedTokens} reused (${reusedRate}%)`);
     }
-    if (s.prefillTokens > 0) {
-      const reusedRate = ((s.prefillReusedTokens / s.prefillTokens) * 100).toFixed(0);
-      parts.push(`prefill ${s.prefillTokens} tokens, ${s.prefillReusedTokens} reused (${reusedRate}%)`);
+    if (s.cacheGrowthTokens > 0) {
+      parts.push(`cache +${s.cacheGrowthTokens} tokens`);
     }
-    parts.push(`(memory=${s.memoryHit} disk=${s.diskHit} incremental=${s.incremental} fresh=${s.fresh})`);
     this.queryLogger.log.verbose(parts.join(' | '));
   }
 

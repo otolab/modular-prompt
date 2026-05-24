@@ -60,7 +60,9 @@ const baseChatModule: PromptModule<ChatContext> = {
         type: 'message' as const,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        ...(i < ctx.messages.length - 1 ? { cacheHint: 'immutable' as const } : {}),
+        // 最後のメッセージ（現在のユーザー入力）はimmutableにしない
+        // そうしないと毎回hashが変わってキャッシュが効かなくなる
+        cacheHint: i < ctx.messages.length - 1 ? ('immutable' as const) : undefined,
       }));
     }
   ],

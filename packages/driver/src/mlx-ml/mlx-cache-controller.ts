@@ -223,20 +223,34 @@ export class MlxCacheController implements PromptCacheController {
   ): Promise<{ offsets: number[]; hashes: string[] }> {
     const instructions = params.instructions || [];
     const data = params.data || [];
-    const totalElements = instructions.length + data.length;
 
     const offsets: number[] = [];
     const hashes: string[] = [];
 
-    // Only compute hashes at section boundaries (instructions→data transition)
-    // to keep tokenize IPC calls bounded regardless of element count.
     const boundaryIndices = new Set<number>();
+
     if (instructions.length > 0 && data.length > 0) {
       boundaryIndices.add(instructions.length - 1);
     }
 
-    for (const boundaryIdx of boundaryIndices) {
-      if (boundaryIdx >= totalElements - 1) continue;
+    // data部分を前方から走査し、連続するimmutableの最後の位置を境界にする
+    // instructionsはcacheHint不問でsection境界が既にカバーしている
+    let lastImmutableIdx = -1;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i].cacheHint === 'immutable') {
+        lastImmutableIdx = instructions.length + i;
+      } else {
+        break;
+      }
+    }
+    if (lastImmutableIdx >= 0) {
+      boundaryIndices.add(lastImmutableIdx);
+    }
+
+    // SetからArrayに変換してソート（prefixOffsetsが昇順になることを保証）
+    const sortedBoundaries = Array.from(boundaryIndices).sort((a, b) => a - b);
+
+    for (const boundaryIdx of sortedBoundaries) {
 
       const partialInst = boundaryIdx < instructions.length
         ? instructions.slice(0, boundaryIdx + 1)
@@ -473,13 +487,10 @@ export class MlxCacheController implements PromptCacheController {
     const s = this.stats;
     return {
       totalQueries: s.totalQueries,
-      cached: s.memoryHit + s.diskHit + s.incremental + s.fresh,
-      memoryHit: s.memoryHit, diskHit: s.diskHit,
       incremental: s.incremental, fresh: s.fresh,
-      prefillTokens: s.prefillTokens,
-      prefillReusedTokens: s.prefillReusedTokens,
       totalPromptTokens: s.totalPromptTokens,
-      totalCacheTokensUsed: s.totalCacheTokensUsed,
+      prefillReusedTokens: s.prefillReusedTokens,
+      cacheGrowthTokens: s.prefillTokens - s.prefillReusedTokens,
     };
   }
 

@@ -208,13 +208,13 @@ def handle_chat(
         if cache_tokens < len(full_tokens):
             effective_prompt = full_tokens[cache_tokens:]
             sys.stderr.write(
-                f"Prompt cache: skip {cache_tokens}/{len(full_tokens)} tokens, "
-                f"process {len(effective_prompt)} remaining\n"
+                f"Prefilled {cache_tokens}/{len(full_tokens)} tokens, "
+                f"generating from {len(effective_prompt)} remaining\n"
             )
         else:
             sys.stderr.write(
-                f"Prompt cache: offset {cache_tokens} >= prompt {len(full_tokens)}, "
-                f"ignoring cache\n"
+                f"Prefill offset {cache_tokens} >= prompt {len(full_tokens)}, "
+                f"ignoring prefill state\n"
             )
             prompt_cache = None
 
