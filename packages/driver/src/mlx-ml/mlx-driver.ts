@@ -11,7 +11,7 @@ import { createModelSpecificProcessor, selectApi } from './process/model-specifi
 import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
-import { formatToolDefinitionsAsText } from './tool-call-parser.js';
+import { formatToolDefinitionsAsText } from './tool-call-parser/index.js';
 import { convertMessages, convertToolDefinitions, extractImagePaths } from './mlx-message-utils.js';
 import { QueryLogger } from '../query-logger.js';
 import type { PromptCacheController } from '../cache-controller.js';
