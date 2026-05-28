@@ -194,7 +194,8 @@ async function executeDirect(
 
   // Fallback to non-streaming
   const result = await driver.query(compiledPrompt, options);
-  logger.info(chalk.cyan('Assistant: ') + result.content);
+  logger.info(chalk.cyan('Assistant:'));
+  process.stdout.write(result.content + '\n\n');
   return result.content;
 }
 
@@ -213,7 +214,7 @@ async function executeDefault(
   const result = await defaultProcess(driver, chatModule, context, {
     queryOptions: options,
   });
-  logger.info(chalk.cyan('Assistant: ') + result.output);
+  process.stdout.write(result.output + '\n\n');
   return result.output;
 }
 
@@ -234,7 +235,7 @@ async function executeAgentic(
     maxTasks: processOptions?.maxTasks ?? 10,
     includeThinking: processOptions?.includeThinking ?? false,
   });
-  logger.info(chalk.cyan('Assistant: ') + result.output);
+  process.stdout.write(result.output + '\n\n');
   return result.output;
 }
 
