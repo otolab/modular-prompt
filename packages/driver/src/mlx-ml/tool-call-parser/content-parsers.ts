@@ -1,7 +1,7 @@
 import type { ContentParser, ParsedToolCall } from './types.js';
 import { coerceValue, extractBracketedValue } from './utils.js';
 
-function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
+export function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
   if (typeof obj !== 'object' || obj === null) return null;
 
   const rec = obj as Record<string, unknown>;

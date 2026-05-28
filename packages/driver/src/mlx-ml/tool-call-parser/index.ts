@@ -1,8 +1,8 @@
 import type { ToolCall } from '@modular-prompt/core';
 import type { MlxRuntimeInfo } from '../process/types.js';
-import type { ToolCallParseResult, ParsedToolCall } from './types.js';
+import type { ToolCallParseResult } from './types.js';
 import { detect } from './detector.js';
-import { tryParsers, jsonParser } from './content-parsers.js';
+import { tryParsers, jsonParser, normalizeJsonToolCall } from './content-parsers.js';
 import { escapeRegExp, extractJsonObject } from './utils.js';
 
 export type { ToolCallParseResult } from './types.js';
@@ -109,15 +109,16 @@ function parseCodeBlocks(text: string): ToolCallParseResult {
 
   let match;
   while ((match = regex.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(match[1].trim());
-      toolCalls.push({
-        id: `call_${callIndex++}`,
-        name: parsed.name,
-        arguments: parsed.arguments || parsed.parameters || {},
-      });
-    } catch {
-      // skip
+    const parsed = jsonParser.parse(match[1].trim());
+    if (parsed) {
+      const calls = Array.isArray(parsed) ? parsed : [parsed];
+      for (const call of calls) {
+        toolCalls.push({
+          id: `call_${callIndex++}`,
+          name: call.name,
+          arguments: call.arguments || {},
+        });
+      }
     }
   }
 
@@ -126,12 +127,6 @@ function parseCodeBlocks(text: string): ToolCallParseResult {
   }
 
   return { content, toolCalls };
-}
-
-function normalizeJsonToolCall(obj: unknown): ParsedToolCall | null {
-  const result = jsonParser.parse(JSON.stringify(obj));
-  if (result && !Array.isArray(result)) return result;
-  return null;
 }
 
 function parseGeneric(text: string): ToolCallParseResult {
