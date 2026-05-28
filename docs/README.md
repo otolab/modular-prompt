@@ -33,6 +33,7 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 ### モデル固有の挙動
 
 - **[MLX - Qwen系モデル](./models/MLX_QWEN.md)** - Qwen系モデルのtool call時のcontent挙動
+- **[MLX - Tool Call Parserアーキテクチャ](./models/MLX_TOOL_CALL_PARSER.md)** - MLXドライバーのツール呼び出しパーサーの設計と実装
 
 ## プロセスモジュール
 
