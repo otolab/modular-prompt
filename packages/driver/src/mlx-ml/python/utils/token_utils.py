@@ -187,50 +187,32 @@ def get_special_tokens(tokenizer):
 def detect_tool_call_format(tokenizer):
     """tokenizer設定からtool call/resultのデリミタを検出する
 
-    tokenizer_config.json / chat_template からtool call関連の情報を抽出:
-    - tool_parser_type: パーサー種別（"json_tools" 等）
-    - chat_template テキスト内の <tool_call></tool_call> 等のタグパターン
+    tokenizerアクセスが必要な情報のみを抽出する:
+    - tool_parser_type: tokenizer_config由来のパーサー種別文字列
+    - chat_templateテキストからのデリミタパターン検出
+
+    パーサー種別→デリミタのマッピングはTS側(detector.ts)に一元化。
+    Python側はtokenizerから生の情報を抽出して渡す役割に専念する。
 
     Returns:
         dict or None: {
             "tool_parser_type": str,  # tokenizer_configのtool_parser_type
-            "call_start": str,        # tool callの開始デリミタ
-            "call_end": str,          # tool callの終了デリミタ
+            "call_start": str,        # chat_templateから検出した開始デリミタ
+            "call_end": str,          # chat_templateから検出した終了デリミタ
             "response_start": str,    # tool responseの開始デリミタ（検出時）
             "response_end": str,      # tool responseの終了デリミタ（検出時）
         } or None
     """
     import re
 
-    # tool_parser_type を取得
     tool_parser_type = None
     if hasattr(tokenizer, 'init_kwargs'):
         tool_parser_type = tokenizer.init_kwargs.get('tool_parser_type')
 
-    # 既知パーサーからの逆引き（最優先）
-    KNOWN_TOOL_PARSERS = {
-        "json_tools": {"call_start": "<tool_call>", "call_end": "</tool_call>"},
-        "pythonic": {"call_start": "<|tool_call_start|>", "call_end": "<|tool_call_end|>"},
-        "function_gemma": {"call_start": "<start_function_call>", "call_end": "<end_function_call>"},
-        "mistral": {"call_start": "[TOOL_CALLS]", "call_end": ""},
-        "kimi_k2": {"call_start": "<|tool_calls_section_begin|>", "call_end": "<|tool_calls_section_end|>"},
-        "longcat": {"call_start": "<longcat_tool_call>", "call_end": "</longcat_tool_call>"},
-        "glm47": {"call_start": "<tool_call>", "call_end": "</tool_call>"},
-        "qwen3_coder": {"call_start": "<tool_call>", "call_end": "</tool_call>"},
-        "minimax_m2": {"call_start": "<minimax:tool_call>", "call_end": "</minimax:tool_call>"},
-    }
-
-    if tool_parser_type and tool_parser_type in KNOWN_TOOL_PARSERS:
-        result = {"tool_parser_type": tool_parser_type}
-        result.update(KNOWN_TOOL_PARSERS[tool_parser_type])
-        return result
-
-    # chat_template テキストを取得
     template = getattr(tokenizer, 'chat_template', None)
     if not template and hasattr(tokenizer, 'init_kwargs'):
         template = tokenizer.init_kwargs.get('chat_template', '')
 
-    # tool_parser_type もテンプレートもなければ非対応
     if not tool_parser_type and not template:
         return None
 
@@ -238,21 +220,13 @@ def detect_tool_call_format(tokenizer):
     if tool_parser_type:
         result["tool_parser_type"] = tool_parser_type
 
-    # テンプレートテキストからデリミタを抽出
     if template:
-        # 複数のtool_call関連パターンを順に試行
         tool_call_patterns = [
-            # </tool_call>, <|/tool_call|>, <tool_call|> (終了タグ専用)
             (r'<\|?tool_call\|?>', r'</tool_call>|<\|/tool_call\|>|<tool_call\|>'),
-            # <|tool_call_start|>...<|tool_call_end|>
             (r'<\|tool_call_start\|>', r'<\|tool_call_end\|>'),
-            # <start_function_call>...<end_function_call>
             (r'<start_function_call>', r'<end_function_call>'),
-            # <|tool_calls_section_begin|>...<|tool_calls_section_end|>
             (r'<\|tool_calls_section_begin\|>', r'<\|tool_calls_section_end\|>'),
-            # <longcat_tool_call>...</longcat_tool_call>
             (r'<longcat_tool_call>', r'</longcat_tool_call>'),
-            # <minimax:tool_call>...</minimax:tool_call>
             (r'<minimax:tool_call>', r'</minimax:tool_call>'),
         ]
 
@@ -264,8 +238,6 @@ def detect_tool_call_format(tokenizer):
                 result["call_end"] = end_match.group(0)
                 break
 
-        # Harmony形式の専用検出
-        # テンプレート内で "functions." と <|call|> が共存する場合
         if "call_start" not in result:
             has_functions = re.search(r'"functions\."', template)
             has_call = re.search(r'<\|call\|>', template)
@@ -274,14 +246,12 @@ def detect_tool_call_format(tokenizer):
                 result["call_start"] = "to=functions."
                 result["call_end"] = "<|call|>"
 
-        # Mistral特殊ケース
         if "call_start" not in result:
             mistral_match = re.search(r'\[TOOL_CALLS\]', template)
             if mistral_match:
                 result["call_start"] = "[TOOL_CALLS]"
                 result["call_end"] = ""
 
-        # tool_response タグの検出
         resp_tags = re.findall(r'<[|/]?tool_response[|]?>', template)
         if len(resp_tags) >= 2:
             open_tags = [t for t in resp_tags if '/' not in t]

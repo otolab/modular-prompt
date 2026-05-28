@@ -1,7 +1,7 @@
 import type { ToolCall } from '../../types.js';
 import type { MlxRuntimeInfo } from './types.js';
 import { extractThinkingContent } from '../../content-utils.js';
-import { parseToolCalls } from '../tool-call-parser.js';
+import { parseToolCalls } from '../tool-call-parser/index.js';
 
 export interface ResponseParseResult {
   content: string;
