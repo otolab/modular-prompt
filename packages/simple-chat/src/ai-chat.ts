@@ -214,6 +214,7 @@ async function executeDefault(
   const result = await defaultProcess(driver, chatModule, context, {
     queryOptions: options,
   });
+  logger.info(chalk.cyan('Assistant:'));
   process.stdout.write(result.output + '\n\n');
   return result.output;
 }
@@ -235,6 +236,7 @@ async function executeAgentic(
     maxTasks: processOptions?.maxTasks ?? 10,
     includeThinking: processOptions?.includeThinking ?? false,
   });
+  logger.info(chalk.cyan('Assistant:'));
   process.stdout.write(result.output + '\n\n');
   return result.output;
 }
