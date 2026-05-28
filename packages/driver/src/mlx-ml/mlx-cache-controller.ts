@@ -546,6 +546,7 @@ export class MlxCacheController implements PromptCacheController {
 
     const cachePath = this.generateCachePath(cacheKey);
     const elementHashes = this.computeElementHashes(params);
+    let supersededRef: string | undefined;
 
     // Disk hit check (exact same cache already exists)
     if (existsSync(cachePath) && existsSync(cachePath + '.meta.json') && this.readMetaTokenCount(cachePath) > 0) {
@@ -643,6 +644,7 @@ export class MlxCacheController implements PromptCacheController {
       if (base) {
         this.stats.incremental++;
         this.stats.prefillReusedTokens += base.trimTokens ?? this.readMetaTokenCount(base.path);
+        supersededRef = base.path;
       } else {
         this.stats.fresh++;
       }
@@ -663,6 +665,7 @@ export class MlxCacheController implements PromptCacheController {
         dataElementCount: params.data?.length ?? 0,
         tools: (params.tools?.length ?? 0) > 0,
       },
+      supersedes: supersededRef,
     };
     this.cacheByHash.set(cacheKey, handle);
     this.updateLastCache(handle, elementHashes, params);

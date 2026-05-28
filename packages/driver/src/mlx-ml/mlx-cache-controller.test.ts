@@ -400,6 +400,39 @@ describe('MlxCacheController', () => {
       expect(basePath2).toBe(handle1.ref);
     });
 
+    it('should set supersedes to base cache ref on incremental prefill', async () => {
+      const handle1 = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+      });
+
+      vi.mocked(existsSync).mockImplementation((path: any) => {
+        return path === handle1.ref || path === handle1.ref + '.meta.json';
+      });
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
+        token_count: 100,
+        prefix_offsets: [100],
+        prefix_hashes: [testPrefixHash(100)],
+      }));
+
+      const handle2 = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'system prompt' }],
+        data: [{ type: 'text' as const, content: 'message 1' }],
+      });
+
+      expect(handle2.supersedes).toBe(handle1.ref);
+    });
+
+    it('should leave supersedes undefined on fresh prefill', async () => {
+      const handle = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'system prompt' }],
+      });
+
+      expect(handle.supersedes).toBeUndefined();
+    });
+
     it('should fall back to index when lastHandle file is missing', async () => {
       const externalController = new MlxCacheController({ cacheDir: '/cache' });
       externalController.bind(mockProcess as unknown as import('./process/index.js').MlxProcess, {});

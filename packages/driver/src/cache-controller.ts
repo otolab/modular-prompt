@@ -19,6 +19,8 @@ export interface CacheHandle {
     dataElementCount: number;
     tools: boolean;
   };
+  /** ref of the cache that was replaced by incremental prefill */
+  supersedes?: string;
 }
 
 export interface PromptCacheController {
