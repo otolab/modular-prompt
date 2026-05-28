@@ -2,7 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { rmSync, existsSync, readFileSync } from 'node:fs';
-import { unlink, mkdir, rm, writeFile } from 'node:fs/promises';
+import { unlink, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { lock as lockFile } from 'proper-lockfile';
 import type { PromptCacheController, CachePrepareParams, CacheHandle } from '../cache-controller.js';
 import type { ToolDefinition } from '../types.js';
 import type { FormatterOptions } from '../formatter/types.js';
@@ -83,11 +84,11 @@ export class MlxCacheController implements PromptCacheController {
     }
   }
 
-  bind(
+  async bind(
     process: MlxProcess,
     formatterOptions: FormatterOptions,
     messageProcessor?: (messages: MlxMessage[]) => MlxMessage[],
-  ): void {
+  ): Promise<void> {
     if (this.bound) {
       throw new Error('MlxCacheController is already bound to a process');
     }
@@ -104,7 +105,7 @@ export class MlxCacheController implements PromptCacheController {
       globalThis.process.on('exit', this.cleanupHandler);
     }
     if (!this.managedDir) {
-      this.loadIndexSync();
+      await this.loadIndex();
     }
     this.bound = true;
   }
@@ -129,17 +130,21 @@ export class MlxCacheController implements PromptCacheController {
     }
   }
 
-  private loadIndexSync(): void {
+  private async loadIndex(): Promise<void> {
     try {
-      if (existsSync(this.indexPath)) {
-        const raw = readFileSync(this.indexPath, 'utf-8');
+      if (!existsSync(this.indexPath)) return;
+      const release = await lockFile(this.indexPath, { realpath: false });
+      try {
+        const raw = await readFile(this.indexPath, 'utf-8');
         const parsed = JSON.parse(raw);
         if (parsed && parsed.version === 1 && Array.isArray(parsed.entries)) {
           this.cacheIndex = parsed;
         }
+      } finally {
+        await release();
       }
     } catch {
-      // corrupt index — start fresh
+      // corrupt index or lock failure — start fresh
     }
   }
 
@@ -147,7 +152,12 @@ export class MlxCacheController implements PromptCacheController {
     if (this.managedDir) return;
     try {
       await this.ensureCacheDir();
-      await writeFile(this.indexPath, JSON.stringify(this.cacheIndex, null, 2));
+      const release = await lockFile(this.indexPath, { realpath: false });
+      try {
+        await writeFile(this.indexPath, JSON.stringify(this.cacheIndex, null, 2));
+      } finally {
+        await release();
+      }
     } catch {
       // best-effort
     }

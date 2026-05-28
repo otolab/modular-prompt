@@ -205,7 +205,7 @@ export class MlxDriver implements AIDriver {
             this.queryLogger.log.info('VLM models do not support prompt caching — cacheController disabled');
             this.cacheController = undefined;
           } else {
-            this.cacheController.bind(
+            await this.cacheController.bind(
               this.process,
               this.formatterOptions,
               (msgs) => this.modelProcessor.applyChatSpecificProcessing(msgs),
