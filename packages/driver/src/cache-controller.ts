@@ -27,6 +27,7 @@ export interface PromptCacheController {
   /** Record that a query was issued (regardless of cache usage) */
   recordQuery?(): void;
   prepare(params: CachePrepareParams): Promise<CacheHandle>;
-  invalidate(handle: CacheHandle): Promise<void>;
+  /** Hint that this cache entry is no longer needed. Actual deletion timing is implementation-defined. */
+  release(ref: string): void;
   close(): Promise<void>;
 }

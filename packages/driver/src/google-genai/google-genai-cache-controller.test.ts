@@ -197,24 +197,24 @@ describe('GoogleGenAICacheController', () => {
     });
   });
 
-  describe('invalidate', () => {
+  describe('release', () => {
     it('should delete the cached content', async () => {
       const handle = await controller.prepare({
         model: 'gemini-2.5-flash',
         instructions: [{ type: 'text', content: 'prompt' }],
       });
 
-      await controller.invalidate(handle);
+      controller.release(handle.ref);
       expect(mockClient.caches.delete).toHaveBeenCalledWith({ name: 'cachedContents/test-cache-123' });
     });
 
-    it('should allow re-creation after invalidation', async () => {
+    it('should allow re-creation after release', async () => {
       const params = {
         model: 'gemini-2.5-flash',
         instructions: [{ type: 'text' as const, content: 'prompt' }],
       };
       const handle1 = await controller.prepare(params);
-      await controller.invalidate(handle1);
+      controller.release(handle1.ref);
 
       mockClient.caches.create.mockResolvedValueOnce({ name: 'cachedContents/new-cache' });
       const handle2 = await controller.prepare(params);

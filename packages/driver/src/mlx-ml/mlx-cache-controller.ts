@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { rmSync, existsSync, readFileSync } from 'node:fs';
 import { unlink, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { lock as lockFile } from 'proper-lockfile';
@@ -24,6 +24,7 @@ interface CacheIndexEntry {
   toolsHash?: string;
   reasoningEffort?: string;
   createdAt: string;
+  hint?: 'retain' | 'release';
 }
 
 interface CacheIndex {
@@ -328,6 +329,7 @@ export class MlxCacheController implements PromptCacheController {
     const staleKeys: string[] = [];
 
     for (const entry of this.cacheIndex.entries) {
+      if (entry.hint === 'release') continue;
       if (entry.model !== params.model || entry.formatterOptionsHash !== fmtHash) continue;
       if ((entry.toolsHash ?? '') !== newToolsHash) continue;
       if ((entry.reasoningEffort ?? '') !== (params.reasoningEffort ?? '')) continue;
@@ -449,11 +451,6 @@ export class MlxCacheController implements PromptCacheController {
       reasoningEffort: params.reasoningEffort,
       createdAt: new Date().toISOString(),
     });
-  }
-
-  private removeFromIndex(cachePath: string): void {
-    const key = basename(cachePath, '.safetensors');
-    this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.key !== key);
   }
 
   private computeCacheKey(params: CachePrepareParams): string {
@@ -681,25 +678,31 @@ export class MlxCacheController implements PromptCacheController {
     this.updateLastCache(handle, elementHashes, params);
 
     this.addToIndex(params, cacheKey);
+    if (supersededRef) {
+      this.release(supersededRef);
+    }
     await this.saveIndex();
 
     return handle;
   }
 
-  async invalidate(handle: CacheHandle): Promise<void> {
-    logger.debug('invalidate', handle.ref);
-    this.removeFromIndex(handle.ref);
-    await unlink(handle.ref).catch(() => {});
-    await unlink(handle.ref + '.meta.json').catch(() => {});
-    for (const [key, entry] of this.cacheByHash) {
-      if (entry.ref === handle.ref) {
+  release(ref: string): void {
+    logger.debug('release', ref);
+    const entry = this.cacheIndex.entries.find(
+      e => this.generateCachePath(e.key) === ref,
+    );
+    if (entry) {
+      entry.hint = 'release';
+    }
+    for (const [key, handle] of this.cacheByHash) {
+      if (handle.ref === ref) {
         this.cacheByHash.delete(key);
       }
     }
-    if (this.lastHandle?.ref === handle.ref) {
+    if (this.lastHandle?.ref === ref) {
       this.clearLastCache();
     }
-    await this.saveIndex();
+    this.saveIndex().catch(() => {});
   }
 
   async close(): Promise<void> {
@@ -718,6 +721,13 @@ export class MlxCacheController implements PromptCacheController {
     if (this.managedDir && this.cacheDir) {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     } else {
+      const released = this.cacheIndex.entries.filter(e => e.hint === 'release');
+      for (const entry of released) {
+        const path = this.generateCachePath(entry.key);
+        await unlink(path).catch(() => {});
+        await unlink(path + '.meta.json').catch(() => {});
+      }
+      this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.hint !== 'release');
       await this.saveIndex();
     }
     this.cacheDirReady = false;

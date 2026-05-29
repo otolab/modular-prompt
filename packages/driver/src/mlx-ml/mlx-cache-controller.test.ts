@@ -207,38 +207,35 @@ describe('MlxCacheController', () => {
     });
   });
 
-  describe('invalidate', () => {
-    it('should delete the cache file', async () => {
+  describe('release', () => {
+    it('should not delete the cache file immediately', async () => {
       const handle = await controller.prepare({
         model: 'test-model',
         instructions: [{ type: 'text', content: 'prompt' }],
       });
 
-      await controller.invalidate(handle);
-      expect(unlink).toHaveBeenCalledWith(handle.ref);
+      controller.release(handle.ref);
+      // release はファイルを削除しない
+      expect(unlink).not.toHaveBeenCalledWith(handle.ref);
     });
 
-    it('should allow re-creation after invalidation', async () => {
+    it('should remove from memory cache so prepare creates new prefill', async () => {
       const params = {
         model: 'test-model',
         instructions: [{ type: 'text' as const, content: 'prompt' }],
       };
 
       const handle1 = await controller.prepare(params);
-      await controller.invalidate(handle1);
+      controller.release(handle1.ref);
 
+      // release 後に同じ params で prepare すると新規 prefill が走る
       await controller.prepare(params);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
     });
 
-    it('should suppress errors when file does not exist', async () => {
-      vi.mocked(unlink).mockRejectedValueOnce(new Error('ENOENT'));
-      const handle = await controller.prepare({
-        model: 'test-model',
-        instructions: [{ type: 'text', content: 'prompt' }],
-      });
-
-      await expect(controller.invalidate(handle)).resolves.toBeUndefined();
+    it('should not throw for unknown ref', () => {
+      // 存在しない ref を release しても問題ない
+      expect(() => controller.release('/nonexistent/path.safetensors')).not.toThrow();
     });
   });
 
