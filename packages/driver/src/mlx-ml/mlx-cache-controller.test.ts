@@ -1044,15 +1044,18 @@ describe('MlxCacheController', () => {
 
     describe('bind with async loadIndex', () => {
       it('should acquire lock when loading index (managedDir=false)', async () => {
+        const { readFile } = await import('node:fs/promises');
+
         // indexファイルが存在するケース
         vi.mocked(existsSync).mockReturnValueOnce(true); // indexPath check
-        vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({
+        vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify({
           version: 1,
           entries: [],
         }));
 
         await lockedController.bind(mockProcess as any, {});
 
+        expect(readFile).toHaveBeenCalledWith('/custom/cache/dir/cache-index.json', 'utf-8');
         // lockが呼ばれたことを確認
         expect(lock).toHaveBeenCalledWith(
           '/custom/cache/dir/cache-index.json',
