@@ -1,5 +1,13 @@
 # @modular-prompt/driver
 
+## 0.13.2
+
+### Patch Changes
+
+- d15e70d: feat: CacheHandle に supersedes フィールドを追加。incremental プリフィル時に置き換え元キャッシュの ref を返すことで、呼び出し側での古いキャッシュ削除を可能にした。
+- 41e8166: feat: cache-index.json のファイルロック機構を追加し、invalidate()を release()ヒント機構に置き換え。proper-lockfile によるアドバイザリロックで外部プロセスとの安全な共有を実現。release()はキャッシュの「もう要らない」ヒントを送るだけで、実際の削除は close()時またはキャッシュクリーンプロセスに委ねる設計に変更。
+- a4af06a: refactor: tool-call-parser をモジュール構造に分割し、ContentParser インターフェースによるプラグイン構造を導入。MiniCPM5 XML フォーマット対応を含む。
+
 ## 0.13.1
 
 ### Patch Changes
