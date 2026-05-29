@@ -87,7 +87,7 @@ importers:
         specifier: 5.23.2
         version: 5.23.2(ws@8.18.3)(zod@3.25.76)
       proper-lockfile:
-        specifier: ^4.1.2
+        specifier: 4.1.2
         version: 4.1.2
     devDependencies:
       '@eslint/js':
@@ -97,7 +97,7 @@ importers:
         specifier: 20.19.27
         version: 20.19.27
       '@types/proper-lockfile':
-        specifier: ^4.1.4
+        specifier: 4.1.4
         version: 4.1.4
       '@typescript-eslint/eslint-plugin':
         specifier: 8.50.0

@@ -251,7 +251,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
         ref: 'cachedContents/abc',
         includes: { instructions: true, dataElementCount: 1, tools: false },
       }),
-      invalidate: vi.fn(),
+      release: vi.fn(),
       close: vi.fn(),
     };
     driver = new GoogleGenAIDriver({
@@ -377,7 +377,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
         ref: 'cachedContents/partial',
         includes: { instructions: false, dataElementCount: 1, tools: false },
       }),
-      invalidate: vi.fn(),
+      release: vi.fn(),
       close: vi.fn(),
     };
     const partialDriver = new GoogleGenAIDriver({
@@ -409,7 +409,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
         ref: 'cachedContents/no-data',
         includes: { instructions: true, dataElementCount: 0, tools: false },
       }),
-      invalidate: vi.fn(),
+      release: vi.fn(),
       close: vi.fn(),
     };
     const noDataDriver = new GoogleGenAIDriver({
