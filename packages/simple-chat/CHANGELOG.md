@@ -1,5 +1,16 @@
 # @modular-prompt/simple-chat
 
+## 0.4.2
+
+### Patch Changes
+
+- 49cf1f5: fix: --quiet モードでモデルの応答コンテンツが表示されるように修正
+- Updated dependencies [d15e70d]
+- Updated dependencies [41e8166]
+- Updated dependencies [a4af06a]
+  - @modular-prompt/driver@0.13.2
+  - @modular-prompt/process@0.5.3
+
 ## 0.4.1
 
 ### Patch Changes
