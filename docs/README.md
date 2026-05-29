@@ -29,6 +29,7 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 - **[Structured Outputs仕様](./STRUCTURED_OUTPUTS.md)** - 構造化出力の仕様と実装ガイド
 - **[テスト用ドライバーガイド](./TEST_DRIVERS.md)** - TestDriverとEchoDriverの使い方
 - **[Formatter仕様](./FORMATTER_SPEC.md)** - CompiledPromptのレンダリング仕様とFormatterOptions
+- **[プロンプトキャッシュ設計](./CACHE_DESIGN.md)** - PromptCacheControllerの設計思想とキャッシュライフサイクル管理
 
 ### モデル固有の挙動
 

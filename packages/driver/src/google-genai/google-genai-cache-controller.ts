@@ -135,11 +135,11 @@ export class GoogleGenAICacheController implements PromptCacheController {
     return handle;
   }
 
-  async invalidate(handle: CacheHandle): Promise<void> {
-    await this.client.caches.delete({ name: handle.ref });
-    this.managedCaches.delete(handle.ref);
+  release(ref: string): void {
+    this.client.caches.delete({ name: ref }).catch(() => {});
+    this.managedCaches.delete(ref);
     for (const [key, entry] of this.cacheByHash) {
-      if (entry.handle.ref === handle.ref) {
+      if (entry.handle.ref === ref) {
         this.cacheByHash.delete(key);
         break;
       }

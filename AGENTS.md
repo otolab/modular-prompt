@@ -114,6 +114,7 @@ npm run lint
 - `@modular-prompt/driver` - AIモデルドライバー
   - OpenAI、Anthropic、VertexAI、GoogleGenAI、Ollama、MLX、vLLM
   - 統一インターフェースとストリーミングサポート
+  - プロンプトキャッシュ管理（PromptCacheController）
   - StreamResult型: stream（AsyncIterable<string>）+ result（Promise<QueryResult>）
 
 ### ユーティリティパッケージ
