@@ -722,11 +722,10 @@ export class MlxCacheController implements PromptCacheController {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     } else {
       const released = this.cacheIndex.entries.filter(e => e.hint === 'release');
-      for (const entry of released) {
+      await Promise.allSettled(released.flatMap(entry => {
         const path = this.generateCachePath(entry.key);
-        await unlink(path).catch(() => {});
-        await unlink(path + '.meta.json').catch(() => {});
-      }
+        return [unlink(path), unlink(path + '.meta.json')];
+      }));
       this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.hint !== 'release');
       await this.saveIndex();
     }
