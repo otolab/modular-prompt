@@ -82,7 +82,6 @@ describe('formatCompletionPrompt', () => {
 
     const result = formatCompletionPrompt(prompt, ECHO_SPECIAL_TOKENS);
 
-    // formatCompletionPrompt always adds section headers
     expect(result).toContain('# Data');
     // ECHO_SPECIAL_TOKENS markers are applied to chunk elements
     expect(result).toContain('<chunk>');
@@ -195,6 +194,38 @@ describe('formatCompletionPrompt', () => {
 
     // Output section is not shown when there are no output elements or schema
     expect(result).not.toContain('# Output');
+  });
+
+  it('should show Output section with schema when output elements are empty', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Do something' }
+      ],
+      data: [],
+      output: [],
+      metadata: {
+        outputSchema: {
+          type: 'object',
+          properties: {
+            isNewTopic: { type: 'boolean' },
+            title: { type: 'string' }
+          }
+        }
+      }
+    };
+
+    const result = formatCompletionPrompt(prompt);
+
+    expect(result).toContain('# Output');
+    expect(result).toContain('### Output Schema');
+    expect(result).toContain('isNewTopic');
+    expect(result).toContain('```json');
+    // Schema should appear after Instructions, not inside it
+    const instructionsIndex = result.indexOf('# Instructions');
+    const outputIndex = result.indexOf('# Output');
+    const schemaIndex = result.indexOf('### Output Schema');
+    expect(outputIndex).toBeGreaterThan(instructionsIndex);
+    expect(schemaIndex).toBeGreaterThan(outputIndex);
   });
 
   it('should include preamble when provided', () => {

@@ -69,7 +69,7 @@ export function formatCompletionPrompt(
   }
 
   // Format output section with header
-  const hasOutputElements = prompt.output && prompt.output.length > 0;
+  const hasOutputElements = (prompt.output?.length ?? 0) > 0;
   const hasOutputSchema = !!prompt.metadata?.outputSchema;
 
   if (hasOutputElements || hasOutputSchema) {
