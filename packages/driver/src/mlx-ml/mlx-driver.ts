@@ -299,12 +299,11 @@ export class MlxDriver implements AIDriver {
 
       // Cache: chat APIのみ、以下の条件を全て満たす場合にキャッシュを使用
       // - options.cache !== false（呼び出し側が明示的に無効化していない）
-      // - outputSchema未使用（スキーマはInstructionsセクションに挿入されキャッシュプレフィックスに影響するため）
       // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
       let cachePath: string | undefined;
       let cacheTrimTokens: number | undefined;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
-      if (this.cacheController && options?.cache !== false && !augmentedPrompt.metadata?.outputSchema && trustRemoteCode === undefined) {
+      if (this.cacheController && options?.cache !== false && trustRemoteCode === undefined) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
