@@ -87,7 +87,8 @@ describe('formatCompletionPrompt', () => {
     // ECHO_SPECIAL_TOKENS markers are applied to chunk elements
     expect(result).toContain('<chunk>');
     expect(result).toContain('</chunk>');
-    expect(result).toContain('# Output');
+    // Output section is not shown when there are no output elements or schema
+    expect(result).not.toContain('# Output');
   });
 
   it('should format chunk elements', () => {
@@ -192,9 +193,8 @@ describe('formatCompletionPrompt', () => {
 
     const result = formatCompletionPrompt(prompt);
 
-    // Even with empty prompt, Output section header is always included
-    expect(result).toContain('# Output');
-    expect(result).toContain('This section is where you write your response.');
+    // Output section is not shown when there are no output elements or schema
+    expect(result).not.toContain('# Output');
   });
 
   it('should include preamble when provided', () => {

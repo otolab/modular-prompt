@@ -137,8 +137,8 @@ describe('formatCompletionPrompt', () => {
     // Data section is included
     expect(result).toContain('# Data');
     expect(result).toContain('Some data');
-    // Output section is always included
-    expect(result).toContain('# Output');
+    // Output section is not shown when there are no output elements or schema
+    expect(result).not.toContain('# Output');
   });
   
   it('should use custom line breaks', () => {

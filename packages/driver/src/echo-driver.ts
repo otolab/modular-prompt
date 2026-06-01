@@ -1,7 +1,7 @@
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { AIDriver, QueryOptions, QueryResult, StreamResult } from './types.js';
 import type { FormatterOptions } from './formatter/types.js';
-import { formatCompletionPrompt, formatPromptAsMessages, ECHO_SPECIAL_TOKENS, defaultFormatterTexts } from './formatter/converter.js';
+import { formatCompletionPrompt, formatPromptAsMessages, ECHO_SPECIAL_TOKENS } from './formatter/converter.js';
 import { extractJSON } from '@modular-prompt/utils';
 
 /**
@@ -122,59 +122,25 @@ export class EchoDriver implements AIDriver {
 
       case 'both': {
         // Both text and messages in a single object
-        // outputSchemaの二重出力を防ぐため、一時的に削除してフォーマット
-        const outputSchema = prompt.metadata?.outputSchema;
-        const promptWithoutSchema = outputSchema ? {
-          ...prompt,
-          metadata: { ...prompt.metadata, outputSchema: undefined }
-        } : prompt;
-
-        const text = formatCompletionPrompt(promptWithoutSchema, this.formatterOptions);
-        const messages = formatPromptAsMessages(promptWithoutSchema, this.formatterOptions);
-
-        // outputSchemaがある場合は一度だけ追加
-        let finalText = text;
-        let finalMessages = messages;
-        if (outputSchema) {
-          const schemaContent = JSON.stringify(outputSchema, null, 2);
-          const schemaMessage = `### Output Schema\n\n${defaultFormatterTexts.schemaInstruction}\n\nJSONSchema:\n\`\`\`json\n${schemaContent}\n\`\`\``;
-          finalText = `${text}\n\n${schemaMessage}`;
-          finalMessages = [...messages, { role: 'system', content: schemaMessage }];
-        }
+        const text = formatCompletionPrompt(prompt, this.formatterOptions);
+        const messages = formatPromptAsMessages(prompt, this.formatterOptions);
 
         content = JSON.stringify({
-          text: finalText,
-          messages: finalMessages
+          text,
+          messages
         }, null, 2);
         break;
       }
 
       case 'debug': {
-        // outputSchemaの二重出力を防ぐため、一時的に削除してフォーマット
-        const outputSchema = prompt.metadata?.outputSchema;
-        const promptWithoutSchema = outputSchema ? {
-          ...prompt,
-          metadata: { ...prompt.metadata, outputSchema: undefined }
-        } : prompt;
-
-        const text = formatCompletionPrompt(promptWithoutSchema, this.formatterOptions);
-        const messages = formatPromptAsMessages(promptWithoutSchema, this.formatterOptions);
-
-        // outputSchemaがある場合は一度だけ追加
-        let finalText = text;
-        let finalMessages = messages;
-        if (outputSchema) {
-          const schemaContent = JSON.stringify(outputSchema, null, 2);
-          const schemaMessage = `### Output Schema\n\n${defaultFormatterTexts.schemaInstruction}\n\nJSONSchema:\n\`\`\`json\n${schemaContent}\n\`\`\``;
-          finalText = `${text}\n\n${schemaMessage}`;
-          finalMessages = [...messages, { role: 'system', content: schemaMessage }];
-        }
+        const text = formatCompletionPrompt(prompt, this.formatterOptions);
+        const messages = formatPromptAsMessages(prompt, this.formatterOptions);
 
         const debug = {
           raw: prompt,
           formatted: {
-            text: finalText,
-            messages: finalMessages
+            text,
+            messages
           },
           metadata: {
             instructionsCount: prompt.instructions?.length || 0,
