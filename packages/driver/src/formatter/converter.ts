@@ -77,11 +77,14 @@ export function formatPromptAsMessages(
     }
   }
   
-  // Process output section
+  // Output section: always included by default to match the preamble's
+  // "three main sections" declaration. Set alwaysIncludeOutputHeader: false
+  // to suppress when there is no output content.
+  const alwaysOutput = options.alwaysIncludeOutputHeader !== false;
   const hasOutputElements = (prompt.output?.length ?? 0) > 0;
   const hasOutputSchema = !!prompt.metadata?.outputSchema;
 
-  if (hasOutputElements || hasOutputSchema) {
+  if (alwaysOutput || hasOutputElements || hasOutputSchema) {
     const outputHeader = sectionDescriptions?.output
       ? `# Output\n\n${sectionDescriptions.output}`
       : '# Output';

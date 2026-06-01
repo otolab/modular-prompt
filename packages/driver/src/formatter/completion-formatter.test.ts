@@ -86,8 +86,8 @@ describe('formatCompletionPrompt', () => {
     // ECHO_SPECIAL_TOKENS markers are applied to chunk elements
     expect(result).toContain('<chunk>');
     expect(result).toContain('</chunk>');
-    // Output section is not shown when there are no output elements or schema
-    expect(result).not.toContain('# Output');
+    // Output section is always included by default (matches preamble structure)
+    expect(result).toContain('# Output');
   });
 
   it('should format chunk elements', () => {
@@ -192,7 +192,24 @@ describe('formatCompletionPrompt', () => {
 
     const result = formatCompletionPrompt(prompt);
 
-    // Output section is not shown when there are no output elements or schema
+    // Output section is always included by default
+    expect(result).toContain('# Output');
+  });
+
+  it('should suppress Output section when alwaysIncludeOutputHeader is false', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Task' }
+      ],
+      data: [],
+      output: []
+    };
+
+    const result = formatCompletionPrompt(prompt, {
+      alwaysIncludeOutputHeader: false
+    });
+
+    expect(result).toContain('# Instructions');
     expect(result).not.toContain('# Output');
   });
 

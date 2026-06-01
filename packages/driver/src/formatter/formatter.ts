@@ -14,7 +14,7 @@ import type { ElementFormatter, FormatterOptions, SpecialToken, SpecialTokenPair
  * Default formatter implementation for converting elements to text
  */
 export class DefaultFormatter implements ElementFormatter {
-  private options: Required<Omit<FormatterOptions, 'preamble' | 'sectionDescriptions' | 'formatter' | 'specialTokens'>> & 
+  private options: Required<Omit<FormatterOptions, 'preamble' | 'sectionDescriptions' | 'formatter' | 'specialTokens' | 'alwaysIncludeOutputHeader'>> &
     Pick<FormatterOptions, 'preamble' | 'sectionDescriptions' | 'specialTokens'>;
   private specialTokens?: Record<string, SpecialToken | SpecialTokenPair>;
   

@@ -266,8 +266,8 @@ describe('Section Headers in Prompts', () => {
 
       const messages = formatPromptAsMessages(prompt, defaultFormatterTexts);
 
-      // When preamble is provided via defaultFormatterTexts, should have preamble message only
-      expect(messages).toHaveLength(1);
+      // When preamble is provided via defaultFormatterTexts, should have preamble message + Output header
+      expect(messages).toHaveLength(2);
       expect(messages[0].content).toContain('This prompt is organized into three main sections');
     });
 
