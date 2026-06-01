@@ -58,16 +58,8 @@ export function formatPromptAsMessages(
       messages.push(...elementToMessages(element, formatter));
     }
 
-    // Add output schema to Instructions section if metadata.outputSchema exists
-    if (prompt.metadata?.outputSchema) {
-      const schemaContent = JSON.stringify(prompt.metadata.outputSchema, null, 2);
-      messages.push({
-        role: 'system',
-        content: `### Output Schema\n\n${defaultFormatterTexts.schemaInstruction}\n\nJSONSchema:\n\`\`\`json\n${schemaContent}\n\`\`\``
-      });
-    }
   }
-  
+
   // Process data section
   if (prompt.data && prompt.data.length > 0) {
     // Add section header with description
@@ -85,8 +77,14 @@ export function formatPromptAsMessages(
     }
   }
   
-  // Process output section
-  if (prompt.output && prompt.output.length > 0) {
+  // Output section: always included by default to match the preamble's
+  // "three main sections" declaration. Set alwaysIncludeOutputHeader: false
+  // to suppress when there is no output content.
+  const alwaysOutput = options.alwaysIncludeOutputHeader !== false;
+  const hasOutputElements = (prompt.output?.length ?? 0) > 0;
+  const hasOutputSchema = !!prompt.metadata?.outputSchema;
+
+  if (alwaysOutput || hasOutputElements || hasOutputSchema) {
     const outputHeader = sectionDescriptions?.output
       ? `# Output\n\n${sectionDescriptions.output}`
       : '# Output';
@@ -95,9 +93,18 @@ export function formatPromptAsMessages(
       content: outputHeader
     });
 
-    // Convert each element to a message
-    for (const element of prompt.output) {
-      messages.push(...elementToMessages(element, formatter));
+    if (hasOutputSchema) {
+      const schemaContent = JSON.stringify(prompt.metadata!.outputSchema, null, 2);
+      messages.push({
+        role: 'system',
+        content: `### Output Schema\n\n${defaultFormatterTexts.schemaInstruction}\n\nJSONSchema:\n\`\`\`json\n${schemaContent}\n\`\`\``
+      });
+    }
+
+    if (hasOutputElements) {
+      for (const element of prompt.output!) {
+        messages.push(...elementToMessages(element, formatter));
+      }
     }
   }
 

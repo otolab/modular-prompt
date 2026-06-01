@@ -73,6 +73,14 @@ export interface FormatterOptions {
    * Line break settings
    */
   lineBreak?: '\n' | '\r\n';
+
+  /**
+   * Whether to always include the Output section header.
+   * Default: true — the default preamble declares three sections (Instructions, Data, Output),
+   * so omitting the Output header would contradict that structure.
+   * Set to false for chat-style formatting where trailing messages are preferred over section framing.
+   */
+  alwaysIncludeOutputHeader?: boolean;
   
   /**
    * Model-specific special tokens

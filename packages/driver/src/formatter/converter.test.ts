@@ -137,10 +137,10 @@ describe('formatCompletionPrompt', () => {
     // Data section is included
     expect(result).toContain('# Data');
     expect(result).toContain('Some data');
-    // Output section is always included
+    // Output section is always included by default
     expect(result).toContain('# Output');
   });
-  
+
   it('should use custom line breaks', () => {
     const prompt: CompiledPrompt = {
       instructions: [
@@ -360,8 +360,8 @@ describe('formatPromptAsMessages', () => {
         instructions: 'Follow these carefully'
       }
     });
-    
-    expect(messages).toHaveLength(3);
+
+    expect(messages).toHaveLength(4);
     
     // Preamble
     expect(messages[0]).toEqual({
@@ -391,12 +391,12 @@ describe('formatPromptAsMessages', () => {
       ],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(3);
+    expect(messages).toHaveLength(4);
 
     expect(messages[0]).toEqual({
       role: 'system',
@@ -424,12 +424,12 @@ describe('formatPromptAsMessages', () => {
       data: [],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Instructions'
@@ -454,12 +454,12 @@ describe('formatPromptAsMessages', () => {
       ],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Data'
@@ -489,12 +489,12 @@ describe('formatPromptAsMessages', () => {
       ],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(3);
+    expect(messages).toHaveLength(4);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Data'
@@ -523,12 +523,12 @@ describe('formatPromptAsMessages', () => {
       ],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Data'
@@ -551,12 +551,12 @@ describe('formatPromptAsMessages', () => {
       ],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Data'
@@ -620,15 +620,67 @@ describe('formatPromptAsMessages', () => {
       ],
       output: []
     };
-    
+
     const messages = formatPromptAsMessages(prompt, {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    // Should only have data section
+    // Data + Output (always included by default)
+    expect(messages).toHaveLength(3);
+    expect(messages[0].content).toBe('# Data');
+    expect(messages[1].content).toBe('Some data');
+    expect(messages[2].content).toBe('# Output');
+  });
+
+  it('should suppress Output section when alwaysIncludeOutputHeader is false', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [],
+      data: [
+        { type: 'text', content: 'Some data' }
+      ],
+      output: []
+    };
+
+    const messages = formatPromptAsMessages(prompt, {
+      sectionDescriptions: {},
+      alwaysIncludeOutputHeader: false
+    });
+
     expect(messages).toHaveLength(2);
     expect(messages[0].content).toBe('# Data');
     expect(messages[1].content).toBe('Some data');
+  });
+
+  it('should show Output section with schema when output elements are empty', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Process input' }
+      ],
+      data: [],
+      output: [],
+      metadata: {
+        outputSchema: {
+          type: 'object',
+          properties: {
+            isNewTopic: { type: 'boolean' },
+            title: { type: 'string' }
+          }
+        }
+      }
+    };
+
+    const messages = formatPromptAsMessages(prompt, {
+      sectionDescriptions: {}
+    });
+
+    // Instructions header + content + Output header + schema = 4 messages
+    expect(messages).toHaveLength(4);
+    expect(messages[0].content).toBe('# Instructions');
+    expect(messages[1].content).toBe('Process input');
+    expect(messages[2].content).toBe('# Output');
+    expect((messages[3].content as string)).toContain('### Output Schema');
+    expect((messages[3].content as string)).toContain('isNewTopic');
+    expect((messages[3].content as string)).toContain('```json');
   });
   
   it('should use default formatter texts', () => {
@@ -699,7 +751,7 @@ describe('formatPromptAsMessages', () => {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Data'
@@ -730,7 +782,7 @@ describe('formatPromptAsMessages', () => {
       sectionDescriptions: {} // Disable section descriptions for basic test
     });
 
-    expect(messages).toHaveLength(2);
+    expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({
       role: 'system',
       content: '# Data'

@@ -54,20 +54,6 @@ export function formatCompletionPrompt(
     }
     sections.push('');
     sections.push(formatter.formatAll(prompt.instructions));
-
-    // Add output schema to Instructions section if metadata.outputSchema exists
-    if (prompt.metadata?.outputSchema) {
-      sections.push('');
-      const schemaContent = JSON.stringify(prompt.metadata.outputSchema, null, 2);
-      sections.push('### Output Schema');
-      sections.push('');
-      sections.push(defaultFormatterTexts.schemaInstruction);
-      sections.push('');
-      sections.push('JSONSchema:');
-      sections.push('```json');
-      sections.push(schemaContent);
-      sections.push('```');
-    }
   }
 
   // Format data section with header
@@ -82,16 +68,36 @@ export function formatCompletionPrompt(
     sections.push(formatter.formatAll(prompt.data));
   }
 
-  // Format output section with header - always show the section
-  if (sections.length > 0) sections.push('');
-  sections.push('# Output');
-  if (sectionDescriptions?.output) {
-    sections.push('');
-    sections.push(sectionDescriptions.output);
-  }
-  if (prompt.output && prompt.output.length > 0) {
-    sections.push('');
-    sections.push(formatter.formatAll(prompt.output));
+  // Output section: always included by default to match the preamble's
+  // "three main sections" declaration. Set alwaysIncludeOutputHeader: false
+  // to suppress when there is no output content.
+  const alwaysOutput = options.alwaysIncludeOutputHeader !== false;
+  const hasOutputElements = (prompt.output?.length ?? 0) > 0;
+  const hasOutputSchema = !!prompt.metadata?.outputSchema;
+
+  if (alwaysOutput || hasOutputElements || hasOutputSchema) {
+    if (sections.length > 0) sections.push('');
+    sections.push('# Output');
+    if (sectionDescriptions?.output) {
+      sections.push('');
+      sections.push(sectionDescriptions.output);
+    }
+    if (hasOutputSchema) {
+      sections.push('');
+      const schemaContent = JSON.stringify(prompt.metadata!.outputSchema, null, 2);
+      sections.push('### Output Schema');
+      sections.push('');
+      sections.push(defaultFormatterTexts.schemaInstruction);
+      sections.push('');
+      sections.push('JSONSchema:');
+      sections.push('```json');
+      sections.push(schemaContent);
+      sections.push('```');
+    }
+    if (hasOutputElements) {
+      sections.push('');
+      sections.push(formatter.formatAll(prompt.output!));
+    }
   }
 
   return sections.join(lineBreak);

@@ -82,11 +82,11 @@ describe('formatCompletionPrompt', () => {
 
     const result = formatCompletionPrompt(prompt, ECHO_SPECIAL_TOKENS);
 
-    // formatCompletionPrompt always adds section headers
     expect(result).toContain('# Data');
     // ECHO_SPECIAL_TOKENS markers are applied to chunk elements
     expect(result).toContain('<chunk>');
     expect(result).toContain('</chunk>');
+    // Output section is always included by default (matches preamble structure)
     expect(result).toContain('# Output');
   });
 
@@ -192,9 +192,57 @@ describe('formatCompletionPrompt', () => {
 
     const result = formatCompletionPrompt(prompt);
 
-    // Even with empty prompt, Output section header is always included
+    // Output section is always included by default
     expect(result).toContain('# Output');
-    expect(result).toContain('This section is where you write your response.');
+  });
+
+  it('should suppress Output section when alwaysIncludeOutputHeader is false', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Task' }
+      ],
+      data: [],
+      output: []
+    };
+
+    const result = formatCompletionPrompt(prompt, {
+      alwaysIncludeOutputHeader: false
+    });
+
+    expect(result).toContain('# Instructions');
+    expect(result).not.toContain('# Output');
+  });
+
+  it('should show Output section with schema when output elements are empty', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Do something' }
+      ],
+      data: [],
+      output: [],
+      metadata: {
+        outputSchema: {
+          type: 'object',
+          properties: {
+            isNewTopic: { type: 'boolean' },
+            title: { type: 'string' }
+          }
+        }
+      }
+    };
+
+    const result = formatCompletionPrompt(prompt);
+
+    expect(result).toContain('# Output');
+    expect(result).toContain('### Output Schema');
+    expect(result).toContain('isNewTopic');
+    expect(result).toContain('```json');
+    // Schema should appear after Instructions, not inside it
+    const instructionsIndex = result.indexOf('# Instructions');
+    const outputIndex = result.indexOf('# Output');
+    const schemaIndex = result.indexOf('### Output Schema');
+    expect(outputIndex).toBeGreaterThan(instructionsIndex);
+    expect(schemaIndex).toBeGreaterThan(outputIndex);
   });
 
   it('should include preamble when provided', () => {
