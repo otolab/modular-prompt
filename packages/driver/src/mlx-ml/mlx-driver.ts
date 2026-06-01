@@ -297,12 +297,13 @@ export class MlxDriver implements AIDriver {
         ? messages.flatMap(m => 'content' in m && !isToolResult(m) ? extractImagePaths(m.content) : [])
         : [];
 
-      // Cache: chat APIのみ、trustRemoteCode未指定の場合にキャッシュを使用
+      // Cache: chat APIのみ、以下の条件を全て満たす場合にキャッシュを使用
+      // - options.cache !== false（呼び出し側が明示的に無効化していない）
       // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
       let cachePath: string | undefined;
       let cacheTrimTokens: number | undefined;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
-      if (this.cacheController && trustRemoteCode === undefined) {
+      if (this.cacheController && options?.cache !== false && trustRemoteCode === undefined) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
         const hasCacheableContent =
           prefix.instructions.length > 0 ||
