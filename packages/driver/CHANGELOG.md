@@ -1,5 +1,12 @@
 # @modular-prompt/driver
 
+## 0.13.3
+
+### Patch Changes
+
+- eae48db: fix: MlxDriver で QueryOptions.cache オプションを尊重するように修正。cache: false 指定時に KV キャッシュを迂回する。
+- 0920f17: fix: outputSchema の挿入位置を Instructions セクションから Output セクションに移動。Output セクションヘッダーは preamble の"three main sections"宣言と一貫性を保つためデフォルトで常に出力されるように変更。alwaysIncludeOutputHeader: false で抑制可能。これにより MlxDriver の outputSchema 使用時のキャッシュ迂回ガードが不要になり、routing リクエスト等でもキャッシュが利用可能に。
+
 ## 0.13.2
 
 ### Patch Changes
