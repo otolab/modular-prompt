@@ -1,6 +1,6 @@
 ---
-"@modular-prompt/driver": minor
-"@modular-prompt/simple-chat": minor
+"@modular-prompt/driver": patch
+"@modular-prompt/simple-chat": patch
 ---
 
 feat: キャッシュのread-onlyモードを追加
