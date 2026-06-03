@@ -4,7 +4,8 @@
   "private": true,
   "description": "Modular prompt framework for generative AI",
   "bin": {
-    "simple-chat": "./bin/simple-chat.mjs"
+    "simple-chat": "./scripts/simple-chat.mjs",
+    "experiment": "./scripts/experiment.mjs"
   },
   "scripts": {
     "build": "pnpm run -r build",
