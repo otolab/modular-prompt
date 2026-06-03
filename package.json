@@ -3,6 +3,9 @@
   "version": "0.16.2",
   "private": true,
   "description": "Modular prompt framework for generative AI",
+  "bin": {
+    "simple-chat": "./bin/simple-chat.mjs"
+  },
   "scripts": {
     "build": "pnpm run -r build",
     "test": "pnpm run -r test",
