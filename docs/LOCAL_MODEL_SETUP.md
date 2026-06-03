@@ -45,7 +45,7 @@ npm install @modular-prompt/driver
 
 ```bash
 cd node_modules/@modular-prompt/driver
-./src/mlx-ml/python/setup.sh
+npm run setup-mlx
 ```
 
 **セットアップ内容：**
@@ -109,7 +109,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # MLX環境の再セットアップ
 cd node_modules/@modular-prompt/driver
-./src/mlx-ml/python/setup.sh
+npm run setup-mlx
 ```
 
 #### モデルのダウンロードが失敗する
