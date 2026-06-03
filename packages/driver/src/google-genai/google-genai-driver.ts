@@ -154,7 +154,7 @@ export class GoogleGenAIDriver implements AIDriver {
         (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
     };
 
-    if (cacheHandle) {
+    if (cacheHandle?.ref) {
       config.cachedContent = cacheHandle.ref;
       if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
         config.tools = convertTools(mergedOptions.tools);
