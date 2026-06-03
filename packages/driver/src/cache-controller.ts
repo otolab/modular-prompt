@@ -7,6 +7,8 @@ export interface CachePrepareParams {
   data?: Element[];
   tools?: ToolDefinition[];
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** When true, only return existing cache hits — never create new entries */
+  readOnly?: boolean;
 }
 
 export interface CacheHandle {

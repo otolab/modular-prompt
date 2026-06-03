@@ -22,6 +22,10 @@ function parseTtlSeconds(ttl: string): number {
 }
 
 export class GoogleGenAICacheController implements PromptCacheController {
+  private static readonly EMPTY_HANDLE: CacheHandle = {
+    ref: '', includes: { instructions: false, dataElementCount: 0, tools: false }
+  };
+
   private managedCaches = new Set<string>();
   private cacheByHash = new Map<string, CacheEntry>();
   private inflightRequests = new Map<string, Promise<CacheHandle>>();
@@ -76,6 +80,10 @@ export class GoogleGenAICacheController implements PromptCacheController {
     const inflight = this.inflightRequests.get(cacheKey);
     if (inflight) {
       return inflight;
+    }
+
+    if (params.readOnly) {
+      return GoogleGenAICacheController.EMPTY_HANDLE;
     }
 
     const promise = this.createCache(params, cacheKey);

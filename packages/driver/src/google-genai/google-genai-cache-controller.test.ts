@@ -111,6 +111,31 @@ describe('GoogleGenAICacheController', () => {
       expect(handle.includes.dataElementCount).toBe(0);
     });
 
+    it('should return empty handle on read-only cache miss', async () => {
+      const handle = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text', content: 'Be helpful' }],
+        readOnly: true,
+      });
+
+      expect(handle.ref).toBe('');
+      expect(mockClient.caches.create).not.toHaveBeenCalled();
+    });
+
+    it('should return cached handle on read-only memory hit', async () => {
+      const params = {
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text' as const, content: 'Be helpful' }],
+        data: [{ type: 'material' as const, id: 'm1', title: 'Doc', content: 'text' }],
+      };
+      const handle1 = await controller.prepare(params);
+      expect(mockClient.caches.create).toHaveBeenCalledTimes(1);
+
+      const handle2 = await controller.prepare({ ...params, readOnly: true });
+      expect(handle2.ref).toBe(handle1.ref);
+      expect(mockClient.caches.create).toHaveBeenCalledTimes(1);
+    });
+
     it('should reuse cache for identical params', async () => {
       const params = {
         model: 'gemini-2.5-flash',
@@ -278,6 +303,7 @@ describe('GoogleGenAIDriver with CacheController', () => {
       instructions: [{ type: 'text', content: 'Be helpful' }],
       data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'stable content' }],
       tools: undefined,
+      readOnly: false,
     });
 
     const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;

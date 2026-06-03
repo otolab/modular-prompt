@@ -129,6 +129,69 @@ describe('MlxCacheController', () => {
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
 
+    it('should return empty handle on read-only cache miss', async () => {
+      const handle = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'Be helpful' }],
+        readOnly: true,
+      });
+
+      expect(handle.ref).toBe('');
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+      expect(mockProcess.tokenize).toHaveBeenCalled();
+    });
+
+    it('should return cached handle on read-only memory hit', async () => {
+      const params = {
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'Be helpful' }],
+      };
+
+      // First call creates the cache
+      const handle1 = await controller.prepare(params);
+      expect(handle1.ref).toMatch(/\.safetensors$/);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+
+      // Second call with readOnly returns the cached handle
+      const handle2 = await controller.prepare({ ...params, readOnly: true });
+      expect(handle2.ref).toBe(handle1.ref);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return disk-cached handle on read-only disk hit', async () => {
+      const params = {
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'Be helpful' }],
+      };
+
+      // First call creates the cache on disk
+      const handle1 = await controller.prepare(params);
+      expect(handle1.ref).toMatch(/\.safetensors$/);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+
+      // Clear memory cache to force disk lookup
+      (controller as unknown as { cacheByHash: Map<string, unknown> }).cacheByHash.clear();
+
+      // Simulate disk files exist for the cache path
+      const cachePath = handle1.ref;
+      vi.mocked(existsSync).mockImplementation((p: string | URL) => {
+        const s = typeof p === 'string' ? p : p.toString();
+        return s === cachePath || s === cachePath + '.meta.json';
+      });
+      vi.mocked(readFileSync).mockImplementation((p: string | URL | number) => {
+        const s = typeof p === 'string' ? p : String(p);
+        if (s === cachePath + '.meta.json') {
+          return JSON.stringify({ token_count: 100 });
+        }
+        return '';
+      });
+
+      // read-only should find the disk cache and return it
+      const handle2 = await controller.prepare({ ...params, readOnly: true });
+      expect(handle2.ref).toBe(handle1.ref);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+    });
+
     it('should accept tools and pass them to cachePrefill', async () => {
       const handle = await controller.prepare({
         model: 'test-model',

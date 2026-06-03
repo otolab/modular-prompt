@@ -162,8 +162,14 @@ export interface QueryOptions {
   toolChoice?: ToolChoice;
   /** Reasoning effort level for thinking models (e.g., o-series, llm-jp-4-thinking) */
   reasoningEffort?: 'low' | 'medium' | 'high';
-  /** Enable prompt caching (driver-specific optimization) */
-  cache?: boolean;
+  /**
+   * Prompt caching strategy (driver-specific optimization).
+   * - true: enable cache (read and write)
+   * - false: disable cache entirely
+   * - 'read-only': use existing cache but never create new entries
+   * - undefined: driver default behavior
+   */
+  cache?: boolean | 'read-only';
 }
 
 /**

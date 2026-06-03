@@ -317,6 +317,7 @@ export class MlxDriver implements AIDriver {
             data: prefix.data,
             tools: nativeTools ? options!.tools : undefined,
             reasoningEffort: options?.reasoningEffort,
+            readOnly: options?.cache === 'read-only',
           });
           cachePath = handle.ref || undefined;
           cacheTrimTokens = handle.trimTokens;

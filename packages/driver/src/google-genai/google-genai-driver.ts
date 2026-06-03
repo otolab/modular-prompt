@@ -108,6 +108,7 @@ export class GoogleGenAIDriver implements AIDriver {
           instructions: partition.cacheable.instructions,
           data: partition.cacheable.data,
           tools: mergedOptions.tools,
+          readOnly: mergedOptions.cache === 'read-only',
         });
 
         const instructionsForRequest = handle.includes.instructions
@@ -153,7 +154,7 @@ export class GoogleGenAIDriver implements AIDriver {
         (mergedOptions.mode === 'thinking' ? { thinkingLevel: 'HIGH' } : undefined),
     };
 
-    if (cacheHandle) {
+    if (cacheHandle?.ref) {
       config.cachedContent = cacheHandle.ref;
       if (!cacheHandle.includes.tools && mergedOptions.tools && mergedOptions.tools.length > 0) {
         config.tools = convertTools(mergedOptions.tools);

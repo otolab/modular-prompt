@@ -113,6 +113,10 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.draftBlockSize = options.draftBlockSize;
     logger.info(chalk.gray(`⚡ Draft block size: ${options.draftBlockSize}`));
   }
+  if (options.cache !== undefined) {
+    profile.options = profile.options || {};
+    profile.options.cache = options.cache;
+  }
   if (profile.cacheDir) {
     const base = options.profilePath ? dirname(resolve(options.profilePath)) : process.cwd();
     profile.cacheDir = resolve(base, profile.cacheDir);

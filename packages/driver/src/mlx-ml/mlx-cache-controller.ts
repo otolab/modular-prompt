@@ -615,6 +615,11 @@ export class MlxCacheController implements PromptCacheController {
         return handle;
       }
 
+      if (params.readOnly) {
+        logger.verbose('read-only cache miss', cacheKey.slice(0, 12));
+        return MlxCacheController.EMPTY_HANDLE;
+      }
+
       if (base) {
         logger.verbose('incremental prefill from', base.path.split('/').pop(),
           base.trimTokens != null ? `(trim to ${base.trimTokens})` : '');
