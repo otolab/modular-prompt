@@ -164,9 +164,10 @@ export interface QueryOptions {
   reasoningEffort?: 'low' | 'medium' | 'high';
   /**
    * Prompt caching strategy (driver-specific optimization).
-   * - true / undefined: read and write cache (default)
+   * - true: enable cache (read and write)
    * - false: disable cache entirely
    * - 'read-only': use existing cache but never create new entries
+   * - undefined: driver default behavior
    */
   cache?: boolean | 'read-only';
 }
