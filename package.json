@@ -13,9 +13,8 @@
     "lint": "pnpm run -r lint",
     "typecheck": "pnpm run -r typecheck",
     "prepack:all": "pnpm run -r --if-present prepack",
-    "chat": "node packages/simple-chat/dist/cli.js",
-    "chat:help": "node packages/simple-chat/dist/cli.js --help",
-    "chat:template": "node packages/simple-chat/dist/cli.js --generate-template",
+    "chat": "pnpm --filter @modular-prompt/simple-chat exec simple-chat",
+    "experiment": "pnpm --filter @modular-prompt/experiment exec modular-experiment",
     "mlx:setup": "cd packages/driver/src/mlx-ml/python && uv sync",
     "mlx:test": "cd packages/driver/src/mlx-ml/python && uv run python test_api_spec.py",
     "postinstall": "npm run mlx:setup || echo 'MLX setup failed, you can run it manually with: npm run mlx:setup'"

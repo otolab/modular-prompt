@@ -526,6 +526,12 @@ export class MlxCacheController implements PromptCacheController {
       return inflight;
     }
 
+    if (params.readOnly) {
+      // read-only: skip createCache entirely — disk/base checks are not worth the cost
+      logger.verbose('read-only cache miss', cacheKey.slice(0, 12));
+      return MlxCacheController.EMPTY_HANDLE;
+    }
+
     const prepareStart = performance.now();
     const promise = this.createCache(params, cacheKey);
     this.inflightRequests.set(cacheKey, promise);

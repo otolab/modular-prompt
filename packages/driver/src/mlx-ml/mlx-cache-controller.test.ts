@@ -129,6 +129,34 @@ describe('MlxCacheController', () => {
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
 
+    it('should return empty handle on read-only cache miss', async () => {
+      const handle = await controller.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'Be helpful' }],
+        readOnly: true,
+      });
+
+      expect(handle.ref).toBe('');
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+    });
+
+    it('should return cached handle on read-only memory hit', async () => {
+      const params = {
+        model: 'test-model',
+        instructions: [{ type: 'text' as const, content: 'Be helpful' }],
+      };
+
+      // First call creates the cache
+      const handle1 = await controller.prepare(params);
+      expect(handle1.ref).toMatch(/\.safetensors$/);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+
+      // Second call with readOnly returns the cached handle
+      const handle2 = await controller.prepare({ ...params, readOnly: true });
+      expect(handle2.ref).toBe(handle1.ref);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
+    });
+
     it('should accept tools and pass them to cachePrefill', async () => {
       const handle = await controller.prepare({
         model: 'test-model',

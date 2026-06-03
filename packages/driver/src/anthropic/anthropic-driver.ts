@@ -231,7 +231,7 @@ export class AnthropicDriver implements AIDriver {
     system?: AnthropicSystem;
     messages: AnthropicMessage[];
   } {
-    const cache = options?.cache ?? false;
+    const cache = options?.cache === true;
     const systemParts: string[] = [];
     const messages: AnthropicMessage[] = [];
 
@@ -354,7 +354,7 @@ export class AnthropicDriver implements AIDriver {
     this.queryLogger.mark(mergedOptions);
 
     // Convert prompt
-    const { system, messages } = this.compiledPromptToAnthropic(prompt, { cache: mergedOptions.cache });
+    const { system, messages } = this.compiledPromptToAnthropic(prompt, { cache: mergedOptions.cache === true });
 
     // Extended Thinking: mode === 'thinking' with thinking config
     const useThinking = mergedOptions.mode === 'thinking' && mergedOptions.thinking;

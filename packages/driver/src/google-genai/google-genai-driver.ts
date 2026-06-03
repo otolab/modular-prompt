@@ -108,6 +108,7 @@ export class GoogleGenAIDriver implements AIDriver {
           instructions: partition.cacheable.instructions,
           data: partition.cacheable.data,
           tools: mergedOptions.tools,
+          readOnly: mergedOptions.cache === 'read-only',
         });
 
         const instructionsForRequest = handle.includes.instructions

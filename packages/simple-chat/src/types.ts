@@ -40,6 +40,8 @@ export interface DialogProfile {
     maxTokens?: number;
     /** Top-p setting */
     topP?: number;
+    /** Cache strategy: true=read/write, false=disabled, 'read-only'=use existing only */
+    cache?: boolean | 'read-only';
   };
   /** Driver provider configurations */
   drivers?: ApplicationConfig['drivers'];
@@ -108,4 +110,6 @@ export interface SimpleChatOptions {
   drafterModel?: string;
   /** Speculative decoding用のdraft block size */
   draftBlockSize?: number;
+  /** Cache strategy: true=read/write, false=disabled, 'read-only'=use existing only */
+  cache?: boolean | 'read-only';
 }

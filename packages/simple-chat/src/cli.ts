@@ -41,6 +41,12 @@ program
     }
     return n;
   })
+  .option('--cache <mode>', 'Cache strategy: true, false, or read-only', (val: string) => {
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    if (val === 'read-only') return 'read-only' as const;
+    throw new InvalidArgumentError('must be true, false, or read-only');
+  })
   .option('--stdin', 'Read user message from stdin')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
@@ -84,6 +90,7 @@ program
         textOnly: options.textOnly,
         drafterModel: options.drafterModel,
         draftBlockSize: options.draftBlockSize,
+        cache: options.cache,
       };
       
       await runChat(chatOptions);
