@@ -30,6 +30,7 @@
     "clean": "rm -rf dist skills",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "start": "node dist/run-comparison.js",
     "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills"
   },
   "dependencies": {

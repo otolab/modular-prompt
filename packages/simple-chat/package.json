@@ -19,6 +19,7 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "start": "node dist/cli.js",
     "prepack": "pnpm run clean && pnpm build"
   },
   "dependencies": {
