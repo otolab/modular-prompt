@@ -1,5 +1,26 @@
 # @modular-prompt/simple-chat
 
+## 0.4.4
+
+### Patch Changes
+
+- 766447a: feat: キャッシュの read-only モードを追加
+
+  `QueryOptions.cache`に`'read-only'`値を追加。既存キャッシュは使用するが、新規エントリの作成（increase）を行わないモード。
+
+  ユースケース:
+
+  - oneshot リクエストでキャッシュ書き込みを省略
+  - 重要なキャッシュを supersedes 自動削除から保護
+
+  simple-chat に`--cache`オプションを追加（`true`/`false`/`read-only`）。
+  ルート package.json のスクリプトを`pnpm --filter`による子パッケージ移譲形式に統一。
+
+- 9f37a31: scripts/を整理し CLI ラッパーを bin/から統合。`npm install -g .`で simple-chat と experiment が使用可能に。
+- Updated dependencies [766447a]
+  - @modular-prompt/driver@0.13.4
+  - @modular-prompt/process@0.5.5
+
 ## 0.4.3
 
 ### Patch Changes
