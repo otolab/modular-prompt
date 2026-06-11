@@ -1,5 +1,12 @@
 # @modular-prompt/driver
 
+## 0.13.5
+
+### Patch Changes
+
+- e1977ba: chore: mlx-vlm を 0.5.0 → 0.6.3 に更新
+- d2df6c3: fix: mlx-vlm に sys_platform == 'darwin' マーカーを追加
+
 ## 0.13.4
 
 ### Patch Changes
