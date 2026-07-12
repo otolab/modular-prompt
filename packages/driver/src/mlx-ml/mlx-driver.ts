@@ -17,6 +17,12 @@ import { QueryLogger } from '../query-logger.js';
 import type { PromptCacheController } from '../cache-controller.js';
 import { extractCacheablePrefix } from '../cache-utils.js';
 import { MlxCacheController } from './mlx-cache-controller.js';
+import {
+  buildQueryUsage,
+  createAbortedStreamResult,
+  isAborted,
+  watchAbortSignal,
+} from '../query-utils.js';
 
 // ========================================================================
 // Utility Functions (exported for testing)
@@ -83,7 +89,10 @@ function extractStreamMeta(content: string): { content: string; meta: StreamMeta
   }
 }
 
-function createStreamIterable(stream: Readable): {
+function createStreamIterable(
+  stream: Readable,
+  isAborted?: () => boolean,
+): {
   iterable: AsyncIterable<string>;
   completion: Promise<{ content: string; meta: StreamMeta; error: Error | null }>;
 } {
@@ -100,6 +109,9 @@ function createStreamIterable(stream: Readable): {
         let buffer = '';
         let markerFound = false;
         for await (const chunk of stream) {
+          if (isAborted?.()) {
+            break;
+          }
           const str = chunk.toString();
           chunks.push(str);
           if (markerFound) continue;
@@ -120,12 +132,19 @@ function createStreamIterable(stream: Readable): {
         if (!markerFound && buffer) yield buffer;
         const raw = chunks.join('');
         const { content, meta } = extractStreamMeta(raw);
+        const aborted = isAborted?.() ?? false;
         resolveCompletion({ content, meta, error: null });
+        if (aborted) {
+          return;
+        }
       } catch (error) {
         const raw = chunks.join('');
         const { content, meta } = extractStreamMeta(raw);
-        resolveCompletion({ content, meta, error: error as Error });
-        throw error;
+        const aborted = isAborted?.() ?? false;
+        resolveCompletion({ content, meta, error: aborted ? null : error as Error });
+        if (!aborted) {
+          throw error;
+        }
       }
     }
   };
@@ -255,7 +274,7 @@ export class MlxDriver implements AIDriver {
     prompt: CompiledPrompt,
     mlxOptions: MlxMlModelOptions,
     options?: QueryOptions
-  ): Promise<{ stream: Readable; cacheTokensUsed: number }> {
+  ): Promise<{ stream: Readable; cacheTokensUsed: number; cacheWriteTokens: number }> {
     // APIを選択
     const api = this.determineApi(options);
 
@@ -302,6 +321,10 @@ export class MlxDriver implements AIDriver {
       // - trustRemoteCode未指定（明示的なtrue/falseどちらもapply_chat_template kwargsに影響）
       let cachePath: string | undefined;
       let cacheTrimTokens: number | undefined;
+      let cacheWriteTokens = 0;
+      const cacheGrowthBefore = this.cacheController instanceof MlxCacheController
+        ? this.cacheController.getStats().cacheGrowthTokens
+        : 0;
       const trustRemoteCode = mlxOptions.trustRemoteCode;
       if (this.cacheController && options?.cache !== false && trustRemoteCode === undefined) {
         const prefix = extractCacheablePrefix(augmentedPrompt);
@@ -331,16 +354,23 @@ export class MlxDriver implements AIDriver {
         }
       }
 
+      if (this.cacheController instanceof MlxCacheController) {
+        cacheWriteTokens = Math.max(
+          0,
+          this.cacheController.getStats().cacheGrowthTokens - cacheGrowthBefore,
+        );
+      }
+
       stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cachePath, cacheTrimTokens);
 
       const cacheTokensUsed = cachePath
         ? (cacheTrimTokens ?? (this.cacheController instanceof MlxCacheController
           ? this.cacheController.readCacheTokenCount(cachePath) : 0))
         : 0;
-      return { stream, cacheTokensUsed };
+      return { stream, cacheTokensUsed, cacheWriteTokens };
     }
 
-    return { stream, cacheTokensUsed: 0 };
+    return { stream, cacheTokensUsed: 0, cacheWriteTokens: 0 };
   }
 
   /**
@@ -368,6 +398,18 @@ export class MlxDriver implements AIDriver {
   ): Promise<StreamResult> {
     await this.ensureInitialized();
 
+    const signal = options?.signal;
+    if (isAborted(signal)) {
+      return createAbortedStreamResult(this.queryLogger.collect());
+    }
+
+    let abortRequested = false;
+    const cleanupAbort = watchAbortSignal(signal, () => {
+      abortRequested = true;
+      this.process.cancelActiveRequest();
+    });
+    const checkAborted = () => abortRequested || isAborted(signal);
+
     // Merge options (only override if explicitly provided)
     const mlxOptions: MlxMlModelOptions = {
       ...this.defaultOptions,
@@ -378,19 +420,18 @@ export class MlxDriver implements AIDriver {
     };
     this.queryLogger.mark(mlxOptions as Record<string, unknown>);
 
-    // Use executeQuery for the actual stream generation
     const queryStart = performance.now();
-    const { stream, cacheTokensUsed } = await this.executeQuery(prompt, mlxOptions, options);
+    const { stream, cacheTokensUsed, cacheWriteTokens } = await this.executeQuery(prompt, mlxOptions, options);
+
+    if (checkAborted()) {
+      this.process.cancelActiveRequest();
+    }
+
     const streamStart = performance.now();
     this.queryLogger.log.debug(`setup ${(streamStart - queryStart).toFixed(0)}ms`);
 
-    // Convert stream to async iterable with collection
-    const { iterable, completion } = createStreamIterable(stream);
+    const { iterable, completion } = createStreamIterable(stream, checkAborted);
 
-    // Wrap iterable with phase-separated timing:
-    //   TTFT: streamStart → first chunk (inference latency, shows cache benefit)
-    //   generation: first chunk → last chunk (output speed, tok/s)
-    //   query total: queryStart → last chunk (end-to-end)
     const queryLogger = this.queryLogger;
     let firstChunkTime = 0;
     const wrappedIterable: AsyncIterable<string> = {
@@ -399,6 +440,10 @@ export class MlxDriver implements AIDriver {
         let firstChunk = true;
         return {
           async next() {
+            if (checkAborted()) {
+              void inner.return?.();
+              return { done: true as const, value: undefined };
+            }
             const result = await inner.next();
             if (!result.done) {
               if (firstChunk) {
@@ -419,72 +464,85 @@ export class MlxDriver implements AIDriver {
             return result;
           },
           async return(value?: string) {
+            cleanupAbort();
             return inner.return?.(value) ?? { done: true as const, value: undefined };
           },
           async throw(e?: unknown) {
+            cleanupAbort();
             return inner.throw?.(e) ?? { done: true as const, value: undefined };
           },
         };
       },
     };
 
-    // Create result promise that waits for stream completion
     const cacheController = this.cacheController;
-    const resultPromise = completion.then(({ content, meta, error }) => {
-      // If there was an error, log and throw it
-      if (error) {
-        this.queryLogger.log.error('Stream error:', error.message);
-        throw error;
-      }
-
-      if (cacheController instanceof MlxCacheController && meta.prompt_tokens != null) {
-        cacheController.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
-      }
-
-      // Log accurate generation stats if available
-      if (meta.generation_tokens != null && firstChunkTime > 0) {
-        const genMs = performance.now() - firstChunkTime;
-        const actualTps = (meta.generation_tokens / genMs * 1000).toFixed(1);
-        this.queryLogger.log.debug(
-          `${meta.generation_tokens} tokens, ${actualTps} tok/s`
-        );
-      }
-
-      // Response post-processing: thinking抽出 + tool call解析
-      const hasTools = options?.tools && options.tools.length > 0;
-      const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo, { enableToolParsing: !!hasTools });
-      const parsed = responseProcessor(content);
-      let finalContent = parsed.content;
-      const thinkingContent = parsed.thinkingContent;
-      const toolCalls = parsed.toolCalls;
-
-      if (thinkingContent) {
-        this.queryLogger.log.verbose('Thinking content:', thinkingContent);
-      }
-
-      // Handle structured output if schema is provided
-      let structuredOutput: unknown | undefined;
-      if (prompt.metadata?.outputSchema && finalContent) {
-        const extracted = extractJSON(finalContent, { multiple: false });
-        if (extracted.source !== 'none' && extracted.data !== null) {
-          structuredOutput = extracted.data;
+    const resultPromise = completion
+      .then(({ content, meta, error }) => {
+        const aborted = checkAborted();
+        if (error && !aborted) {
+          this.queryLogger.log.error('Stream error:', error.message);
+          throw error;
         }
-      }
 
-      const finishReason: FinishReason = toolCalls ? 'tool_calls' : 'stop';
-      return {
-        content: finalContent,
-        thinkingContent,
-        structuredOutput,
-        toolCalls,
-        finishReason,
-        ...this.queryLogger.collect()
-      };
-    });
+        if (cacheController instanceof MlxCacheController && meta.prompt_tokens != null) {
+          cacheController.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
+        }
+
+        if (meta.generation_tokens != null && firstChunkTime > 0) {
+          const genMs = performance.now() - firstChunkTime;
+          const actualTps = (meta.generation_tokens / genMs * 1000).toFixed(1);
+          this.queryLogger.log.debug(
+            `${meta.generation_tokens} tokens, ${actualTps} tok/s`
+          );
+        }
+
+        const hasTools = options?.tools && options.tools.length > 0;
+        const responseProcessor = selectResponseProcessor(this.model, this.runtimeInfo, { enableToolParsing: !!hasTools });
+        const parsed = responseProcessor(content);
+        const finalContent = parsed.content;
+        const thinkingContent = parsed.thinkingContent;
+        const toolCalls = parsed.toolCalls;
+
+        if (thinkingContent) {
+          this.queryLogger.log.verbose('Thinking content:', thinkingContent);
+        }
+
+        let structuredOutput: unknown | undefined;
+        if (prompt.metadata?.outputSchema && finalContent) {
+          const extracted = extractJSON(finalContent, { multiple: false });
+          if (extracted.source !== 'none' && extracted.data !== null) {
+            structuredOutput = extracted.data;
+          }
+        }
+
+        const finishReason: FinishReason = aborted
+          ? 'error'
+          : toolCalls
+            ? 'tool_calls'
+            : 'stop';
+
+        return {
+          content: finalContent,
+          thinkingContent,
+          structuredOutput,
+          toolCalls,
+          finishReason,
+          usage: buildQueryUsage({
+            promptTokens: meta.prompt_tokens,
+            completionTokens: meta.generation_tokens,
+            cacheReadTokens: cacheTokensUsed,
+            cacheWriteTokens,
+          }),
+          ...this.queryLogger.collect(),
+        };
+      })
+      .finally(() => {
+        cleanupAbort();
+      });
 
     return {
       stream: wrappedIterable,
-      result: resultPromise
+      result: resultPromise,
     };
   }
   

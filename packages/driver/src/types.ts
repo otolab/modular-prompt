@@ -110,6 +110,10 @@ export interface QueryResult {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** Tokens read from prompt/KV cache in this request */
+    cacheReadTokens?: number;
+    /** Tokens newly written to prompt/KV cache in this request */
+    cacheWriteTokens?: number;
   };
 
   /** Tool calls selected by the model */
@@ -170,6 +174,11 @@ export interface QueryOptions {
    * - undefined: driver default behavior
    */
   cache?: boolean | 'read-only';
+  /**
+   * Abort signal for cancelling in-flight inference.
+   * Unsupported drivers ignore this option.
+   */
+  signal?: AbortSignal;
 }
 
 /**

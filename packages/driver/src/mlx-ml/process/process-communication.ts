@@ -42,6 +42,7 @@ export class ProcessCommunication {
   private decoder: StringDecoder;
   private currentStream: Readable | null = null;
   private jsonBuffer: string = '';
+  private draining = false;
   private callbacks: ProcessCommunicationCallbacks;
 
   constructor(modelName: string, callbacks: ProcessCommunicationCallbacks, options?: ProcessCommunicationOptions) {
@@ -118,6 +119,8 @@ export class ProcessCommunication {
           this.currentStream.push(chunk);
           this.currentStream.push(null); // ストリーム終了
           this.currentStream = null;
+        } else if (this.draining) {
+          // キャンセル後のドレイン: データを破棄
         } else {
           // JSONレスポンスの場合
           this.jsonBuffer += chunk;
@@ -126,6 +129,10 @@ export class ProcessCommunication {
         }
 
         this.callbacks.onRequestCompleted();
+
+        if (this.draining) {
+          this.draining = false;
+        }
 
         // null文字以降の残りデータを続けて処理
         remaining = remaining.slice(nullIndex + 1);
@@ -136,6 +143,8 @@ export class ProcessCommunication {
         if (this.currentStream) {
           // ストリーミング中
           this.currentStream.push(chunk);
+        } else if (this.draining) {
+          // キャンセル後のドレイン: データを破棄
         } else {
           // JSONレスポンス蓄積中
           this.jsonBuffer += chunk;
@@ -150,6 +159,29 @@ export class ProcessCommunication {
       read() {} // 空のreadメソッド
     });
     return this.currentStream;
+  }
+
+  /**
+   * Cancel the active streaming request.
+   * Destroys the current stream, drains stdout until the response terminator,
+   * and sends a cancel command to the Python process.
+   */
+  cancelActiveStream(): void {
+    if (!this.currentStream && !this.draining) {
+      return;
+    }
+
+    if (this.currentStream) {
+      this.currentStream.destroy();
+      this.currentStream = null;
+    }
+
+    this.draining = true;
+    this.sendToProcess(JSON.stringify({ method: 'cancel' }) + '\n');
+  }
+
+  isDraining(): boolean {
+    return this.draining;
   }
 
   sendToProcess(data: string): void {

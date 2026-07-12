@@ -31,6 +31,7 @@ import type {
 export interface QueueManagerCallbacks {
   sendToProcess: (data: string) => void;
   createNewStream: () => Readable;
+  cancelActiveStream: () => void;
 }
 
 export class QueueManager {
@@ -250,6 +251,13 @@ export class QueueManager {
   onRequestCompleted(): void {
     this.isProcessing = false;
     this.processNext(); // 次のリクエストを処理
+  }
+
+  cancelActiveRequest(): void {
+    if (!this.isProcessing) {
+      return;
+    }
+    this.callbacks.cancelActiveStream();
   }
 
   get length(): number {

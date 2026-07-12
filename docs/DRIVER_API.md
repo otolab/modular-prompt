@@ -111,8 +111,15 @@ interface QueryOptions {
   topP?: number;                // トップPサンプリング
   stream?: boolean;             // ストリーミング有効化
   reasoningEffort?: 'low' | 'medium' | 'high';  // 推論深度（thinking系モデル用）
+  signal?: AbortSignal;         // 推論キャンセル（未対応ドライバーは無視）
+  cache?: boolean | 'read-only'; // プロンプトキャッシュ（ドライバー依存）
 }
 ```
+
+**signal**: 進行中の推論をキャンセルするための `AbortSignal` です。
+- 呼び出し時点で `aborted` の場合、推論を開始せず `finishReason: 'error'` で `result` を resolve します
+- ストリーム消費中の abort では `result` を reject しません（キャンセル判定は `signal.aborted`）
+- 現時点で対応しているのは MLX ドライバーのみです
 
 **reasoningEffort**: 推論特化モデル（OpenAI o-series、llm-jp-4-thinking等）の思考深度を制御します。
 - 対応ドライバー: OpenAI（APIパラメータとして送信）、MLX（`apply_chat_template`に渡す）
@@ -129,9 +136,11 @@ interface QueryResult {
   structuredOutput?: unknown;          // 構造化出力（スキーマ指定時）
   finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
   usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
+    promptTokens: number;       // プロンプト側トークン総数（プロバイダ報告値）
+    completionTokens: number;   // 生成トークン数
+    totalTokens: number;        // promptTokens + completionTokens と整合
+    cacheReadTokens?: number;   // 今回リクエストでキャッシュから読んだトークン数
+    cacheWriteTokens?: number;  // 今回リクエストでキャッシュに新規書き込みしたトークン数
   };
   logEntries?: LogEntry[];             // クエリ実行中のログエントリ
   errors?: LogEntry[];                 // エラーレベルのログエントリ
@@ -141,6 +150,11 @@ interface QueryResult {
 **thinkingContent**: モデルの思考・推論過程の内容を格納します。
 - Harmonyフォーマット（llm-jp-4等）の `analysis` チャネル
 - 将来的にAnthropicのthinkingブロック等にも対応予定
+
+**usage**: トークン使用量は `stream` チャンクではなく `result.usage` にのみ載せます。
+- `promptTokens` はキャッシュ分を差し引く前のプロバイダ報告値です
+- `cacheReadTokens` / `cacheWriteTokens` はプロンプトキャッシュ対応ドライバーが任意で付与します（未取得時は省略または 0）
+- MLX ドライバーは `prompt_tokens` / `generation_tokens` をマッピングし、KV キャッシュ利用時は `cacheReadTokens` を付与します
 
 ### StreamResult
 
