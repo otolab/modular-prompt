@@ -131,6 +131,10 @@ interface QueryOptions {
   toolChoice?: ToolChoice;
   /** 会話ループ用の追加メッセージ（tool result等） */
   messages?: ChatMessage[];
+  /** 推論キャンセル（未対応ドライバーは無視） */
+  signal?: AbortSignal;
+  /** プロンプトキャッシュ（ドライバー依存） */
+  cache?: boolean | 'read-only';
 }
 ```
 
@@ -142,6 +146,13 @@ interface QueryResult {
   /** モデルが選択したツール呼び出し（0個以上） */
   toolCalls?: ToolCall[];
   finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
 }
 ```
 
