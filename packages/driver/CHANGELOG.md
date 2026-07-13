@@ -1,5 +1,11 @@
 # @modular-prompt/driver
 
+## 0.14.0
+
+### Minor Changes
+
+- a47efa9: feat: QueryOptions.signal と usage の cache 系フィールドを共通ドライバ API に追加（MLX で実装）
+
 ## 0.13.5
 
 ### Patch Changes
