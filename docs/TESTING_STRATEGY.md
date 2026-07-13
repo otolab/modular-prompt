@@ -279,6 +279,23 @@ export async function waitForModelLoad(
 
 ## モックの使用方針
 
+### MLX ローカルモデルテストの並行実行
+
+`packages/driver` の Vitest 設定では **並行実行を禁止** しています（`fileParallelism: false`, `maxWorkers: 1`）。オンメモリ MLX モデルはメモリを大量に消費するため、同一ワーカーで逐次実行します。
+
+### テストで使用しているローカルモデル一覧
+
+| テストファイル | モデル指定元 | モデル名（例） | 備考 |
+|---|---|---|---|
+| `test/integration/*.integration.test.ts` | `test-drivers.yaml` の `mlx.nativeModel` | `mlx-community/Qwen3.5-4B-OptiQ-4bit`（ローカル設定による） | cache / abort / tool-call 統合テスト |
+| `test/integration/test-drivers.yaml.example` | 例示 | `Qwen3.5-2B-OptiQ-4bit` / `gemma-3-270m-it-qat-8bit` | fallback はテキスト注入 tool call 用 |
+| `src/mlx-ml/mlx-driver-params.test.ts` | ハードコード | `mlx-community/gemma-3-27b-it-qat-4bit` | macOS ローカルのみ（CI スキップ） |
+| `src/mlx-ml/mlx-driver-structured-outputs.integration.test.ts` | ハードコード | `mlx-community/gemma-3-270m-it-qat-8bit` | macOS ローカルのみ（CI スキップ） |
+| `test/system/mlx-parameters.system.test.ts` | ハードコード | `mlx-community/gemma-3-270m-it-qat-8bit` | システムテスト専用 config |
+| `src/mlx-ml/mlx-driver*.test.ts`（abort 等） | モック | `test-model`（実ロードなし） | `MlxProcess` を vi.mock |
+
+ユニットテスト（`mlx-driver-abort.test.ts` 等）は **Python 子プロセスを起動せず** `test-model` 名で `MlxProcess` をモックします。実モデルをロードするのは `describe.skipIf(!darwin || !test-drivers.yaml)` 付きの統合テストのみです。
+
 ### MLXドライバーテストでのモック戦略
 
 | テストレベル | MLXプロセス | モデルロード | 推論実行 |

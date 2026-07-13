@@ -86,6 +86,26 @@ describe('MlxDriver abort signal', () => {
     expect(mockProcess.cancelActiveRequest).toHaveBeenCalled();
   });
 
+  it('rejects result on non-abort stream errors', async () => {
+    const driver = new MlxDriver({ model: 'test-model' });
+
+    const failingStream = new Readable({
+      read() {
+        this.destroy(new Error('stream failed'));
+      },
+    });
+    mockProcess.chat.mockResolvedValue(failingStream);
+
+    const { stream, result } = await driver.streamQuery(prompt);
+    await expect(async () => {
+      for await (const chunk of stream) {
+        void chunk;
+      }
+    }).rejects.toThrow('stream failed');
+
+    await expect(result).rejects.toThrow('stream failed');
+  });
+
   it('includes usage with token counts from stream meta', async () => {
     const driver = new MlxDriver({ model: 'test-model' });
     const { stream, result } = await driver.streamQuery(prompt);

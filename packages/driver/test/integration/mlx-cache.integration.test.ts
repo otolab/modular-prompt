@@ -105,6 +105,8 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Cache Integration', ()
       const result2 = await driver.query(compile(chatModule, ctx2), { maxTokens: 100, temperature: 0 });
       expect(result2.content).toBeTruthy();
       expect(result2.finishReason).toBeDefined();
+      expect(result2.usage?.promptTokens).toBeGreaterThan(0);
+      expect(result2.usage?.cacheReadTokens).toBeGreaterThan(0);
 
       console.log('[cache-messages] result1:', result1.content?.slice(0, 80));
       console.log('[cache-messages] result2:', result2.content?.slice(0, 80));
@@ -154,6 +156,8 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Cache Integration', ()
       const queryResult = await result;
       expect(chunks.length).toBeGreaterThan(0);
       expect(queryResult.content).toBeTruthy();
+      expect(queryResult.usage?.promptTokens).toBeGreaterThan(0);
+      expect(queryResult.usage?.completionTokens).toBeGreaterThan(0);
       console.log('[cache-messages-stream]:', queryResult.content?.slice(0, 80));
     }, 60_000);
   });
