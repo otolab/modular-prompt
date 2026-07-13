@@ -90,8 +90,8 @@ describe('MlxDriver abort signal', () => {
     const driver = new MlxDriver({ model: 'test-model' });
     const { stream, result } = await driver.streamQuery(prompt);
 
-    for await (const _chunk of stream) {
-      // consume
+    for await (const chunk of stream) {
+      void chunk;
     }
 
     await expect(result).resolves.toMatchObject({
