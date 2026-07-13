@@ -77,8 +77,8 @@ export function formatToolDefinitionsAsText(
   }
 
   const concreteExample = exampleToolName
-    ? `{"name": "${exampleToolName}", "arguments": ${exampleArgs}}`
-    : '{"name": "tool_name", "arguments": {"key": "value"}}';
+    ? `{ "name": "${exampleToolName}", "arguments": ${exampleArgs} }`
+    : '{ "name": "tool_name", "arguments": {"key": "value"} }';
 
   if (toolCallFormat?.call_start && toolCallFormat?.call_end) {
     lines.push('To call a tool, respond ONLY with:');

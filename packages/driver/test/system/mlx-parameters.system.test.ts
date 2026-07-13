@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
+import { DEFAULT_MLX_TEST_MODEL } from '../integration/test-config.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { platform } from 'os';
 
@@ -29,7 +30,7 @@ function chatPrompt(content: string): CompiledPrompt {
 
 describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
   let driver: MlxDriver;
-  const testModel = 'mlx-community/gemma-3-270m-it-qat-8bit';
+  const testModel = DEFAULT_MLX_TEST_MODEL;
 
   beforeAll(async () => {
     console.log(`\n🔧 Setting up MLX system test with model: ${testModel}`);

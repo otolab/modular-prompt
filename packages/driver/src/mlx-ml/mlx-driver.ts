@@ -98,6 +98,16 @@ function createStreamIterable(
 } {
   const chunks: string[] = [];
   let resolveCompletion: (value: { content: string; meta: StreamMeta; error: Error | null }) => void;
+  let settled = false;
+
+  const settle = (error: Error | null) => {
+    if (settled) return;
+    settled = true;
+    const raw = chunks.join('');
+    const { content, meta } = extractStreamMeta(raw);
+    const aborted = isAborted?.() ?? false;
+    resolveCompletion({ content, meta, error: aborted ? null : error });
+  };
 
   const completion = new Promise<{ content: string; meta: StreamMeta; error: Error | null }>((resolve) => {
     resolveCompletion = resolve;
@@ -130,21 +140,14 @@ function createStreamIterable(
           }
         }
         if (!markerFound && buffer) yield buffer;
-        const raw = chunks.join('');
-        const { content, meta } = extractStreamMeta(raw);
-        const aborted = isAborted?.() ?? false;
-        resolveCompletion({ content, meta, error: null });
-        if (aborted) {
-          return;
-        }
       } catch (error) {
-        const raw = chunks.join('');
-        const { content, meta } = extractStreamMeta(raw);
+        settle(error as Error);
         const aborted = isAborted?.() ?? false;
-        resolveCompletion({ content, meta, error: aborted ? null : error as Error });
         if (!aborted) {
           throw error;
         }
+      } finally {
+        settle(null);
       }
     }
   };

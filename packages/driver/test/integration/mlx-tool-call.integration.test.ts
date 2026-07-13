@@ -4,6 +4,7 @@
  * 実際のMLXモデルを使用して、tool call機能が正しく動作することを検証する。
  * - nativeModel: chat_templateでtool call形式をサポートするモデル
  * - fallbackModel: テキスト注入方式でtool callを実現するモデル
+ *   （一時スキップ: unsupported かつ注入に従えるモデルがなく #294 待ち）
  *
  * test-drivers.yaml に mlx セクションの設定がない場合はスキップされる。
  */
@@ -156,7 +157,8 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Tool Call Integration'
     defineToolCallTests(() => driver, 'native');
   });
 
-  describe.skipIf(!mlxConfig?.fallbackModel)('Text-based Tool Support Model', () => {
+  // #294: QueryOptions.toolCallMode 実装後に再有効化
+  describe.skip('Text-based Tool Support Model', () => {
     let driver: MlxDriver;
 
     beforeAll(async () => {

@@ -7,15 +7,16 @@
  * - テストケース群1: 会話履歴（messages）のキャッシュ
  *   静的な会話履歴はcacheable prefix、動的な最新メッセージはvolatile
  * - テストケース群2: state/materials構成でのキャッシュ
- *   state (Current State section) がdata内のcacheable prefixを遮断する挙動
+ *   materials 等の安定セクションは prefix に含め、Current State と contextual 要素は除外
  *
- * test-drivers.yaml に mlx.nativeModel の設定が必要。
+ * モデルは DEFAULT_MLX_TEST_MODEL（軽量・逐次実行向け）。
+ * tool-call 統合テストの nativeModel / fallbackModel とは別設定。
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
 import { MlxCacheController } from '../../src/mlx-ml/mlx-cache-controller.js';
-import { hasDriverConfig, getDriverConfig } from './test-config.js';
+import { hasDriverConfig, DEFAULT_MLX_TEST_MODEL } from './test-config.js';
 import type { PromptModule } from '@modular-prompt/core';
 import { compile, createContext } from '@modular-prompt/core';
 import { extractCacheablePrefix } from '../../src/cache-utils.js';
@@ -38,8 +39,7 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Cache Integration', ()
   let model: string;
 
   beforeAll(async () => {
-    const config = getDriverConfig('mlx')!;
-    model = config.nativeModel!;
+    model = DEFAULT_MLX_TEST_MODEL;
 
     cacheController = new MlxCacheController();
     driver = new MlxDriver({ model, cacheController });
@@ -165,11 +165,10 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Cache Integration', ()
   // ================================================================
   // テストケース群2: State-aware caching
   //
-  // STANDARD_SECTIONSの配置順: state → inputs → materials → chunks → messages
-  // state (title: 'Current State') は extractCacheablePrefix で非キャッシュと判定
-  // されるため、data 内の cacheable prefix は state で遮断される。
-  //
-  // stateなしの場合は materials が cacheable prefix に含まれる。
+  // STANDARD_SECTIONS の data 配置順: inputs → materials → messages → chunks → state
+  // materials など安定セクションは cacheable prefix に含まれる。
+  // DynamicContent 由来の最新 user message (contextual) と Current State section は
+  // prefix 外（state は messages より後なので、contextual message で先に途切れる）。
   // ================================================================
   describe('State-aware caching', () => {
     const docModule: PromptModule<DocContext> = {
@@ -189,25 +188,24 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Cache Integration', ()
       ],
     };
 
-    it('should block data prefix at state section while queries still work', async () => {
+    it('should cache stable materials but exclude state and contextual messages from prefix', async () => {
       const ctx1 = createContext(docModule);
       ctx1.stateInfo = 'User is reading the API reference';
       ctx1.userMessage = 'What parameters does createUser accept?';
       const compiled1 = compile(docModule, ctx1);
 
-      // state が data 先頭に来るため、data の cacheable prefix は空
+      // materials + Messages section までが prefix。contextual user message と state は含まれない
       const prefix = extractCacheablePrefix(compiled1);
       expect(prefix.instructions.length).toBeGreaterThan(0);
-      expect(prefix.data.length).toBe(0);
+      expect(prefix.data.length).toBe(4);
 
-      // stateがprefixを遮断するため、キャッシュはinstructionsのみ
       const handle = await cacheController.prepare({
         model,
         instructions: prefix.instructions,
         data: prefix.data,
       });
       expect(handle.includes.instructions).toBe(true);
-      expect(handle.includes.dataElementCount).toBe(0);
+      expect(handle.includes.dataElementCount).toBe(4);
 
       const result1 = await driver.query(compiled1, { maxTokens: 100, temperature: 0 });
       expect(result1.content).toBeTruthy();

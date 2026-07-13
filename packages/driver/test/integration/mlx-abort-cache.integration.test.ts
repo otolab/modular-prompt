@@ -2,10 +2,8 @@
  * MLX Driver: AbortSignal と cache usage の統合テスト
  *
  * 実 MLX モデルを 1 プロセスで逐次実行する（並行実行禁止）。
- * モデルは test-drivers.yaml の mlx.nativeModel を使用。
- *
- * ローカル設定例（packages/driver/test/integration/test-drivers.yaml）:
- *   nativeModel: mlx-community/Qwen3.5-4B-OptiQ-4bit
+ * モデルは DEFAULT_MLX_TEST_MODEL（軽量・逐次実行向け）。
+ * tool-call 統合テストの nativeModel / fallbackModel とは別設定。
  *
  * macOS + test-drivers.yaml の mlx セクションが必要。
  */
@@ -16,13 +14,24 @@ import type { PromptModule } from '@modular-prompt/core';
 import { compile, createContext } from '@modular-prompt/core';
 import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
 import { MlxCacheController } from '../../src/mlx-ml/mlx-cache-controller.js';
-import { hasDriverConfig, getDriverConfig } from './test-config.js';
+import { hasDriverConfig, DEFAULT_MLX_TEST_MODEL } from './test-config.js';
 
 const isMacOS = platform() === 'darwin';
 
 interface ChatContext {
   userMessage: string;
 }
+
+/** abort 検証用: 長文生成を促す（chatModule の短文指示と混ぜない） */
+const longOutputModule: PromptModule<ChatContext> = {
+  createContext: () => ({ userMessage: '' }),
+  instructions: [
+    'You are a creative writing assistant. Write long, detailed multi-paragraph responses. Never summarize or stop early.',
+  ],
+  messages: [
+    (ctx) => ({ type: 'message' as const, role: 'user' as const, content: ctx.userMessage }),
+  ],
+};
 
 const chatModule: PromptModule<ChatContext> = {
   createContext: () => ({ userMessage: '' }),
@@ -48,8 +57,7 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Abort & Cache Usage In
     let model: string;
 
     beforeAll(async () => {
-      const config = getDriverConfig('mlx')!;
-      model = config.nativeModel!;
+      model = DEFAULT_MLX_TEST_MODEL;
 
       cacheController = new MlxCacheController();
       driver = new MlxDriver({ model, cacheController });
@@ -66,19 +74,22 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Abort & Cache Usage In
 
     it('aborts mid-stream, keeps partial content, and resolves result', async () => {
       const controller = new AbortController();
-      const ctx = createContext(chatModule);
-      ctx.userMessage = 'Count from 1 to 100 slowly, one number per line.';
+      const ctx = createContext(longOutputModule);
+      ctx.userMessage =
+        'Write a detailed essay of at least 800 words about the history of computing, ' +
+        'from mechanical calculators through mainframes, personal computers, the internet, and modern AI. ' +
+        'Use many paragraphs and elaborate on each era. Do not stop early.';
 
-      const { stream, result } = await driver.streamQuery(compile(chatModule, ctx), {
+      const { stream, result } = await driver.streamQuery(compile(longOutputModule, ctx), {
         signal: controller.signal,
-        maxTokens: 200,
-        temperature: 0,
+        maxTokens: 1024,
+        temperature: 0.7,
       });
 
       let received = '';
       for await (const chunk of stream) {
         received += chunk;
-        if (received.length >= 15) {
+        if (received.length >= 50) {
           controller.abort();
           break;
         }
@@ -89,7 +100,8 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Abort & Cache Usage In
       const final = await result;
       expect(final.finishReason).toBe('error');
       expect(final.content.length).toBeGreaterThan(0);
-      console.log('[abort-mid-stream] partial:', final.content.slice(0, 60));
+      expect(final.content.length).toBeLessThan(800);
+      console.log('[abort-mid-stream] partial:', final.content.slice(0, 80));
     }, 90_000);
 
     it('accepts the next query after abort without hanging', async () => {
