@@ -14,6 +14,7 @@
   - [GoogleGenAICacheController](#googlegenaicachecontroller)
 - [ファイルロック機構](#ファイルロック機構)
 - [Incremental Prefillとsupersedes](#incremental-prefillとsupersedes)
+- [QueryResult.usage との関係](#queryresultusage-との関係)
 - [関連ドキュメント](#関連ドキュメント)
 
 ## 概要
@@ -329,6 +330,42 @@ interface PrefixMeta {
   - 共通部分のprefillを省略し、差分のみ処理
 - **自動クリーンアップ**
   - 古いキャッシュが自動的にreleaseされる
+
+## QueryResult.usage との関係
+
+プロンプトキャッシュの利用状況は、ドライバーが `QueryResult.usage` の任意フィールドとして報告します。
+
+```typescript
+usage?: {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheReadTokens?: number;   // 今回リクエストでキャッシュから読んだトークン数
+  cacheWriteTokens?: number;  // 今回リクエストでキャッシュに新規書き込みしたトークン数
+};
+```
+
+### MlxCacheController + MlxDriver
+
+| フィールド | ソース |
+|---|---|
+| `promptTokens` | Python ストリーム終端 meta の `prompt_tokens` |
+| `completionTokens` | Python ストリーム終端 meta の `generation_tokens` |
+| `cacheReadTokens` | クエリで使用した KV キャッシュのトークン数（`cacheTrimTokens` または `.meta.json` の `token_count`） |
+| `cacheWriteTokens` | 同一 `streamQuery` 内の `prepare()` で新規作成した prefill トークン数（`getStats().cacheGrowthTokens` の差分） |
+
+`promptTokens` はキャッシュ分を差し引いた値ではありません。キャッシュヒット分は `cacheReadTokens` で別途報告します。
+
+### AbortSignal とキャッシュ
+
+MLX ドライバーで `QueryOptions.signal` により推論をキャンセルする場合:
+
+1. TS が `ProcessCommunication.cancelActiveStream()` で Node `Readable` を destroy
+2. stdin に `{"method":"cancel"}\n` を送信
+3. Python の `_stream_to_stdout` が `poll_cancel()` でループを抜け、`\0` でレスポンス終端
+4. TS が stdout をドレインし、キューを解放（次リクエストを受け付け可能に）
+
+キャンセル後も `MlxCacheController` が作成済みのキャッシュファイルは保持されます。`release()` / `close()` のライフサイクルは通常どおりです。
 
 ## 関連ドキュメント
 

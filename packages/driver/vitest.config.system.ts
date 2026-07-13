@@ -6,6 +6,12 @@ export default defineConfig({
     include: [
       '**/test/system/**/*.test.ts'
     ],
+    // オンメモリ MLX モデルは逐次実行
+    fileParallelism: false,
+    maxWorkers: 1,
+    sequence: {
+      concurrent: false,
+    },
     // システムテストは時間がかかるため長めのタイムアウト
     testTimeout: 60000,     // 60秒
     hookTimeout: 60000,

@@ -73,9 +73,69 @@ if (result.logEntries) {
 ## 主な機能
 
 - **統一インターフェース**: `query()` / `streamQuery()` / `close()` の3メソッド
+- **推論キャンセル**: `QueryOptions.signal`（`AbortSignal`）— 現時点は MLX ドライバーで実装
+- **トークン使用量**: `QueryResult.usage`（`cacheReadTokens` / `cacheWriteTokens` 含む）
 - **ツール呼び出し**: Function Calling対応（OpenAI、Anthropic、VertexAI、GoogleGenAI）
 - **構造化出力**: JSONスキーマによる出力制御
 - **AIService**: 能力ベースのモデル自動選択
+
+## 推論キャンセル（AbortSignal）
+
+```typescript
+import { MlxDriver } from '@modular-prompt/driver';
+
+const driver = new MlxDriver({ model: 'mlx-community/...' });
+const controller = new AbortController();
+
+const { stream, result } = await driver.streamQuery(prompt, {
+  signal: controller.signal,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk);
+}
+
+// 途中でキャンセルする場合
+controller.abort();
+
+const final = await result;
+// final.finishReason === 'error' かつ controller.signal.aborted → キャンセル
+```
+
+- `result` はキャンセル時も **reject しません**（`finishReason: 'error'` で resolve）
+- キャンセル前の部分応答は `result.content` に残ります
+- 他ドライバーは `signal` を無視します（未実装）
+
+詳細は [Driver APIリファレンス](../../docs/DRIVER_API.md#推論キャンセルabortsignal) を参照。
+
+## トークン使用量（usage）
+
+```typescript
+const { stream, result } = await driver.streamQuery(prompt, { cache: true });
+for await (const _ of stream) { /* consume */ }
+
+const final = await result;
+if (final.usage) {
+  console.log(final.usage.promptTokens, final.usage.completionTokens);
+  console.log(final.usage.cacheReadTokens);   // MLX + KV キャッシュ時
+  console.log(final.usage.cacheWriteTokens);  // 同一クエリ内の新規 prefill 時
+}
+```
+
+usage は `stream` の各チャンクではなく **`result.usage` のみ** に載ります。
+
+## 共通ユーティリティ（query-utils）
+
+カスタムドライバーやアダプタ向けヘルパー:
+
+```typescript
+import {
+  buildQueryUsage,
+  createAbortedStreamResult,
+  isAborted,
+  watchAbortSignal,
+} from '@modular-prompt/driver';
+```
 
 ## カスタムドライバーの作成
 

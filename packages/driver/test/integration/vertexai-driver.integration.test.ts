@@ -3,10 +3,12 @@
  *
  * 実際のVertexAI (Gemini) APIに接続して基本機能を確認する。
  * test-drivers.yaml に vertexai の設定がない場合はスキップされる。
+ *
+ * 一時スキップ: SDK更新・genai統合方針の検討待ち（#295）
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { VertexAIDriver } from '../../src/vertexai/vertexai-driver.js';
-import { hasDriverConfig, getDriverConfig } from './test-config.js';
+import { getDriverConfig } from './test-config.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 
 function chatPrompt(content: string): CompiledPrompt {
@@ -17,7 +19,8 @@ function chatPrompt(content: string): CompiledPrompt {
   };
 }
 
-describe.skipIf(!hasDriverConfig('vertexai'))('VertexAIDriver Integration', () => {
+// #295: VertexAIDriver メンテナンス方針確定後に再有効化
+describe.skip('VertexAIDriver Integration', () => {
   let driver: VertexAIDriver;
 
   beforeAll(() => {

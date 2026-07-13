@@ -54,6 +54,8 @@ interface QueryOptions {
   stream?: boolean;
   tools?: ToolDefinition[];
   toolChoice?: ToolChoice;
+  cache?: boolean | 'read-only';  // プロンプトキャッシュ（ドライバー依存）
+  signal?: AbortSignal;           // 推論キャンセル（未対応ドライバーは無視）
 }
 ```
 
@@ -67,6 +69,8 @@ interface QueryResult {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cacheReadTokens?: number;    // キャッシュヒット分（MLX 等）
+    cacheWriteTokens?: number;   // 新規キャッシュ書き込み分（MLX 等）
   };
   toolCalls?: ToolCall[];        // ツール呼び出し
   finishReason?: FinishReason;   // 'stop' | 'length' | 'error' | 'tool_calls'
@@ -78,9 +82,46 @@ interface QueryResult {
 ```typescript
 interface StreamResult {
   stream: AsyncIterable<string>;  // テキストチャンクのストリーム
-  result: Promise<QueryResult>;   // 最終結果（ストリーム完了後に解決）
+  result: Promise<QueryResult>;   // 最終結果（ストリーム完了または abort 後に解決）
 }
 ```
+
+- usage は `stream` チャンクではなく **`result.usage` のみ**
+- `signal` でキャンセルした場合も `result` は reject しない（`finishReason: 'error'` + `signal.aborted` で判定）
+
+## 推論キャンセル（AbortSignal）
+
+```typescript
+const controller = new AbortController();
+const { stream, result } = await driver.streamQuery(compiled, {
+  signal: controller.signal,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk);
+  if (userPressedEsc) controller.abort();
+}
+
+const final = await result;
+```
+
+| ドライバー | 対応 |
+|---|---|
+| MlxDriver | ✅ stdin cancel + Python `poll_cancel()` |
+| その他 | 未実装（`signal` 無視） |
+
+ヘルパー: `watchAbortSignal`, `createAbortedStreamResult`, `isAborted`（`@modular-prompt/driver`）
+
+## トークン使用量とキャッシュ
+
+```typescript
+const final = await result;
+final.usage?.promptTokens;      // プロバイダ報告の prompt 側総数
+final.usage?.cacheReadTokens;   // MLX: KV キャッシュヒット分
+final.usage?.cacheWriteTokens;  // MLX: 同一クエリ内の新規 prefill 分
+```
+
+`buildQueryUsage()` でカスタムドライバーから同形式の usage を組み立てられます。
 
 ## 各ドライバーのConfig
 
@@ -218,6 +259,20 @@ await driver.close();
 ```
 
 Apple Silicon専用。Python 3.11以上が必要。
+
+#### AbortSignal（推論キャンセル）
+
+`QueryOptions.signal` を渡すと、ストリーム中の推論をキャンセルできます。
+
+```typescript
+const controller = new AbortController();
+const { stream, result } = await driver.streamQuery(compiled, {
+  signal: controller.signal,
+});
+// controller.abort() → Python 子プロセスに cancel 送信、部分 content 保持
+```
+
+実装: TS が stdin に `{"method":"cancel"}` を送り、Python の `stream_generate` ループが `poll_cancel()` で協調的に終了します。
 
 #### textOnlyオプション
 

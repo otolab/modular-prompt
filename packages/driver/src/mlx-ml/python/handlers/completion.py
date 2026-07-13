@@ -5,6 +5,7 @@ import re
 import sys
 
 from backends.base import ModelBackend
+from handlers.cancel import poll_cancel
 
 
 def handle_completion(
@@ -31,6 +32,8 @@ def handle_completion(
             sys.stderr.write(f"--- prompt\n{prompt}\n")
 
     for response in backend.stream_generate(prompt, final_options, images):
+        if poll_cancel():
+            break
         print(response.text.replace("\0", ""), end="", flush=True)
 
     print("\n", end="\0", flush=True)

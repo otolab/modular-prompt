@@ -7,6 +7,7 @@ import sys
 from backends.base import ModelBackend
 from mlx_lm.models.cache import trim_prompt_cache
 from utils.prompt_builder import generate_merged_prompt, supports_chat_template
+from handlers.cancel import poll_cancel
 
 
 def _read_cache_token_count(cache_path: str) -> int | None:
@@ -34,6 +35,8 @@ def _stream_to_stdout(
 
     last_response = None
     for response in backend.stream_generate(prompt, options, images, prompt_cache=prompt_cache):
+        if poll_cancel():
+            break
         print(response.text.replace("\0", "").replace("\x1e", ""), end="", flush=True)
         last_response = response
 

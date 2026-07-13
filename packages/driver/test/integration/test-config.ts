@@ -12,6 +12,16 @@ import yaml from 'js-yaml';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, 'test-drivers.yaml');
 
+/** ローカル MLX 統合テストのデフォルトモデル（軽量・逐次実行向け） */
+export const DEFAULT_MLX_TEST_MODEL =
+  'prism-ml/Ternary-Bonsai-1.7B-mlx-2bit';
+
+/**
+ * test-drivers.yaml の mlx セクションは tool-call 統合テスト専用:
+ * - nativeModel: chat_template による native tool call 対応モデル
+ * - fallbackModel: テキスト注入方式（native 未サポート）のモデル
+ */
+
 export interface TestDriversConfig {
   anthropic?: {
     apiKey?: string;

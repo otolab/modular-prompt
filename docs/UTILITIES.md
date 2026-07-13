@@ -785,6 +785,26 @@ const noUsage = aggregateUsage([undefined, undefined]);
 // undefined
 ```
 
+`aggregateUsage` は `promptTokens` / `completionTokens` / `totalTokens` のみ合算します。`cacheReadTokens` / `cacheWriteTokens` は現時点では合算しません。
+
+### buildQueryUsage()（@modular-prompt/driver）
+
+単一クエリの usage オブジェクトを組み立てるヘルパー。カスタムドライバー実装で利用します。
+
+```typescript
+import { buildQueryUsage } from '@modular-prompt/driver';
+
+const usage = buildQueryUsage({
+  promptTokens: 100,
+  completionTokens: 20,
+  cacheReadTokens: 80,
+  cacheWriteTokens: 0,
+});
+// { promptTokens: 100, completionTokens: 20, totalTokens: 120, cacheReadTokens: 80 }
+```
+
+詳細は [Driver APIリファレンス](./DRIVER_API.md#共通ユーティリティquery-utils) を参照。
+
 ### aggregateLogEntries()
 
 複数の LogEntry 配列をフラット化します。全タスク・全クエリのログを1つの配列にまとめる際に使用します。

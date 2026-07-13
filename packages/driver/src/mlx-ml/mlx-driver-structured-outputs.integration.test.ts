@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MlxDriver } from './mlx-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { platform } from 'os';
+import { DEFAULT_MLX_TEST_MODEL } from '../../test/integration/test-config.js';
 
 // Test data types
 interface PersonData {
@@ -27,7 +28,7 @@ describe.skipIf(shouldSkipMLX)('MLXDriver Structured Outputs', () => {
 
   beforeAll(() => {
     driver = new MlxDriver({
-      model: 'mlx-community/gemma-3-270m-it-qat-8bit',
+      model: DEFAULT_MLX_TEST_MODEL,
       defaultOptions: {
         maxTokens: 100,
         temperature: 0.1,  // Low temperature for more deterministic output

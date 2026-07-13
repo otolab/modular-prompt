@@ -1,3 +1,12 @@
+// Query utilities (shared driver interface helpers)
+export {
+  buildQueryUsage,
+  createAbortedStreamResult,
+  isAborted,
+  watchAbortSignal,
+  type UsageCounts,
+} from './query-utils.js';
+
 // Types
 export type {
   AIDriver,

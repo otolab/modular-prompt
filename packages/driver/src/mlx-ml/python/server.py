@@ -4,6 +4,7 @@ import sys
 
 from backends.base import ModelBackend
 from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test, handle_tokenize
+from handlers.cancel import request_cancel, reset_cancel
 
 
 MAX_READ_LINES = 10000
@@ -47,6 +48,12 @@ class Server:
         if not method:
             self._error_response("'method' field is required")
             return
+
+        if method == 'cancel':
+            request_cancel()
+            return
+
+        reset_cancel()
 
         try:
             if method == 'capabilities':

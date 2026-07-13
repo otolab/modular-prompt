@@ -243,7 +243,7 @@ describe('Parameter Mapping Integration', () => {
 // test/setup/mlx-test-setup.ts
 export class MlxTestEnvironment {
   private static instance: MlxTestEnvironment;
-  private testModel = 'mlx-community/gemma-3-270m-it-qat-4bit';
+  private testModel = DEFAULT_MLX_TEST_MODEL;
 
   static async setup() {
     if (!this.instance) {
@@ -278,6 +278,25 @@ export async function waitForModelLoad(
 ```
 
 ## モックの使用方針
+
+### MLX ローカルモデルテストの並行実行
+
+`packages/driver` の Vitest 設定では **並行実行を禁止** しています（`fileParallelism: false`, `maxWorkers: 1`）。オンメモリ MLX モデルはメモリを大量に消費するため、同一ワーカーで逐次実行します。
+
+### テストで使用しているローカルモデル一覧
+
+| テストファイル | モデル指定元 | モデル名（例） | 備考 |
+|---|---|---|---|
+| `test/integration/mlx-abort-cache.integration.test.ts` | `DEFAULT_MLX_TEST_MODEL` | `Josiefied-LFM2.5-1.2B-Instruct-abliterated-4bit` | abort / cache usage |
+| `test/integration/mlx-cache.integration.test.ts` | `DEFAULT_MLX_TEST_MODEL` | 同上 | KV キャッシュ統合 |
+| `test/integration/mlx-tool-call.integration.test.ts` | `test-drivers.yaml` | `nativeModel` / `fallbackModel` | native のみ実行中。fallback は #294 待ちでスキップ |
+| `test/integration/test-drivers.yaml.example` | 例示 | Josiefied-LFM2.5-1.2B / Gemma-3-270m-GroomAttention | native は LFM、fallback は tool なし |
+| `src/mlx-ml/mlx-driver-params.test.ts` | `DEFAULT_MLX_TEST_MODEL` | Josiefied-LFM2.5-1.2B | macOS ローカルのみ（CI スキップ） |
+| `src/mlx-ml/mlx-driver-structured-outputs.integration.test.ts` | `DEFAULT_MLX_TEST_MODEL` | 同上 | macOS ローカルのみ（CI スキップ） |
+| `test/system/mlx-parameters.system.test.ts` | `DEFAULT_MLX_TEST_MODEL` | 同上 | システムテスト専用 config |
+| `src/mlx-ml/mlx-driver*.test.ts`（abort 等） | モック | `test-model`（実ロードなし） | `MlxProcess` を vi.mock |
+
+ユニットテスト（`mlx-driver-abort.test.ts` 等）は **Python 子プロセスを起動せず** `test-model` 名で `MlxProcess` をモックします。実モデルをロードするのは `describe.skipIf(!darwin || !test-drivers.yaml)` 付きの統合テストのみです。
 
 ### MLXドライバーテストでのモック戦略
 

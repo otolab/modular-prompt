@@ -7,6 +7,9 @@
 - [インターフェース](#インターフェース)
 - [利用可能なドライバー](#利用可能なドライバー)
 - [型定義](#型定義)
+- [推論キャンセル（AbortSignal）](#推論キャンセルabortsignal)
+- [トークン使用量（usage）](#トークン使用量usage)
+- [共通ユーティリティ（query-utils）](#共通ユーティリティquery-utils)
 - [エラーハンドリング](#エラーハンドリング)
 - [関連ドキュメント](#関連ドキュメント)
 
@@ -36,7 +39,7 @@ query(prompt: CompiledPrompt, options?: QueryOptions): Promise<QueryResult>
 
 **streamQuery()**
 
-ストリーミングレスポンスを生成。
+ストリーミングレスポンスを生成。`stream`（テキスト断片）と `result`（最終集計）は別経路です。usage は `result.usage` にのみ載せ、各チャンクには含めません。
 
 ```typescript
 streamQuery(prompt: CompiledPrompt, options?: QueryOptions): Promise<StreamResult>
@@ -111,8 +114,15 @@ interface QueryOptions {
   topP?: number;                // トップPサンプリング
   stream?: boolean;             // ストリーミング有効化
   reasoningEffort?: 'low' | 'medium' | 'high';  // 推論深度（thinking系モデル用）
+  signal?: AbortSignal;         // 推論キャンセル（未対応ドライバーは無視）
+  cache?: boolean | 'read-only'; // プロンプトキャッシュ（ドライバー依存）
 }
 ```
+
+**signal**: 進行中の推論をキャンセルするための `AbortSignal` です。
+- 呼び出し時点で `aborted` の場合、推論を開始せず `finishReason: 'error'` で `result` を resolve します
+- ストリーム消費中の abort では `result` を reject しません（キャンセル判定は `signal.aborted`）
+- 現時点で対応しているのは MLX ドライバーのみです
 
 **reasoningEffort**: 推論特化モデル（OpenAI o-series、llm-jp-4-thinking等）の思考深度を制御します。
 - 対応ドライバー: OpenAI（APIパラメータとして送信）、MLX（`apply_chat_template`に渡す）
@@ -129,9 +139,11 @@ interface QueryResult {
   structuredOutput?: unknown;          // 構造化出力（スキーマ指定時）
   finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
   usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
+    promptTokens: number;       // プロンプト側トークン総数（プロバイダ報告値）
+    completionTokens: number;   // 生成トークン数
+    totalTokens: number;        // promptTokens + completionTokens と整合
+    cacheReadTokens?: number;   // 今回リクエストでキャッシュから読んだトークン数
+    cacheWriteTokens?: number;  // 今回リクエストでキャッシュに新規書き込みしたトークン数
   };
   logEntries?: LogEntry[];             // クエリ実行中のログエントリ
   errors?: LogEntry[];                 // エラーレベルのログエントリ
@@ -141,6 +153,11 @@ interface QueryResult {
 **thinkingContent**: モデルの思考・推論過程の内容を格納します。
 - Harmonyフォーマット（llm-jp-4等）の `analysis` チャネル
 - 将来的にAnthropicのthinkingブロック等にも対応予定
+
+**usage**: トークン使用量は `stream` チャンクではなく `result.usage` にのみ載せます。
+- `promptTokens` はキャッシュ分を差し引く前のプロバイダ報告値です
+- `cacheReadTokens` / `cacheWriteTokens` はプロンプトキャッシュ対応ドライバーが任意で付与します（未取得時は省略または 0）
+- MLX ドライバーは `prompt_tokens` / `generation_tokens` をマッピングし、KV キャッシュ利用時は `cacheReadTokens` を付与します
 
 ### StreamResult
 
@@ -207,6 +224,96 @@ type DriverProvider =
   | string;  // カスタムプロバイダー
 ```
 
+## 推論キャンセル（AbortSignal）
+
+`QueryOptions.signal` で進行中の推論をキャンセルします。未対応ドライバーはこのオプションを無視します。
+
+### 契約
+
+| 条件 | 振る舞い |
+|---|---|
+| 呼び出し時点で `signal.aborted` | 推論を開始しない。`result` は reject せず `finishReason: 'error'` で resolve |
+| ストリーム消費中に `abort()` | バックエンドの推論を止め、`stream` を終了させる |
+| キャンセル判定 | `finishReason === 'error'` かつ `signal.aborted`（呼び出し側がキャンセルとエラーを区別） |
+| 部分応答 | キャンセル前に yield されたテキストは `result.content` に保持 |
+
+### ドライバー対応状況
+
+| ドライバー | `signal` 対応 |
+|---|---|
+| MlxDriver | ✅（Python 子プロセス連携） |
+| その他 | 未実装（無視） |
+
+### 使用例
+
+```typescript
+const controller = new AbortController();
+
+const { stream, result } = await driver.streamQuery(prompt, {
+  signal: controller.signal,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk);
+  if (shouldCancel) controller.abort();
+}
+
+const final = await result;
+if (controller.signal.aborted) {
+  // キャンセル（Pi 連携では stopReason: "aborted" に変換）
+} else if (final.finishReason === 'error') {
+  // 推論エラー
+}
+```
+
+### MLX ドライバーの実装概要
+
+TS 側が `{"method":"cancel"}\n` を Python 子プロセスの stdin に送り、Python は `stream_generate` の各チャンク前に `poll_cancel()` で非ブロッキング検知してループを抜けます。同時に Node 側の `Readable` を `destroy()` し、stdout をドレインして次リクエストがキュー詰まりしないようにします。詳細は [プロンプトキャッシュ設計](./CACHE_DESIGN.md#queryresultusage-との関係) および `packages/driver/src/mlx-ml/python/handlers/cancel.py` を参照。
+
+## トークン使用量（usage）
+
+`QueryResult.usage` はプロバイダ報告のトークン数を正規化したオブジェクトです。
+
+| フィールド | 意味 |
+|---|---|
+| `promptTokens` | プロンプト側トークン総数（キャッシュ分を差し引く前の生値） |
+| `completionTokens` | 今回の生成トークン数 |
+| `totalTokens` | 少なくとも `promptTokens + completionTokens` と整合 |
+| `cacheReadTokens` | 今回リクエストでキャッシュから読んだトークン数（任意） |
+| `cacheWriteTokens` | 今回リクエストでキャッシュに新規書き込みしたトークン数（任意） |
+
+driver は `promptTokens` を「非キャッシュ入力」に分解しません（`promptTokens - cacheRead - cacheWrite` のような計算は行いません）。
+
+### ドライバー対応状況
+
+| ドライバー | `usage` 基本3フィールド | `cacheReadTokens` / `cacheWriteTokens` |
+|---|---|---|
+| OpenAI / Anthropic / VertexAI / GoogleGenAI | ✅ | 未対応（省略） |
+| MlxDriver | ✅ | ✅（KV キャッシュ利用時） |
+| その他 | 状況により異なる | 未対応 |
+
+MLX では Python 側の `prompt_tokens` / `generation_tokens` をマッピングし、`cacheReadTokens` は KV ヒット分、`cacheWriteTokens` は同一クエリ内の `prepare()` による新規 prefill 分を報告します。
+
+## 共通ユーティリティ（query-utils）
+
+`@modular-prompt/driver` が提供するヘルパー。カスタムドライバーやアダプタ実装で利用できます。
+
+```typescript
+import {
+  buildQueryUsage,
+  createAbortedStreamResult,
+  isAborted,
+  watchAbortSignal,
+} from '@modular-prompt/driver';
+```
+
+| 関数 | 用途 |
+|---|---|
+| `buildQueryUsage(counts)` | 生トークン数から `QueryResult.usage` を組み立て（全ゼロなら `undefined`） |
+| `createAbortedStreamResult(extras?)` | 即時 abort 用の空 `StreamResult`（`result` は resolve） |
+| `isAborted(signal?)` | `signal?.aborted ?? false` |
+| `watchAbortSignal(signal, onAbort)` | abort リスナー登録。既に aborted なら即 `onAbort` を呼ぶ |
+
 ## エラーハンドリング
 
 すべてのドライバーは統一されたエラーハンドリングを提供：
@@ -215,8 +322,10 @@ type DriverProvider =
 const result = await driver.query(prompt);
 
 if (result.finishReason === 'error') {
-  // エラー発生 — errors フィールドで詳細を確認
-  if (result.errors) {
+  // エラーまたはキャンセル — signal.aborted で区別
+  if (options?.signal?.aborted) {
+    console.log('Query was cancelled');
+  } else if (result.errors) {
     for (const entry of result.errors) {
       console.error(`[${entry.prefix}] ${entry.message}`);
     }

@@ -9,8 +9,14 @@ export default defineConfig({
       '**/test/system/**/*.test.ts',  // システムテストを除外
       '**/test/e2e/**/*.test.ts'      // E2Eテストを除外
     ],
+    // MLX 等のオンメモリモデルテストは逐次実行（並行禁止）
+    fileParallelism: false,
+    maxWorkers: 1,
+    sequence: {
+      concurrent: false,
+    },
     // タイムアウト設定
     testTimeout: 10000,     // ユニットテスト: 10秒
-    hookTimeout: 10000,
+    hookTimeout: 300_000,   // MLX 統合テストの beforeAll（モデルロード）向け
   }
 });

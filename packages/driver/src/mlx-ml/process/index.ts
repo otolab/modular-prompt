@@ -64,7 +64,8 @@ export class MlxProcess {
 
     const queueCallbacks: QueueManagerCallbacks = {
       sendToProcess: (data: string) => this.processComm.sendToProcess(data),
-      createNewStream: () => this.processComm.createNewStream()
+      createNewStream: () => this.processComm.createNewStream(),
+      cancelActiveStream: () => this.processComm.cancelActiveStream(),
     };
 
     // 各コンポーネント初期化
@@ -112,6 +113,10 @@ export class MlxProcess {
 
   async exit(): Promise<void> {
     await this.processComm.exit();
+  }
+
+  cancelActiveRequest(): void {
+    this.queueManager.cancelActiveRequest();
   }
 
   // デバッグ・ステータス情報

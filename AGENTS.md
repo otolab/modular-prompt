@@ -143,8 +143,13 @@ npm run lint
 
 ### 共通インターフェース (AIDriver)
 - `query`: 通常クエリ実行
-- `streamQuery`: ストリーミングクエリ
+- `streamQuery`: ストリーミングクエリ（`stream` + `result` の二経路。usage は `result` のみ）
 - `close`: リソースクリーンアップ
+
+### QueryOptions / QueryResult 拡張
+- `QueryOptions.signal`: 推論キャンセル（MLX 実装済み、他ドライバーは未対応）
+- `QueryResult.usage.cacheReadTokens` / `cacheWriteTokens`: キャッシュ利用量（MLX 実装済み）
+- 共通ヘルパー: `packages/driver/src/query-utils.ts`（`buildQueryUsage`, `watchAbortSignal` 等）
 
 ### DriverInput / DriverSet
 ワークフロー関数は `DriverInput` 型（`AIDriver | DriverSet`）を第1引数に受け入れます:
