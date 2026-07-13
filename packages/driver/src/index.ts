@@ -107,6 +107,8 @@ export type {
   MlxContentPart
 } from './mlx-ml/types.js';
 
+export type { MlxQueryOptions } from './mlx-ml/mlx-options.js';
+
 // VertexAI driver
 export {
   VertexAIDriver,

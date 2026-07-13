@@ -58,7 +58,6 @@ export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxT
  * Python側へはmapOptionsToPythonで変換される
  */
 export interface MlxMlModelOptions {
-  mode?: import('../types.js').QueryMode;
   maxTokens?: number;
   temperature?: number;
   topP?: number;

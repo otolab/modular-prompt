@@ -6,6 +6,7 @@ import { formatPromptAsMessages } from '../formatter/converter.js';
 import { formatCompletionPrompt } from '../formatter/completion-formatter.js';
 import { MlxProcess } from './process/index.js';
 import type { MlxMlModelOptions, MlxModelCapabilities } from './types.js';
+import { mergeMlxQueryOptions, toMlxSamplingOptions, type MlxQueryOptions } from './mlx-options.js';
 import type { MlxRuntimeInfo } from './process/types.js';
 import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
 import { selectResponseProcessor } from './process/model-handlers.js';
@@ -54,7 +55,7 @@ export function hasMessageElement(prompt: CompiledPrompt): boolean {
  */
 export interface MlxDriverConfig {
   model: string;
-  defaultOptions?: Partial<MlxMlModelOptions>;
+  defaultOptions?: Partial<MlxQueryOptions>;
   formatterOptions?: FormatterOptions;
   /** VLM画像の最大辺ピクセル数（デフォルト: 768） */
   maxImageSize?: number;
@@ -161,7 +162,7 @@ function createStreamIterable(
 export class MlxDriver implements AIDriver {
   private process: MlxProcess;
   private model: string;
-  private _defaultOptions: Partial<MlxMlModelOptions>;
+  private _defaultOptions: Partial<MlxQueryOptions>;
   private runtimeInfo: MlxRuntimeInfo | null = null;
   private modelProcessor;
   private formatterOptions: FormatterOptions;
@@ -170,17 +171,17 @@ export class MlxDriver implements AIDriver {
   private cacheController?: PromptCacheController;
   private cacheControllerBound = false;
 
-  get defaultOptions(): Partial<MlxMlModelOptions> {
+  get defaultOptions(): Partial<MlxQueryOptions> {
     return this._defaultOptions;
   }
 
-  set defaultOptions(value: Partial<MlxMlModelOptions>) {
-    this._defaultOptions = value;
+  set defaultOptions(value: Partial<MlxQueryOptions>) {
+    this._defaultOptions = value ?? {};
   }
 
   constructor(config: MlxDriverConfig) {
     this.model = config.model;
-    this._defaultOptions = config.defaultOptions || {};
+    this._defaultOptions = config.defaultOptions ?? {};
     this.formatterOptions = config.formatterOptions || {};
     this.maxImageSize = config.maxImageSize ?? 768;
     this.process = new MlxProcess(config.model, {
@@ -276,7 +277,7 @@ export class MlxDriver implements AIDriver {
   private async executeQuery(
     prompt: CompiledPrompt,
     mlxOptions: MlxMlModelOptions,
-    options?: QueryOptions
+    options?: MlxQueryOptions
   ): Promise<{ stream: Readable; cacheTokensUsed: number; cacheWriteTokens: number }> {
     // APIを選択
     const api = this.determineApi(options);
@@ -413,18 +414,12 @@ export class MlxDriver implements AIDriver {
     });
     const checkAborted = () => abortRequested || isAborted(signal);
 
-    // Merge options (only override if explicitly provided)
-    const mlxOptions: MlxMlModelOptions = {
-      ...this.defaultOptions,
-      ...(options?.maxTokens !== undefined && { maxTokens: options.maxTokens }),
-      ...(options?.temperature !== undefined && { temperature: options.temperature }),
-      ...(options?.topP !== undefined && { topP: options.topP }),
-      ...(options?.topK !== undefined && { topK: options.topK }),
-    };
-    this.queryLogger.mark(mlxOptions as Record<string, unknown>);
+    const merged = mergeMlxQueryOptions(this._defaultOptions, options);
+    const mlxOptions = toMlxSamplingOptions(merged);
+    this.queryLogger.mark(merged as Record<string, unknown>);
 
     const queryStart = performance.now();
-    const { stream, cacheTokensUsed, cacheWriteTokens } = await this.executeQuery(prompt, mlxOptions, options);
+    const { stream, cacheTokensUsed, cacheWriteTokens } = await this.executeQuery(prompt, mlxOptions, merged);
 
     if (checkAborted()) {
       this.process.cancelActiveRequest();
