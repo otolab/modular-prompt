@@ -5,11 +5,12 @@ on:
     types: [closed]
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   release:
-    # release/*ブランチからのマージ時のみ実行
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    # release/*ブランチからのマージ時、または手動再実行時
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -29,8 +30,8 @@ jobs:
         registry-url: 'https://registry.npmjs.org'
 
     - name: Upgrade npm for Trusted Publisher
-      run: npm install -g npm@latest
-      # Trusted Publisher requires npm CLI v11.5.1+
+      run: npm install -g npm@^11.5.1
+      # Trusted Publisher requires npm CLI v11.5.1+ (npm@12 requires Node 22+)
 
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
