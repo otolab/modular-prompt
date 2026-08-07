@@ -4,6 +4,8 @@ export interface RuntimeManifest {
   platform: string;
   pythonVersion: string;
   createdAt: string;
+  variant?: string;
+  torchVersion?: string;
   packages?: Record<string, string>;
 }
 
