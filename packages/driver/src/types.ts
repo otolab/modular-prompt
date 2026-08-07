@@ -143,6 +143,11 @@ export type FinishReason = 'stop' | 'length' | 'error' | 'tool_calls';
 export type QueryMode = 'default' | 'thinking' | 'instruct' | 'chat';
 
 /**
+ * API selection strategy (MLX / LocalInference drivers)
+ */
+export type ApiStrategy = 'auto' | 'force-chat' | 'force-completion';
+
+/**
  * Options for querying AI model
  */
 export interface QueryOptions {
@@ -159,7 +164,7 @@ export interface QueryOptions {
    * - 'force-chat': Force chat API
    * - 'force-completion': Force completion API
    */
-  apiStrategy?: 'auto' | 'force-chat' | 'force-completion';
+  apiStrategy?: ApiStrategy;
   /** Available tool definitions */
   tools?: ToolDefinition[];
   /** Tool usage strategy */

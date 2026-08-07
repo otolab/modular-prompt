@@ -8,6 +8,11 @@ import type { InferenceProcessPort } from '../local-inference/process-port.js';
 import { MlxCacheController } from './mlx-cache-controller.js';
 import type { PromptCacheController } from '../cache-controller.js';
 
+/**
+ * MLX 向け KV キャッシュ連携を構築する。
+ * `PromptCacheController` が `MlxCacheController` でない場合は undefined（旧挙動と同様）。
+ * PyTorch 等の別バックエンド用 adapter は将来ここに並列で追加する。
+ */
 export function createMlxCacheSupport(
   controller: PromptCacheController,
 ): LocalInferenceCacheSupport | undefined {

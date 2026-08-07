@@ -123,7 +123,7 @@ export class LocalInferenceDriver implements AIDriver {
 
   protected determineApi(options?: QueryOptions): 'chat' | 'completion' {
     return this.adapters.selectApi(
-      options?.apiStrategy || 'auto',
+      options?.apiStrategy ?? 'auto',
       options?.mode,
       !!this.runtimeInfo?.features.apply_chat_template,
       this.modelProcessor.hasCompletionProcessor(),

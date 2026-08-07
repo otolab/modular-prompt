@@ -5,6 +5,7 @@
  * Python側のapply_model_specific_processingをTypeScript側に移行
  */
 
+import type { ApiStrategy, QueryMode } from '../../types.js';
 import type { MlxMessage, MlxRuntimeInfo } from './types.js';
 import { mergeSystemMessages, selectChatProcessor, selectCompletionProcessor } from './model-handlers.js';
 
@@ -20,8 +21,8 @@ type ChatRestrictions = MlxRuntimeInfo['chat_restrictions'];
  * 4. auto → chat templateがあればchat、なければcompletion
  */
 export function selectApi(
-  strategy: string,
-  mode: string | undefined,
+  strategy: ApiStrategy,
+  mode: QueryMode | undefined,
   hasChatTemplate: boolean,
   hasCompletionProc: boolean
 ): 'chat' | 'completion' {

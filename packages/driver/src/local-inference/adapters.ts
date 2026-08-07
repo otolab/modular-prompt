@@ -1,6 +1,6 @@
 import type { CompiledPrompt } from '@modular-prompt/core';
 import type { ChatMessage, FormatterOptions } from '../formatter/types.js';
-import type { ToolCall, ToolDefinition } from '../types.js';
+import type { ToolCall, ToolDefinition, ApiStrategy, QueryMode } from '../types.js';
 import type {
   InferenceCapabilities,
   InferenceMessage,
@@ -53,8 +53,8 @@ export interface LocalInferenceAdapters {
     specialTokens: InferenceCapabilities['special_tokens'],
   ): string;
   selectApi(
-    strategy: string,
-    mode: string | undefined,
+    strategy: ApiStrategy,
+    mode: QueryMode | undefined,
     hasChatTemplate: boolean,
     hasCompletionProc: boolean,
   ): 'chat' | 'completion';
