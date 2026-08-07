@@ -386,7 +386,8 @@ export class MlxDriver implements AIDriver {
         );
       }
 
-      const { trustRemoteCode: _trustRemoteCode, ...generateOptions } = mlxOptions;
+      const generateOptions = { ...mlxOptions };
+      delete generateOptions.trustRemoteCode;
 
       stream = await this.process.generate(
         formattedPrompt,

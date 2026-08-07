@@ -11,7 +11,6 @@ import type {
   InferenceRenderResult,
   InferenceTokenizeRequest,
   InferenceTokenizeResult,
-  InferenceChatRequest,
   InferenceCompletionRequest,
   InferenceGenerateRequest,
   InferenceCachePrefillRequest,
