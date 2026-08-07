@@ -94,7 +94,7 @@ describe('MlxDriver', () => {
       await ensureInitialized();
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to get MLX runtime info:')
+        expect.stringContaining('Failed to get runtime info:')
       );
 
       consoleSpy.mockRestore();
