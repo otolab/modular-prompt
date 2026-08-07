@@ -117,6 +117,7 @@ export type {
   InferenceRequest,
   InferenceChatRequest,
   InferenceCompletionRequest,
+  InferenceGenerateRequest,
   InferenceToolDefinition,
   InferenceFormatTestResult,
   InferenceTokenizeResult,

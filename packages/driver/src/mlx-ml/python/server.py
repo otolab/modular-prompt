@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test, handle_tokenize
+from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test, handle_generate, handle_tokenize
 from handlers.cancel import request_cancel, reset_cancel
 
 
@@ -110,6 +110,20 @@ class Server:
                     reasoning_effort=req.get('reasoning_effort'),
                     cache_path=req.get('cache_path'),
                     cache_trim_tokens=req.get('cache_trim_tokens'),
+                )
+
+            elif method == 'generate':
+                prompt = req.get('prompt')
+                if not prompt:
+                    self._error_response("'prompt' field is required for generate method")
+                    return
+                images = req.get('images', [])
+                handle_generate(
+                    self.backend,
+                    prompt,
+                    options=req.get('options', {}),
+                    images=images if images else None,
+                    max_image_size=req.get('maxImageSize', 768),
                 )
 
             elif method == 'completion':

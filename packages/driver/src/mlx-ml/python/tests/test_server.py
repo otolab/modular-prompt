@@ -72,3 +72,21 @@ class TestServerDispatch:
         server._dispatch({"method": "completion"})
         captured = capsys.readouterr()
         assert captured.out.endswith('\0')
+
+    def test_generate_missing_prompt(self, capsys):
+        server = self._make_server()
+        server._dispatch({"method": "generate"})
+        captured = capsys.readouterr()
+        assert captured.out.endswith('\0')
+
+    def test_generate_dispatch(self, capsys):
+        server = self._make_server()
+        with patch('server.handle_generate') as mock_generate:
+            server._dispatch({
+                "method": "generate",
+                "prompt": "hello",
+                "options": {"max_tokens": 4},
+            })
+            mock_generate.assert_called_once()
+        captured = capsys.readouterr()
+        assert captured.out == '' or captured.out.endswith('\0')

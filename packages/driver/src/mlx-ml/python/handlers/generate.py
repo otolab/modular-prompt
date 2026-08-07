@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+import os
+import re
+import sys
+
+from backends.base import ModelBackend
+from handlers.cancel import poll_cancel
+
+
+def handle_generate(
+    backend: ModelBackend,
+    prompt: str | list[int],
+    options: dict | None = None,
+    images: list | None = None,
+    max_image_size: int = 768,
+) -> None:
+    """LIP generate: 整形済み prompt のストリーム推論"""
+    if options is None:
+        options = {}
+
+    final_options = dict(options)
+    if images:
+        final_options["max_image_size"] = max_image_size
+        if os.getenv('MLX_DEBUG'):
+            display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', prompt)
+            sys.stderr.write(
+                f"--- vlm generate (images: {len(images)}, max_size: {max_image_size})\n{display_prompt}\n"
+            )
+    elif os.getenv('MLX_DEBUG'):
+        if isinstance(prompt, list):
+            sys.stderr.write(f"--- prompt: len={len(prompt)}\n")
+        else:
+            sys.stderr.write(f"--- prompt\n{prompt}\n")
+
+    for response in backend.stream_generate(prompt, final_options, images):
+        if poll_cancel():
+            break
+        print(response.text.replace("\0", ""), end="", flush=True)
+
+    print("\n", end="\0", flush=True)

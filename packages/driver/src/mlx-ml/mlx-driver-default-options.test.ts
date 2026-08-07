@@ -23,6 +23,7 @@ const mockProcess = {
   getCapabilities: vi.fn().mockResolvedValue(mockCapabilities),
   chat: vi.fn(),
   completion: vi.fn(),
+  generate: vi.fn(),
   cancelActiveRequest: vi.fn(),
   close: vi.fn().mockResolvedValue(undefined),
 };
@@ -45,7 +46,7 @@ describe('MlxDriver defaultOptions.mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcess.chat.mockResolvedValue(createMockStream(['ok']));
-    mockProcess.completion.mockResolvedValue(createMockStream(['ok']));
+    mockProcess.generate.mockResolvedValue(createMockStream(['ok']));
   });
 
   it('does not pass mode to Python when set via defaultOptions', async () => {
@@ -56,9 +57,9 @@ describe('MlxDriver defaultOptions.mode', () => {
 
     await driver.query(prompt);
 
-    const completionOptions = mockProcess.completion.mock.calls[0]?.[1];
-    expect(completionOptions).toEqual({ maxTokens: 16 });
-    expect(completionOptions).not.toHaveProperty('mode');
+    const generateOptions = mockProcess.generate.mock.calls[0]?.[1];
+    expect(generateOptions).toEqual({ maxTokens: 16 });
+    expect(generateOptions).not.toHaveProperty('mode');
   });
 
   it('uses defaultOptions.mode for API selection', async () => {
@@ -69,7 +70,7 @@ describe('MlxDriver defaultOptions.mode', () => {
 
     await driver.query(prompt);
 
-    expect(mockProcess.completion).toHaveBeenCalled();
+    expect(mockProcess.generate).toHaveBeenCalled();
     expect(mockProcess.chat).not.toHaveBeenCalled();
   });
 });

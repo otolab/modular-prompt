@@ -173,6 +173,15 @@ export class InferenceProcessClient {
     return this.requestQueue.addCompletionRequest(prompt, options, images, maxImageSize);
   }
 
+  async generate(
+    prompt: string | number[],
+    options?: unknown,
+    images?: string[],
+    maxImageSize?: number,
+  ): Promise<Readable> {
+    return this.requestQueue.addGenerateRequest(prompt, options, images, maxImageSize);
+  }
+
   async exit(): Promise<void> {
     await this.processComm.exit();
   }

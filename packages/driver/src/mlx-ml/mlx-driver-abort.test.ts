@@ -29,6 +29,7 @@ const mockProcess = {
   getCapabilities: vi.fn().mockResolvedValue(mockCapabilities),
   chat: vi.fn(),
   completion: vi.fn(),
+  generate: vi.fn(),
   cancelActiveRequest: vi.fn(),
   exit: vi.fn(),
 };
