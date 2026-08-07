@@ -19,9 +19,9 @@
     "prepack:all": "pnpm run -r --if-present prepack",
     "simple-chat": "node packages/simple-chat/dist/cli.js",
     "experiment": "node packages/experiment/dist/run-comparison.js",
-    "mlx:setup": "cd packages/driver/src/mlx-ml/python && uv sync",
-    "mlx:test": "cd packages/driver/src/mlx-ml/python && uv run python test_api_spec.py",
-    "postinstall": "npm run mlx:setup || echo 'MLX setup failed, you can run it manually with: npm run mlx:setup'"
+    "mlx:setup": "pnpm run setup-mlx -w @modular-prompt/driver",
+    "mlx:test": "cd packages/driver/src/mlx-ml/python && UV_PROJECT_ENVIRONMENT=\"${MODULAR_PROMPT_HOME:-$HOME/.modular-prompt}/runtimes/mlx/.venv\" uv run python test_api_spec.py",
+    "setup-mlx": "pnpm run setup-mlx -w @modular-prompt/driver"
   },
   "devDependencies": {
     "@changesets/cli": "2.29.8",

@@ -17,7 +17,7 @@
     "src/mlx-ml/python"
   ],
   "scripts": {
-    "build": "tsc -b --force",
+    "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs dist/runtime/",
     "test": "vitest",
     "test:run": "vitest run",
     "test:system": "vitest run --config vitest.config.system.ts",
@@ -28,8 +28,9 @@
     "copy-skills": "mkdir -p skills/driver-usage && cp ../../skills/driver-usage/SKILL.md skills/driver-usage/SKILL.md",
     "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills",
     "clean": "rm -rf dist skills tsconfig.tsbuildinfo",
-    "postinstall": "node scripts/setup-mlx.js || true",
-    "setup-mlx": "node scripts/setup-mlx.js"
+    "setup-mlx": "node scripts/runtime-cli.js setup mlx",
+    "runtime:status": "node scripts/runtime-cli.js setup --status",
+    "runtime:cleanup": "node scripts/runtime-cli.js cleanup"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.61.0",

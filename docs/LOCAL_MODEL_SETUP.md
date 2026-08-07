@@ -34,25 +34,31 @@ Apple Silicon Mac専用の高速ローカルLLM実行環境。
 
 ### 初回セットアップ
 
-`@modular-prompt/driver`のインストール時に自動的にセットアップされます：
+MLX ドライバーを使うには、Python ランタイムを **明示的にセットアップ** します（`npm install` では自動セットアップされません）。
 
 ```bash
-npm install @modular-prompt/driver
-# postinstallスクリプトが自動的にPython環境をセットアップ
-```
+# プロジェクトルートから
+npm run setup-mlx -w @modular-prompt/driver
 
-手動セットアップが必要な場合：
-
-```bash
+# またはパッケージディレクトリから
 cd node_modules/@modular-prompt/driver
 npm run setup-mlx
 ```
 
+Python 環境は `~/.modular-prompt/runtimes/mlx/` に作成されます（プロジェクトや `node_modules` 内には作られません）。
+
+**状態確認・掃除:**
+
+```bash
+npm run runtime:status -w @modular-prompt/driver
+npm run runtime:cleanup -w @modular-prompt/driver mlx -- --yes
+```
+
 **セットアップ内容：**
 
-1. uvパッケージマネージャーのインストール（未インストールの場合）
-2. Python仮想環境の作成
-3. MLX関連パッケージのインストール
+1. uv パッケージマネージャーのインストール（未インストールの場合）
+2. `~/.modular-prompt/runtimes/mlx/.venv` に Python 仮想環境を作成
+3. MLX 関連パッケージのインストール
 
 ### テスト用モデルのダウンロード
 
@@ -72,21 +78,32 @@ npm run download-model
 
 ### 任意のモデルのダウンロード
 
-Hugging Face上の任意のMLXモデルをダウンロードできます：
+Hugging Face上の任意のMLXモデルをダウンロードできます。
+
+**推奨（テスト用モデル）:**
+
+```bash
+pnpm run download-model -w @modular-prompt/driver
+```
+
+**手動で任意モデルを取得する場合**（`UV_PROJECT_ENVIRONMENT` でホーム venv を指定）:
 
 ```bash
 cd node_modules/@modular-prompt/driver/src/mlx-ml/python
-uv run mlx_lm.generate --model <model-name> --prompt "test" --max-tokens 1
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
+  uv run mlx_lm.generate --model <model-name> --prompt "test" --max-tokens 1
 ```
 
 **例：**
 
 ```bash
 # Gemma 2B
-uv run mlx_lm.generate --model mlx-community/gemma-2-2b-it-4bit --prompt "test" --max-tokens 1
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
+  uv run mlx_lm.generate --model mlx-community/gemma-2-2b-it-4bit --prompt "test" --max-tokens 1
 
 # Llama 3.2 3B
-uv run mlx_lm.generate --model mlx-community/Llama-3.2-3B-Instruct-4bit --prompt "test" --max-tokens 1
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
+  uv run mlx_lm.generate --model mlx-community/Llama-3.2-3B-Instruct-4bit --prompt "test" --max-tokens 1
 ```
 
 **モデルの保存場所：**
