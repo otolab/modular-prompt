@@ -1,25 +1,11 @@
 /**
- * MLX Driver プロセス通信管理
- * 
- * Pythonプロセスとの通信、データの送受信、ストリーミング処理を管理
+ * Thin Python 推論プロセスとの stdio 通信
  */
 
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { Readable } from 'stream';
 import { StringDecoder } from 'string_decoder';
 import { Logger } from '@modular-prompt/utils';
-import {
-  assertRuntimeReady,
-  getMlxPythonDir,
-  getVenvPath,
-  resolvePackageRootFromProcessModule,
-} from '../../runtime/index.js';
-
-const logger = new Logger({ prefix: 'MLX', context: 'process' });
-
-const packageRoot = resolvePackageRootFromProcessModule(import.meta.url);
-const mlxDriverDir = getMlxPythonDir(packageRoot);
-const mlxVenvPath = getVenvPath('mlx');
 
 export interface ProcessCommunicationCallbacks {
   onJsonResponse: (jsonData: string) => void;
@@ -27,10 +13,17 @@ export interface ProcessCommunicationCallbacks {
   onProcessExit: (code: number | null, signal: string | null) => void;
 }
 
-export interface ProcessCommunicationOptions {
-  textOnly?: boolean;
-  drafterModel?: string;
-  draftBlockSize?: number;
+export interface ProcessCommunicationConfig {
+  /** uv --project に渡す Python プロジェクトディレクトリ */
+  pythonProjectDir: string;
+  /** UV_PROJECT_ENVIRONMENT に設定する venv パス */
+  venvPath: string;
+  modelName: string;
+  /** `__main__.py` と modelName の後に付与する追加引数 */
+  extraArgs?: string[];
+  loggerPrefix?: string;
+  loggerContext?: string;
+  processExitErrorMessage?: (code: number | null, signal: string | null) => string;
 }
 
 export class ProcessCommunication {
@@ -40,43 +33,38 @@ export class ProcessCommunication {
   private jsonBuffer: string = '';
   private draining = false;
   private callbacks: ProcessCommunicationCallbacks;
+  private readonly exitErrorMessage: (code: number | null, signal: string | null) => string;
 
-  constructor(modelName: string, callbacks: ProcessCommunicationCallbacks, options?: ProcessCommunicationOptions) {
+  constructor(config: ProcessCommunicationConfig, callbacks: ProcessCommunicationCallbacks) {
     this.callbacks = callbacks;
     this.decoder = new StringDecoder('utf8');
+    this.exitErrorMessage =
+      config.processExitErrorMessage ??
+      ((code, signal) => `Inference process exited unexpectedly (code=${code}, signal=${signal})`);
 
-    assertRuntimeReady('mlx');
+    const logger = new Logger({
+      prefix: config.loggerPrefix ?? 'LIP',
+      context: config.loggerContext ?? 'process',
+    });
 
     const args = [
       '--project',
-      mlxDriverDir,
+      config.pythonProjectDir,
       'run',
       'python',
       '__main__.py',
-      modelName
+      config.modelName,
+      ...(config.extraArgs ?? []),
     ];
-    if (options?.textOnly) {
-      args.push('--text-only');
-    }
-    if (options?.drafterModel) {
-      args.push('--drafter', options.drafterModel);
-    }
-    if (options?.draftBlockSize !== undefined) {
-      args.push('--draft-block-size', options.draftBlockSize.toString());
-    }
 
     this.process = spawn('uv', args, {
-      cwd: mlxDriverDir,
+      cwd: config.pythonProjectDir,
       env: {
         ...process.env,
-        UV_PROJECT_ENVIRONMENT: mlxVenvPath,
+        UV_PROJECT_ENVIRONMENT: config.venvPath,
       },
     });
 
-    this.setupProcessHandlers();
-  }
-
-  private setupProcessHandlers(): void {
     this.process.stderr.on('data', (data) => {
       logger.debug(data.toString());
     });
@@ -91,20 +79,13 @@ export class ProcessCommunication {
 
     this.process.on('exit', (code, signal) => {
       if (this.currentStream) {
-        this.currentStream.destroy(
-          new Error(`MLX process exited unexpectedly (code=${code}, signal=${signal})`)
-        );
+        this.currentStream.destroy(new Error(this.exitErrorMessage(code, signal)));
         this.currentStream = null;
       }
       this.callbacks.onProcessExit(code, signal);
     });
   }
 
-  /**
-   * stdoutから受信したデータを処理する
-   * null文字をレスポンス区切りとして解釈し、
-   * 1つのdataチャンクに複数のレスポンスが含まれる場合も正しく処理する
-   */
   private processData(data: Buffer): void {
     let remaining: Buffer = data;
 
@@ -112,19 +93,14 @@ export class ProcessCommunication {
       const nullIndex = remaining.indexOf('\0');
 
       if (nullIndex !== -1) {
-        // null文字が見つかった場合、レスポンス終了
         const chunk = this.decoder.write(remaining.slice(0, nullIndex));
         this.decoder = new StringDecoder('utf8');
 
         if (this.currentStream) {
-          // ストリーミングレスポンスの場合
           this.currentStream.push(chunk);
-          this.currentStream.push(null); // ストリーム終了
+          this.currentStream.push(null);
           this.currentStream = null;
-        } else if (this.draining) {
-          // キャンセル後のドレイン: データを破棄
-        } else {
-          // JSONレスポンスの場合
+        } else if (!this.draining) {
           this.jsonBuffer += chunk;
           this.callbacks.onJsonResponse(this.jsonBuffer);
           this.jsonBuffer = '';
@@ -136,19 +112,13 @@ export class ProcessCommunication {
           this.draining = false;
         }
 
-        // null文字以降の残りデータを続けて処理
         remaining = remaining.slice(nullIndex + 1);
       } else {
-        // null文字がない場合、データを蓄積
         const chunk = this.decoder.write(remaining);
 
         if (this.currentStream) {
-          // ストリーミング中
           this.currentStream.push(chunk);
-        } else if (this.draining) {
-          // キャンセル後のドレイン: データを破棄
-        } else {
-          // JSONレスポンス蓄積中
+        } else if (!this.draining) {
           this.jsonBuffer += chunk;
         }
         break;
@@ -158,16 +128,11 @@ export class ProcessCommunication {
 
   createNewStream(): Readable {
     this.currentStream = new Readable({
-      read() {} // 空のreadメソッド
+      read() {},
     });
     return this.currentStream;
   }
 
-  /**
-   * Cancel the active streaming request.
-   * Destroys the current stream, drains stdout until the response terminator,
-   * and sends a cancel command to the Python process.
-   */
   cancelActiveStream(): void {
     if (!this.currentStream && !this.draining) {
       return;
@@ -180,10 +145,6 @@ export class ProcessCommunication {
 
     this.draining = true;
     this.sendToProcess(JSON.stringify({ method: 'cancel' }) + '\n');
-  }
-
-  isDraining(): boolean {
-    return this.draining;
   }
 
   sendToProcess(data: string): void {
@@ -201,17 +162,15 @@ export class ProcessCommunication {
   async exit(): Promise<void> {
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        // タイムアウト後は強制終了
         this.process.kill('SIGTERM');
         resolve();
-      }, 5000); // 5秒でタイムアウト
+      }, 5000);
 
       this.process.once('exit', () => {
         clearTimeout(timeout);
         resolve();
       });
 
-      // stdinを閉じてプロセスに終了を通知
       this.process.stdin.end();
     });
   }
