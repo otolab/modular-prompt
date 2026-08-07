@@ -1,12 +1,17 @@
 /**
  * MLX Driver 外部インターフェース
- * 
- * mlx-ml.tsドライバーからアクセスされるメイン API
- * 機能をモジュール化し、役割を分離
+ *
+ * mlx-ml.ts ドライバーからアクセスされるメイン API。
+ * 通信層は LIP InferenceProcessClient に委譲する。
  */
 
 import { Readable } from 'stream';
-import { Logger } from '@modular-prompt/utils';
+import {
+  getMlxPythonDir,
+  getVenvPath,
+  resolvePackageRootFromProcessModule,
+} from '../../runtime/index.js';
+import { InferenceProcessClient } from '../../local-inference/process-client.js';
 import type {
   MlxMlModelOptions,
   MlxMessage,
@@ -14,14 +19,14 @@ import type {
   MlxFormatTestResult,
   MlxTokenizeResult,
   MlxCachePrefillResult,
-  MlxToolDefinition
+  MlxToolDefinition,
 } from './types.js';
-import { QueueManager, QueueManagerCallbacks } from './queue.js';
-import { ProcessCommunication, ProcessCommunicationCallbacks } from './process-communication.js';
+import { mapOptionsToPython } from './parameter-mapper.js';
 
-const logger = new Logger({ prefix: 'MLX', context: 'process' });
+const packageRoot = resolvePackageRootFromProcessModule(import.meta.url);
+const mlxPythonDir = getMlxPythonDir(packageRoot);
+const mlxVenvPath = getVenvPath('mlx');
 
-// API v2.0 型をエクスポート
 export type {
   MlxMlModelOptions,
   MlxMessage,
@@ -29,7 +34,7 @@ export type {
   MlxFormatTestResult,
   MlxTokenizeResult,
   MlxCachePrefillResult,
-  MlxToolDefinition
+  MlxToolDefinition,
 };
 
 export interface MlxProcessOptions {
@@ -38,94 +43,124 @@ export interface MlxProcessOptions {
   draftBlockSize?: number;
 }
 
+function buildMlxSpawnArgs(options?: MlxProcessOptions): string[] {
+  const args: string[] = [];
+  if (options?.textOnly) {
+    args.push('--text-only');
+  }
+  if (options?.drafterModel) {
+    args.push('--drafter', options.drafterModel);
+  }
+  if (options?.draftBlockSize !== undefined) {
+    args.push('--draft-block-size', options.draftBlockSize.toString());
+  }
+  return args;
+}
+
 export class MlxProcess {
   modelName: string;
-
-  private queueManager: QueueManager;
-  private processComm: ProcessCommunication;
+  private client: InferenceProcessClient;
 
   constructor(modelName: string, options?: MlxProcessOptions) {
     this.modelName = modelName;
 
-    // コールバック設定
-    const processCallbacks: ProcessCommunicationCallbacks = {
-      onJsonResponse: (jsonData: string) => this.queueManager.handleJsonResponse(jsonData),
-      onRequestCompleted: () => this.queueManager.onRequestCompleted(),
-      onProcessExit: (code: number | null, signal: string | null) => {
-        if (code !== 0) {
-          const error = new Error(
-            `MLX process exited unexpectedly (code=${code}, signal=${signal})`
-          );
-          logger.error(error.message);
-          this.queueManager.rejectAll(error);
-        }
-      },
-    };
-
-    const queueCallbacks: QueueManagerCallbacks = {
-      sendToProcess: (data: string) => this.processComm.sendToProcess(data),
-      createNewStream: () => this.processComm.createNewStream(),
-      cancelActiveStream: () => this.processComm.cancelActiveStream(),
-    };
-
-    // 各コンポーネント初期化
-    this.processComm = new ProcessCommunication(modelName, processCallbacks, options);
-    this.queueManager = new QueueManager(queueCallbacks);
+    this.client = new InferenceProcessClient({
+      modelName,
+      pythonProjectDir: mlxPythonDir,
+      venvPath: mlxVenvPath,
+      runtimeProfile: 'mlx',
+      extraSpawnArgs: buildMlxSpawnArgs(options),
+      loggerPrefix: 'MLX',
+      mapSamplingOptions: (opts) => mapOptionsToPython(opts as MlxMlModelOptions | undefined, true),
+      processExitErrorMessage: (code, signal) =>
+        `MLX process exited unexpectedly (code=${code}, signal=${signal})`,
+    });
   }
 
-  /**
-   * 初期化（何もしない - 互換性のために残す）
-   */
   async ensureInitialized(): Promise<void> {
-    // No-op for compatibility
+    return this.client.ensureInitialized();
   }
 
-  // API v2.0 Capabilities
   async getCapabilities(): Promise<MlxRuntimeInfo> {
-    return this.queueManager.addCapabilitiesRequest();
+    return this.client.getCapabilities();
   }
 
-  // API v2.0 Format Test
   async formatTest(messages: MlxMessage[], options?: { primer?: string }): Promise<MlxFormatTestResult> {
-    return this.queueManager.addFormatTestRequest(messages, options);
+    return this.client.formatTest(messages, options);
   }
 
-  // API v2.0 Tokenize
-  async tokenize(messages: MlxMessage[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxTokenizeResult> {
-    return this.queueManager.addTokenizeRequest(messages, tools, reasoningEffort);
+  async tokenize(
+    messages: MlxMessage[],
+    tools?: MlxToolDefinition[],
+    reasoningEffort?: 'low' | 'medium' | 'high',
+  ): Promise<MlxTokenizeResult> {
+    return this.client.tokenize(messages, tools, reasoningEffort);
   }
 
-  // Cache operations
-  async cachePrefill(cachePath: string, messages: MlxMessage[], baseCachePath?: string, trimToTokens?: number, prefixOffsets?: number[], prefixHashes?: string[], tools?: MlxToolDefinition[], reasoningEffort?: 'low' | 'medium' | 'high'): Promise<MlxCachePrefillResult> {
-    return this.queueManager.addCachePrefillRequest(cachePath, messages, baseCachePath, trimToTokens, prefixOffsets, prefixHashes, tools, reasoningEffort);
+  async cachePrefill(
+    cachePath: string,
+    messages: MlxMessage[],
+    baseCachePath?: string,
+    trimToTokens?: number,
+    prefixOffsets?: number[],
+    prefixHashes?: string[],
+    tools?: MlxToolDefinition[],
+    reasoningEffort?: 'low' | 'medium' | 'high',
+  ): Promise<MlxCachePrefillResult> {
+    return this.client.cachePrefill(
+      cachePath,
+      messages,
+      baseCachePath,
+      trimToTokens,
+      prefixOffsets,
+      prefixHashes,
+      tools,
+      reasoningEffort,
+    );
   }
 
-  // API v2.0 Chat
-  async chat(messages: MlxMessage[], primer?: string, options?: MlxMlModelOptions, tools?: MlxToolDefinition[], images?: string[], maxImageSize?: number, reasoningEffort?: 'low' | 'medium' | 'high', cachePath?: string, cacheTrimTokens?: number): Promise<Readable> {
-    return this.queueManager.addChatRequest(messages, primer, options, tools, images, maxImageSize, reasoningEffort, cachePath, cacheTrimTokens);
+  async chat(
+    messages: MlxMessage[],
+    primer?: string,
+    options?: MlxMlModelOptions,
+    tools?: MlxToolDefinition[],
+    images?: string[],
+    maxImageSize?: number,
+    reasoningEffort?: 'low' | 'medium' | 'high',
+    cachePath?: string,
+    cacheTrimTokens?: number,
+  ): Promise<Readable> {
+    return this.client.chat(
+      messages,
+      primer,
+      options,
+      tools,
+      images,
+      maxImageSize,
+      reasoningEffort,
+      cachePath,
+      cacheTrimTokens,
+    );
   }
 
-  // API v2.0 Completion
-  async completion(prompt: string, options?: MlxMlModelOptions, images?: string[], maxImageSize?: number): Promise<Readable> {
-    return this.queueManager.addCompletionRequest(prompt, options, images, maxImageSize);
+  async completion(
+    prompt: string,
+    options?: MlxMlModelOptions,
+    images?: string[],
+    maxImageSize?: number,
+  ): Promise<Readable> {
+    return this.client.completion(prompt, options, images, maxImageSize);
   }
-
 
   async exit(): Promise<void> {
-    await this.processComm.exit();
+    return this.client.exit();
   }
 
   cancelActiveRequest(): void {
-    this.queueManager.cancelActiveRequest();
+    this.client.cancelActiveRequest();
   }
 
-  // デバッグ・ステータス情報
   getStatus() {
-    return {
-      modelName: this.modelName,
-      queueLength: this.queueManager.length,
-      isStreamingActive: this.processComm.isStreamingActive(),
-      isJsonBuffering: this.processComm.isJsonBuffering()
-    };
+    return this.client.getStatus();
   }
 }

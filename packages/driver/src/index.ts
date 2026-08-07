@@ -123,6 +123,11 @@ export type {
   InferenceCachePrefillResult,
 } from './local-inference/index.js';
 
+export {
+  InferenceProcessClient,
+  type InferenceProcessClientConfig,
+} from './local-inference/index.js';
+
 // Python runtime (MLX venv under ~/.modular-prompt)
 export {
   MODULAR_PROMPT_DIR,
