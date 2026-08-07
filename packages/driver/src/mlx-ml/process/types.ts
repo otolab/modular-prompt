@@ -1,191 +1,75 @@
 /**
  * MLX Driver API v2.0 型定義
+ *
+ * LIP 共通型は local-inference/protocol から re-export し、
+ * Mlx* 名前で後方互換を維持する。
  */
+import { Readable } from 'stream';
 import type { MlxMlModelOptions } from '../types.js';
-import type { SpecialToken, SpecialTokenPair } from '../../formatter/types.js';
+import type {
+  InferenceBaseRequest,
+  InferenceCapabilities,
+  InferenceCapabilitiesRequest,
+  InferenceFormatTestRequest,
+  InferenceTokenizeRequest,
+  InferenceChatRequest,
+  InferenceCompletionRequest,
+  InferenceCachePrefillRequest,
+  InferenceCachePrefillResult,
+  InferenceFormatTestResult,
+  InferenceTokenizeResult,
+  InferenceMessage,
+} from '../../local-inference/protocol.js';
 
 export type { MlxMlModelOptions };
 
-/** VLM content part for structured message content */
-export type MlxContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image' };
+export type {
+  InferenceContentPart as MlxContentPart,
+  InferenceStandardMessage as MlxStandardMessage,
+  InferenceAssistantToolCallMessage as MlxAssistantToolCallMessage,
+  InferenceToolResultMessage as MlxToolResultMessage,
+  InferenceMessage as MlxMessage,
+  InferenceToolDefinition as MlxToolDefinition,
+  InferenceCapabilitiesRequest as MlxCapabilitiesRequest,
+  InferenceFormatTestRequest as MlxFormatTestRequest,
+  InferenceTokenizeRequest as MlxTokenizeRequest,
+  InferenceCachePrefillRequest as MlxCachePrefillRequest,
+  InferenceCachePrefillResult as MlxCachePrefillResult,
+  KnownToolParserType,
+  ToolCallFormat,
+  ChatTemplateInfo,
+  InferenceCapabilities as MlxRuntimeInfo,
+  InferenceFormatTestResult as MlxFormatTestResult,
+  InferenceTokenizeResult as MlxTokenizeResult,
+} from '../../local-inference/protocol.js';
 
-/** 標準メッセージ（system / user / assistant） */
-export interface MlxStandardMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string | MlxContentPart[];
+export interface MlxBaseRequest extends InferenceBaseRequest {
+  method: InferenceBaseRequest['method'];
 }
 
-/** tool_calls付きassistantメッセージ（HuggingFace互換形式） */
-export interface MlxAssistantToolCallMessage {
-  role: 'assistant';
-  content: string;
-  tool_calls: Array<{
-    id: string;
-    type: 'function';
-    function: {
-      name: string;
-      arguments: string;  // JSON文字列
-    };
-  }>;
-}
-
-/** tool resultメッセージ（HuggingFace互換形式） */
-export interface MlxToolResultMessage {
-  role: 'tool';
-  content: string;
-  tool_call_id: string;
-  name: string;
-}
-
-export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxToolResultMessage;
-
-// API v2.0 リクエスト型定義
-export interface MlxBaseRequest {
-  method: 'capabilities' | 'format_test' | 'chat' | 'completion' | 'cache_prefill' | 'tokenize';
-}
-
-export interface MlxCapabilitiesRequest extends MlxBaseRequest {
-  method: 'capabilities';
-}
-
-export interface MlxFormatTestRequest extends MlxBaseRequest {
-  method: 'format_test';
-  messages: MlxMessage[];
-  options?: {
-    primer?: string;
-  };
-}
-
-export interface MlxTokenizeRequest extends MlxBaseRequest {
-  method: 'tokenize';
-  messages: MlxMessage[];
-  tools?: MlxToolDefinition[];
-  reasoning_effort?: 'low' | 'medium' | 'high';
-}
-
-/** HuggingFace apply_chat_template 互換のtool定義 */
-export interface MlxToolDefinition {
-  type: 'function';
-  function: {
-    name: string;
-    description?: string;
-    parameters?: Record<string, unknown>;
-  };
-}
-
-export interface MlxChatRequest extends MlxBaseRequest {
+/** MLX ドライバー向け chat リクエスト（options は camelCase の MlxMlModelOptions） */
+export interface MlxChatRequest extends Omit<InferenceChatRequest, 'options'> {
   method: 'chat';
-  messages: MlxMessage[];
-  primer?: string;
-  tools?: MlxToolDefinition[];
   options?: MlxMlModelOptions;
-  images?: string[];
-  maxImageSize?: number;
-  reasoning_effort?: 'low' | 'medium' | 'high';
-  cache_path?: string;
-  cache_trim_tokens?: number;
 }
 
-export interface MlxCompletionRequest extends MlxBaseRequest {
+/** MLX ドライバー向け completion リクエスト */
+export interface MlxCompletionRequest extends Omit<InferenceCompletionRequest, 'options'> {
   method: 'completion';
-  prompt: string;
   options?: MlxMlModelOptions;
-  images?: string[];
-  maxImageSize?: number;
 }
 
-export interface MlxCachePrefillRequest extends MlxBaseRequest {
-  method: 'cache_prefill';
-  cache_path: string;
-  messages: MlxMessage[];
-  base_cache_path?: string;
-  trim_to_tokens?: number;
-  prefix_offsets?: number[];
-  prefix_hashes?: string[];
-  tools?: MlxToolDefinition[];
-  reasoning_effort?: 'low' | 'medium' | 'high';
-}
-
-export interface MlxCachePrefillResult {
-  cache_path: string;
-  token_count?: number;
-  prefix_offsets?: number[];
-  prefix_hashes?: string[];
-}
-
-export type MlxRequest = MlxCapabilitiesRequest | MlxFormatTestRequest | MlxTokenizeRequest | MlxChatRequest | MlxCompletionRequest | MlxCachePrefillRequest;
-
-/** MLX-LMが認識するtool_parser_type */
-export type KnownToolParserType =
-  | 'json_tools'
-  | 'pythonic'
-  | 'function_gemma'
-  | 'mistral'
-  | 'kimi_k2'
-  | 'longcat'
-  | 'glm47'
-  | 'qwen3_coder'
-  | 'minimax_m2'
-  | 'gemma4'
-  | 'harmony';
-
-export interface ToolCallFormat {
-  tool_parser_type?: string;
-  call_start?: string;
-  call_end?: string;
-  response_start?: string;
-  response_end?: string;
-}
-
-export interface ChatTemplateInfo {
-  supported_roles: string[];
-  preview?: string;
-  constraints: Record<string, unknown>;
-  tool_call_format?: ToolCallFormat;
-}
-
-/**
- * MLX Runtime Information (from Python process)
- *
- * Pythonプロセスから取得する生の情報（snake_case）
- */
-export interface MlxRuntimeInfo {
-  methods: string[];
-  special_tokens: Record<string, SpecialToken | SpecialTokenPair>;
-  features: {
-    apply_chat_template: boolean;
-    vocab_size?: number;
-    model_max_length?: number;
-    chat_template?: ChatTemplateInfo;
-  };
-  chat_restrictions?: {
-    single_system_at_start?: boolean;
-    max_system_messages?: number;
-    alternating_turns?: boolean;
-    requires_user_last?: boolean;
-    allow_empty_messages?: boolean;
-  };
-  model_kind?: 'lm' | 'vlm';
-}
-
-export interface MlxFormatTestResult {
-  formatted_prompt: string | null;
-  template_applied: boolean;
-  model_specific_processing: MlxMessage[] | null;
-  error: string | null;
-}
-
-export interface MlxTokenizeResult {
-  token_ids: number[] | null;
-  token_count: number;
-  error: string | null;
-}
+export type MlxRequest =
+  | InferenceCapabilitiesRequest
+  | InferenceFormatTestRequest
+  | InferenceTokenizeRequest
+  | MlxChatRequest
+  | MlxCompletionRequest
+  | InferenceCachePrefillRequest;
 
 // レガシー互換性のための型
 export interface LegacyMlxRequest {
-  messages: MlxMessage[];
+  messages: InferenceMessage[];
   prompt?: string;
   primer?: string;
   options?: MlxMlModelOptions;
@@ -199,29 +83,29 @@ export interface BaseQueueItem {
 }
 
 export interface CapabilitiesQueueItem extends BaseQueueItem {
-  request: MlxCapabilitiesRequest;
-  resolve: (value: MlxRuntimeInfo) => void;
+  request: InferenceCapabilitiesRequest;
+  resolve: (value: InferenceCapabilities) => void;
   reject: (reason: Error) => void;
   expectJsonResponse: true;
 }
 
 export interface FormatTestQueueItem extends BaseQueueItem {
-  request: MlxFormatTestRequest;
-  resolve: (value: MlxFormatTestResult) => void;
+  request: InferenceFormatTestRequest;
+  resolve: (value: InferenceFormatTestResult) => void;
   reject: (reason: Error) => void;
   expectJsonResponse: true;
 }
 
 export interface TokenizeQueueItem extends BaseQueueItem {
-  request: MlxTokenizeRequest;
-  resolve: (value: MlxTokenizeResult) => void;
+  request: InferenceTokenizeRequest;
+  resolve: (value: InferenceTokenizeResult) => void;
   reject: (reason: Error) => void;
   expectJsonResponse: true;
 }
 
 export interface CachePrefillQueueItem extends BaseQueueItem {
-  request: MlxCachePrefillRequest;
-  resolve: (value: MlxCachePrefillResult) => void;
+  request: InferenceCachePrefillRequest;
+  resolve: (value: InferenceCachePrefillResult) => void;
   reject: (reason: Error) => void;
   expectJsonResponse: true;
 }
@@ -233,7 +117,9 @@ export interface StreamingQueueItem extends BaseQueueItem {
   expectJsonResponse?: false;
 }
 
-export type QueueItem = CapabilitiesQueueItem | FormatTestQueueItem | TokenizeQueueItem | CachePrefillQueueItem | StreamingQueueItem;
-
-// Node.js stream import
-import { Readable } from 'stream';
+export type QueueItem =
+  | CapabilitiesQueueItem
+  | FormatTestQueueItem
+  | TokenizeQueueItem
+  | CachePrefillQueueItem
+  | StreamingQueueItem;
