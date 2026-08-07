@@ -75,6 +75,9 @@ export interface ModelSpec {
   /** プロバイダー名 */
   provider: DriverProvider;
 
+  /** MLX 内の実行モード（provider が mlx のとき。driverOptions.backend より優先） */
+  backend?: MlxBackendMode;
+
   /** モデルの能力フラグ */
   capabilities: DriverCapability[];
 

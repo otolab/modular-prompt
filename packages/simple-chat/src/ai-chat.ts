@@ -15,8 +15,8 @@ import {
 } from '@modular-prompt/driver';
 import {
   buildMlxDriverOptions,
-  resolveDriverSelection,
-} from './driver-selection.js';
+  resolveInferenceSelection,
+} from './inference-selection.js';
 import type { DialogProfile, ChatLog, WorkflowMode } from './types.js';
 import chalk from 'chalk';
 import { Spinner } from './spinner.js';
@@ -101,18 +101,18 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   };
   registerFactories(registry, appConfig);
 
-  const selection = resolveDriverSelection(profile);
+  const selection = resolveInferenceSelection(profile);
   const driverOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
+
+  const resolveProvider = (fallback: DriverProvider): DriverProvider =>
+    selection.provider ?? fallback;
 
   // 1. workflow.models.default があればそれを使う
   const modelRef = profile.workflow?.models?.default;
   if (modelRef) {
-    const provider = profile.driver
-      ? selection.provider
-      : (modelRef.provider as DriverProvider);
     return registry.createDriver({
       model: modelRef.model,
-      provider,
+      provider: resolveProvider(modelRef.provider as DriverProvider),
       capabilities: [],
       driverOptions,
     });
@@ -120,10 +120,9 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
 
   // 2. CLI -m オーバーライド
   if (profile.model) {
-    const provider = profile.driver ? selection.provider : inferProvider(profile.model);
     return registry.createDriver({
       model: profile.model,
-      provider,
+      provider: resolveProvider(inferProvider(profile.model)),
       capabilities: [],
       driverOptions,
     });
@@ -132,7 +131,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   // 3. デフォルト: MLX ローカル
   return registry.createDriver({
     model: DEFAULT_MODEL,
-    provider: selection.provider,
+    provider: resolveProvider('mlx'),
     capabilities: [],
     driverOptions,
   });

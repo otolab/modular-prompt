@@ -7,7 +7,7 @@
  */
 
 import type { DriverRegistry } from './registry.js';
-import type { ModelSpec, MlxModelDriverOptions } from './types.js';
+import type { ModelSpec, MlxModelDriverOptions, MlxBackendMode } from './types.js';
 
 // 個別ドライバーのインポート
 import { MlxDriver } from '../mlx-ml/mlx-driver.js';
@@ -21,6 +21,11 @@ import { OllamaDriver } from '../ollama/ollama-driver.js';
 import { VllmDriver } from '../vllm/vllm-driver.js';
 import { EchoDriver } from '../echo-driver.js';
 import { TestDriver } from '../test-driver.js';
+
+function resolveMlxBackend(spec: ModelSpec): MlxBackendMode | undefined {
+  const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
+  return spec.backend ?? driverOpts?.backend;
+}
 
 /**
  * アプリケーション設定
@@ -110,7 +115,7 @@ export function registerFactories(
     return new MlxDriver({
       model: spec.model,
       defaultOptions: mergeDefaults(spec),
-      backend: driverOpts?.backend,
+      backend: resolveMlxBackend(spec),
       textOnly: driverOpts?.textOnly,
       maxImageSize: driverOpts?.maxImageSize,
       drafterModel: driverOpts?.drafterModel,

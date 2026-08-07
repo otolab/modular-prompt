@@ -25,7 +25,7 @@ import {
   performAIChat,
   closeDriver,
 } from './ai-chat.js';
-import { parseDriverKind } from './driver-selection.js';
+import { parseMlxBackend, parseProvider } from './inference-selection.js';
 import { loadResourceFiles } from './resource-files.js';
 import type { MaterialContext } from '@modular-prompt/process';
 import { Spinner } from './spinner.js';
@@ -97,9 +97,13 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
 
   // Apply overrides
   if (options.model) profile.model = options.model;
-  if (options.driver) {
-    profile.driver = parseDriverKind(options.driver);
-    logger.info(chalk.gray(`Driver: ${profile.driver}`));
+  if (options.provider) {
+    profile.provider = parseProvider(options.provider);
+    logger.info(chalk.gray(`Provider: ${profile.provider}`));
+  }
+  if (options.backend) {
+    profile.backend = parseMlxBackend(options.backend);
+    logger.info(chalk.gray(`Backend: ${profile.backend}`));
   } else if (options.textOnly) {
     profile.textOnly = true;
   }

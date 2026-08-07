@@ -4,7 +4,7 @@
  */
 
 import type { DriverRegistry } from './registry.js';
-import type { ModelSpec, DriverProvider, MlxModelDriverOptions } from './types.js';
+import type { ModelSpec, DriverProvider, MlxModelDriverOptions, MlxBackendMode } from './types.js';
 import type { AIDriver } from '../types.js';
 import { logger } from '@modular-prompt/utils';
 
@@ -49,6 +49,11 @@ function validateAndClampMaxTokens(
   return defaultOptions;
 }
 
+function resolveMlxBackend(spec: ModelSpec): MlxBackendMode | undefined {
+  const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
+  return spec.backend ?? driverOpts?.backend;
+}
+
 /**
  * 標準ドライバーのファクトリー関数を登録
  *
@@ -80,7 +85,7 @@ export function registerStandardDriverFactories(
           spec,
           spec.defaultOptions
         ),
-        backend: driverOpts?.backend,
+        backend: resolveMlxBackend(spec),
         textOnly: driverOpts?.textOnly ?? (spec.metadata?.textOnly as boolean | undefined),
         drafterModel: driverOpts?.drafterModel ?? (spec.metadata?.drafterModel as string | undefined),
         draftBlockSize: driverOpts?.draftBlockSize ?? (spec.metadata?.draftBlockSize as number | undefined),
