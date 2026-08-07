@@ -109,6 +109,20 @@ export type {
 
 export type { MlxQueryOptions } from './mlx-ml/mlx-options.js';
 
+// Local Inference Protocol (LIP)
+export type {
+  InferenceMethod,
+  InferenceMessage,
+  InferenceCapabilities,
+  InferenceRequest,
+  InferenceChatRequest,
+  InferenceCompletionRequest,
+  InferenceToolDefinition,
+  InferenceFormatTestResult,
+  InferenceTokenizeResult,
+  InferenceCachePrefillResult,
+} from './local-inference/index.js';
+
 // Python runtime (MLX venv under ~/.modular-prompt)
 export {
   MODULAR_PROMPT_DIR,

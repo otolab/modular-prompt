@@ -7,51 +7,14 @@
 import type { SpecialToken, SpecialTokenPair } from '../formatter/types.js';
 import type { ChatRestrictions, ApiStrategy } from './model-spec/index.js';
 
-/**
- * VLM content part for structured message content
- */
-export type MlxContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image' };
-
-/**
- * 標準メッセージ（system / user / assistant）
- */
-export interface MlxStandardMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string | MlxContentPart[];
-}
-
-/**
- * tool_calls付きassistantメッセージ（HuggingFace互換形式）
- */
-export interface MlxAssistantToolCallMessage {
-  role: 'assistant';
-  content: string;
-  tool_calls: Array<{
-    id: string;
-    type: 'function';
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
-}
-
-/**
- * tool resultメッセージ（HuggingFace互換形式）
- */
-export interface MlxToolResultMessage {
-  role: 'tool';
-  content: string;
-  tool_call_id: string;
-  name: string;
-}
-
-/**
- * MLX message format（Union型）
- */
-export type MlxMessage = MlxStandardMessage | MlxAssistantToolCallMessage | MlxToolResultMessage;
+/** メッセージ型は LIP 共通定義を re-export（process 層と同一ソース） */
+export type {
+  InferenceContentPart as MlxContentPart,
+  InferenceStandardMessage as MlxStandardMessage,
+  InferenceAssistantToolCallMessage as MlxAssistantToolCallMessage,
+  InferenceToolResultMessage as MlxToolResultMessage,
+  InferenceMessage as MlxMessage,
+} from '../local-inference/protocol.js';
 
 /**
  * MLX model options (キャメルケース形式)
