@@ -15,7 +15,9 @@ import type {
   InferenceSamplingOptions,
 } from './protocol.js';
 
-/** 旧プロトコル互換のストリーミングリクエスト形状 */
+/** 旧プロトコル互換のストリーミングリクエスト形状。
+ * options は LIP ワイヤ形式（snake_case）または mapper 通過後の Record を受け付ける。
+ * 旧 LegacyMlxRequest の MlxMlModelOptions 専用型から意図的に拡張（挙動は mapper 経由で同等）。 */
 export interface LegacyStreamingRequest {
   messages: InferenceMessage[];
   prompt?: string;

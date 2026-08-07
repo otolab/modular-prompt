@@ -58,6 +58,8 @@ export class InferenceProcessClient {
       context: 'process',
     });
 
+    // processCallbacks は this.requestQueue 代入前に定義するが、
+    // コールバックは子プロセスの stdout/exit など非同期イベント時のみ呼ばれるため安全。
     const processCallbacks: ProcessCommunicationCallbacks = {
       onJsonResponse: (jsonData) => this.requestQueue.handleJsonResponse(jsonData),
       onRequestCompleted: () => this.requestQueue.onRequestCompleted(),
