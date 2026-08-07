@@ -152,6 +152,15 @@ export class MlxProcess {
     return this.client.completion(prompt, options, images, maxImageSize);
   }
 
+  async generate(
+    prompt: string | number[],
+    options?: MlxMlModelOptions,
+    images?: string[],
+    maxImageSize?: number,
+  ): Promise<Readable> {
+    return this.client.generate(prompt, options, images, maxImageSize);
+  }
+
   async exit(): Promise<void> {
     return this.client.exit();
   }

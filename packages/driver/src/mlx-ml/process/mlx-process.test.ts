@@ -9,6 +9,7 @@ const clientStub = {
   cachePrefill: vi.fn(),
   chat: vi.fn(),
   completion: vi.fn(),
+  generate: vi.fn(),
   exit: vi.fn(),
   cancelActiveRequest: vi.fn(),
   getStatus: vi.fn(),

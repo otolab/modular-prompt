@@ -12,6 +12,7 @@ import type {
   InferenceTokenizeRequest,
   InferenceChatRequest,
   InferenceCompletionRequest,
+  InferenceGenerateRequest,
   InferenceCachePrefillRequest,
 } from '../../local-inference/protocol.js';
 
@@ -62,10 +63,17 @@ export interface MlxCompletionRequest extends Omit<InferenceCompletionRequest, '
   options?: MlxMlModelOptions;
 }
 
+/** MLX ドライバー向け generate リクエスト */
+export interface MlxGenerateRequest extends Omit<InferenceGenerateRequest, 'options'> {
+  method: 'generate';
+  options?: MlxMlModelOptions;
+}
+
 export type MlxRequest =
   | InferenceCapabilitiesRequest
   | InferenceFormatTestRequest
   | InferenceTokenizeRequest
   | MlxChatRequest
   | MlxCompletionRequest
+  | MlxGenerateRequest
   | InferenceCachePrefillRequest;

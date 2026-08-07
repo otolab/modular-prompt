@@ -342,7 +342,7 @@ def get_capabilities(tokenizer):
         dict: capabilities情報
     """
     # 基本メソッド
-    methods = ["capabilities", "completion", "format_test"]
+    methods = ["capabilities", "completion", "generate", "format_test"]
 
     # apply_chat_templateがある場合はchatメソッドを追加
     if hasattr(tokenizer, 'apply_chat_template'):

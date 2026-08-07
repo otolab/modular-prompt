@@ -20,6 +20,7 @@ export type {
   InferenceTokenizeRequest,
   InferenceChatRequest,
   InferenceCompletionRequest,
+  InferenceGenerateRequest,
   InferenceCachePrefillRequest,
   InferenceCachePrefillResult,
   InferenceRequest,

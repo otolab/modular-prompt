@@ -12,6 +12,7 @@ export type InferenceMethod =
   | 'format_test'
   | 'chat'
   | 'completion'
+  | 'generate'
   | 'cache_prefill'
   | 'tokenize';
 
@@ -118,6 +119,15 @@ export interface InferenceCompletionRequest extends InferenceBaseRequest {
   maxImageSize?: number;
 }
 
+/** 整形済み prompt（文字列 or トークン ID）のストリーム推論 */
+export interface InferenceGenerateRequest extends InferenceBaseRequest {
+  method: 'generate';
+  prompt: string | number[];
+  options?: InferenceSamplingOptions;
+  images?: string[];
+  maxImageSize?: number;
+}
+
 export interface InferenceCachePrefillRequest extends InferenceBaseRequest {
   method: 'cache_prefill';
   cache_path: string;
@@ -143,6 +153,7 @@ export type InferenceRequest =
   | InferenceTokenizeRequest
   | InferenceChatRequest
   | InferenceCompletionRequest
+  | InferenceGenerateRequest
   | InferenceCachePrefillRequest;
 
 /** MLX-LM が認識する tool_parser_type（capabilities 経由で参照）。

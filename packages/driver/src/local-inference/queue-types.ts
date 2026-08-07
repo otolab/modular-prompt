@@ -8,6 +8,7 @@ import type {
   InferenceTokenizeResult,
   InferenceChatRequest,
   InferenceCompletionRequest,
+  InferenceGenerateRequest,
   InferenceCachePrefillRequest,
   InferenceCachePrefillResult,
   InferenceMessage,
@@ -60,7 +61,7 @@ export interface CachePrefillQueueItem extends BaseQueueItem {
 }
 
 export interface StreamingQueueItem extends BaseQueueItem {
-  request: InferenceChatRequest | InferenceCompletionRequest | LegacyStreamingRequest;
+  request: InferenceChatRequest | InferenceCompletionRequest | InferenceGenerateRequest | LegacyStreamingRequest;
   resolve: (value: Readable) => void;
   reject: (reason: Error) => void;
   expectJsonResponse?: false;

@@ -12,6 +12,7 @@ import type {
   InferenceTokenizeResult,
   InferenceChatRequest,
   InferenceCompletionRequest,
+  InferenceGenerateRequest,
   InferenceCachePrefillRequest,
   InferenceCachePrefillResult,
   InferenceMessage,
@@ -180,6 +181,32 @@ export class InferenceRequestQueue {
       try {
         const request: InferenceCompletionRequest = {
           method: 'completion',
+          prompt,
+          options: this.mapSamplingOptions(options),
+          ...(images?.length ? { images, maxImageSize } : {}),
+        };
+        this.queue.push({
+          request,
+          resolve,
+          reject,
+        } as StreamingQueueItem);
+        this.processNext();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  addGenerateRequest(
+    prompt: string | number[],
+    options?: unknown,
+    images?: string[],
+    maxImageSize?: number,
+  ): Promise<Readable> {
+    return new Promise((resolve, reject) => {
+      try {
+        const request: InferenceGenerateRequest = {
+          method: 'generate',
           prompt,
           options: this.mapSamplingOptions(options),
           ...(images?.length ? { images, maxImageSize } : {}),

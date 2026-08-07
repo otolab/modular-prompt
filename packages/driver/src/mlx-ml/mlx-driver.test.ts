@@ -52,6 +52,7 @@ vi.mock('./process/index.js', () => ({
     }),
     chat: vi.fn(),
     completion: vi.fn(),
+    generate: vi.fn(),
     exit: vi.fn()
   }))
 }));
