@@ -145,7 +145,9 @@ export type InferenceRequest =
   | InferenceCompletionRequest
   | InferenceCachePrefillRequest;
 
-/** MLX-LM が認識する tool_parser_type（capabilities 経由で参照） */
+/** MLX-LM が認識する tool_parser_type（capabilities 経由で参照）。
+ * 現時点では MLX 固有の知識。PyTorch バックエンド追加時（#302 Phase 6）に
+ * バックエンド固有モジュールへ移動・一般化する可能性あり。 */
 export type KnownToolParserType =
   | 'json_tools'
   | 'pythonic'

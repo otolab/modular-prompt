@@ -5,30 +5,52 @@ import type {
 } from './protocol.js';
 import type {
   MlxRuntimeInfo,
-  MlxMessage,
+  MlxMessage as ProcessMlxMessage,
   MlxChatRequest,
 } from '../mlx-ml/process/types.js';
+import type { MlxMessage as PublicMlxMessage } from '../mlx-ml/types.js';
 
 describe('local-inference protocol aliases', () => {
+  const sampleCapabilities: InferenceCapabilities = {
+    methods: ['capabilities', 'chat', 'completion'],
+    special_tokens: {},
+    features: {
+      apply_chat_template: true,
+    },
+  };
+
+  const sampleMessage: InferenceMessage = {
+    role: 'user',
+    content: 'hello',
+  };
+
   it('MlxRuntimeInfo is assignable from InferenceCapabilities', () => {
-    const capabilities: InferenceCapabilities = {
-      methods: ['capabilities', 'chat', 'completion'],
-      special_tokens: {},
-      features: {
-        apply_chat_template: true,
-      },
-    };
-    const runtimeInfo: MlxRuntimeInfo = capabilities;
+    const runtimeInfo: MlxRuntimeInfo = sampleCapabilities;
     expect(runtimeInfo.methods).toContain('chat');
   });
 
-  it('MlxMessage accepts InferenceMessage shapes', () => {
-    const message: InferenceMessage = {
-      role: 'user',
-      content: 'hello',
-    };
-    const mlxMessage: MlxMessage = message;
+  it('InferenceCapabilities is assignable from MlxRuntimeInfo', () => {
+    const runtimeInfo: MlxRuntimeInfo = sampleCapabilities;
+    const capabilities: InferenceCapabilities = runtimeInfo;
+    expect(capabilities.features.apply_chat_template).toBe(true);
+  });
+
+  it('process MlxMessage accepts InferenceMessage shapes', () => {
+    const mlxMessage: ProcessMlxMessage = sampleMessage;
     expect(mlxMessage.role).toBe('user');
+  });
+
+  it('InferenceMessage accepts process MlxMessage shapes', () => {
+    const mlxMessage: ProcessMlxMessage = sampleMessage;
+    const message: InferenceMessage = mlxMessage;
+    expect(message.content).toBe('hello');
+  });
+
+  it('public MlxMessage and process MlxMessage are mutually assignable', () => {
+    const fromPublic: PublicMlxMessage = sampleMessage;
+    const toProcess: ProcessMlxMessage = fromPublic;
+    const backToPublic: PublicMlxMessage = toProcess;
+    expect(backToPublic.role).toBe('user');
   });
 
   it('MlxChatRequest accepts MlxMlModelOptions in camelCase', () => {

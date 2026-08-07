@@ -43,9 +43,7 @@ export type {
   InferenceTokenizeResult as MlxTokenizeResult,
 } from '../../local-inference/protocol.js';
 
-export interface MlxBaseRequest extends InferenceBaseRequest {
-  method: InferenceBaseRequest['method'];
-}
+export type MlxBaseRequest = InferenceBaseRequest;
 
 /** MLX ドライバー向け chat リクエスト（options は camelCase の MlxMlModelOptions） */
 export interface MlxChatRequest extends Omit<InferenceChatRequest, 'options'> {
