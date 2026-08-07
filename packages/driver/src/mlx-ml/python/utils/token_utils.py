@@ -346,7 +346,7 @@ def get_capabilities(tokenizer):
 
     # apply_chat_templateがある場合はchatメソッドを追加
     if hasattr(tokenizer, 'apply_chat_template'):
-        methods.append("chat")
+        methods.append("render")
 
     capabilities = {
         "methods": methods,

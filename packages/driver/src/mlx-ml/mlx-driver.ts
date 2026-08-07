@@ -9,6 +9,7 @@ import type { MlxMlModelOptions, MlxModelCapabilities } from './types.js';
 import { mergeMlxQueryOptions, toMlxSamplingOptions, type MlxQueryOptions } from './mlx-options.js';
 import type { MlxRuntimeInfo } from './process/types.js';
 import { createModelSpecificProcessor, selectApi } from './process/model-specific.js';
+import { generateMergedPrompt } from './process/prompt-builder.js';
 import { selectResponseProcessor } from './process/model-handlers.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { extractJSON } from '@modular-prompt/utils';
@@ -366,7 +367,36 @@ export class MlxDriver implements AIDriver {
         );
       }
 
-      stream = await this.process.chat(mlxMessages, undefined, mlxOptions, nativeTools, images.length > 0 ? images : undefined, images.length > 0 ? this.maxImageSize : undefined, options?.reasoningEffort, cachePath, cacheTrimTokens);
+      let formattedPrompt: string;
+      if (this.runtimeInfo?.features.apply_chat_template) {
+        const renderResult = await this.process.render(
+          mlxMessages,
+          mlxOptions,
+          nativeTools,
+          options?.reasoningEffort,
+        );
+        if (renderResult.error || renderResult.formatted_prompt == null) {
+          throw new Error(renderResult.error ?? 'render failed');
+        }
+        formattedPrompt = String(renderResult.formatted_prompt);
+      } else {
+        formattedPrompt = generateMergedPrompt(
+          mlxMessages,
+          this.runtimeInfo?.special_tokens ?? {},
+        );
+      }
+
+      const generateOptions = { ...mlxOptions };
+      delete generateOptions.trustRemoteCode;
+
+      stream = await this.process.generate(
+        formattedPrompt,
+        generateOptions,
+        images.length > 0 ? images : undefined,
+        images.length > 0 ? this.maxImageSize : undefined,
+        cachePath,
+        cacheTrimTokens,
+      );
 
       const cacheTokensUsed = cachePath
         ? (cacheTrimTokens ?? (this.cacheController instanceof MlxCacheController

@@ -8,7 +8,7 @@ vi.mock('./process/index.js', () => ({
   MlxProcess: vi.fn().mockImplementation(() => ({
     ensureInitialized: vi.fn().mockResolvedValue(undefined),
     getCapabilities: vi.fn().mockResolvedValue({
-      methods: ['chat', 'completion', 'format_test', 'capabilities'],
+      methods: ['render', 'completion', 'format_test', 'capabilities', 'generate'],
       special_tokens: {
         eod: { text: '<|endoftext|>', id: 0 },
         system: {
@@ -51,6 +51,7 @@ vi.mock('./process/index.js', () => ({
       determineApi: vi.fn().mockReturnValue('chat')
     }),
     chat: vi.fn(),
+    render: vi.fn(),
     completion: vi.fn(),
     generate: vi.fn(),
     exit: vi.fn()

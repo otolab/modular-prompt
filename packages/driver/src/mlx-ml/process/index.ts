@@ -22,6 +22,7 @@ import type {
   MlxToolDefinition,
 } from './types.js';
 import { mapOptionsToPython } from './parameter-mapper.js';
+import { generateMergedPrompt } from './prompt-builder.js';
 
 const packageRoot = resolvePackageRootFromProcessModule(import.meta.url);
 const mlxPythonDir = getMlxPythonDir(packageRoot);
@@ -89,6 +90,15 @@ export class MlxProcess {
     return this.client.formatTest(messages, options);
   }
 
+  async render(
+    messages: MlxMessage[],
+    options?: MlxMlModelOptions & { primer?: string },
+    tools?: MlxToolDefinition[],
+    reasoningEffort?: 'low' | 'medium' | 'high',
+  ): Promise<import('../../local-inference/protocol.js').InferenceRenderResult> {
+    return this.client.render(messages, options, tools, reasoningEffort);
+  }
+
   async tokenize(
     messages: MlxMessage[],
     tools?: MlxToolDefinition[],
@@ -119,6 +129,7 @@ export class MlxProcess {
     );
   }
 
+  /** @deprecated render + generate を使用すること */
   async chat(
     messages: MlxMessage[],
     primer?: string,
@@ -130,16 +141,40 @@ export class MlxProcess {
     cachePath?: string,
     cacheTrimTokens?: number,
   ): Promise<Readable> {
-    return this.client.chat(
-      messages,
-      primer,
-      options,
-      tools,
+    const capabilities = await this.getCapabilities();
+    let formattedPrompt: string;
+
+    if (capabilities.features.apply_chat_template) {
+      const renderResult = await this.render(
+        messages,
+        primer ? { ...options, primer } : options,
+        tools,
+        reasoningEffort,
+      );
+      if (renderResult.error || renderResult.formatted_prompt == null) {
+        throw new Error(renderResult.error ?? 'render failed');
+      }
+      formattedPrompt = String(renderResult.formatted_prompt);
+    } else {
+      formattedPrompt = generateMergedPrompt(messages, capabilities.special_tokens);
+      if (primer) {
+        formattedPrompt += primer;
+      }
+    }
+
+    const generateOptions = options ? { ...options } : undefined;
+    if (generateOptions) {
+      delete generateOptions.trustRemoteCode;
+    }
+
+    return this.generate(
+      formattedPrompt,
+      generateOptions,
       images,
       maxImageSize,
-      reasoningEffort,
       cachePath,
       cacheTrimTokens,
+      primer,
     );
   }
 
@@ -157,8 +192,19 @@ export class MlxProcess {
     options?: MlxMlModelOptions,
     images?: string[],
     maxImageSize?: number,
+    cachePath?: string,
+    cacheTrimTokens?: number,
+    primer?: string,
   ): Promise<Readable> {
-    return this.client.generate(prompt, options, images, maxImageSize);
+    return this.client.generate(
+      prompt,
+      options,
+      images,
+      maxImageSize,
+      cachePath,
+      cacheTrimTokens,
+      primer,
+    );
   }
 
   async exit(): Promise<void> {

@@ -11,10 +11,12 @@ import { assertRuntimeReady } from '../runtime/index.js';
 import type {
   InferenceCapabilities,
   InferenceFormatTestResult,
+  InferenceRenderResult,
   InferenceTokenizeResult,
   InferenceCachePrefillResult,
   InferenceMessage,
   InferenceToolDefinition,
+  InferenceSamplingOptions,
 } from './protocol.js';
 import {
   ProcessCommunication,
@@ -110,6 +112,15 @@ export class InferenceProcessClient {
     return this.requestQueue.addFormatTestRequest(messages, options);
   }
 
+  async render(
+    messages: InferenceMessage[],
+    options?: InferenceSamplingOptions & { primer?: string },
+    tools?: InferenceToolDefinition[],
+    reasoningEffort?: 'low' | 'medium' | 'high',
+  ): Promise<InferenceRenderResult> {
+    return this.requestQueue.addRenderRequest(messages, options, tools, reasoningEffort);
+  }
+
   async tokenize(
     messages: InferenceMessage[],
     tools?: InferenceToolDefinition[],
@@ -140,30 +151,6 @@ export class InferenceProcessClient {
     );
   }
 
-  async chat(
-    messages: InferenceMessage[],
-    primer?: string,
-    options?: unknown,
-    tools?: InferenceToolDefinition[],
-    images?: string[],
-    maxImageSize?: number,
-    reasoningEffort?: 'low' | 'medium' | 'high',
-    cachePath?: string,
-    cacheTrimTokens?: number,
-  ): Promise<Readable> {
-    return this.requestQueue.addChatRequest(
-      messages,
-      primer,
-      options,
-      tools,
-      images,
-      maxImageSize,
-      reasoningEffort,
-      cachePath,
-      cacheTrimTokens,
-    );
-  }
-
   async completion(
     prompt: string,
     options?: unknown,
@@ -178,8 +165,19 @@ export class InferenceProcessClient {
     options?: unknown,
     images?: string[],
     maxImageSize?: number,
+    cachePath?: string,
+    cacheTrimTokens?: number,
+    primer?: string,
   ): Promise<Readable> {
-    return this.requestQueue.addGenerateRequest(prompt, options, images, maxImageSize);
+    return this.requestQueue.addGenerateRequest(
+      prompt,
+      options,
+      images,
+      maxImageSize,
+      cachePath,
+      cacheTrimTokens,
+      primer,
+    );
   }
 
   async exit(): Promise<void> {

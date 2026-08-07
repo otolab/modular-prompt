@@ -17,6 +17,7 @@ export type {
   InferenceBaseRequest,
   InferenceCapabilitiesRequest,
   InferenceFormatTestRequest,
+  InferenceRenderRequest,
   InferenceTokenizeRequest,
   InferenceChatRequest,
   InferenceCompletionRequest,
@@ -29,6 +30,7 @@ export type {
   ChatTemplateInfo,
   InferenceCapabilities,
   InferenceFormatTestResult,
+  InferenceRenderResult,
   InferenceTokenizeResult,
 } from './protocol.js';
 

@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_cache_prefill, handle_capabilities, handle_chat, handle_completion, handle_format_test, handle_generate, handle_tokenize
+from handlers import handle_cache_prefill, handle_capabilities, handle_completion, handle_format_test, handle_generate, handle_render, handle_tokenize
 from handlers.cancel import request_cancel, reset_cancel
 
 
@@ -102,23 +102,17 @@ class Server:
                     reasoning_effort=req.get('reasoning_effort'),
                 )
 
-            elif method == 'chat':
+            elif method == 'render':
                 messages = req.get('messages')
                 if not messages:
-                    self._error_response("'messages' field is required for chat method")
+                    self._error_response("'messages' field is required for render method")
                     return
-                handle_chat(
+                handle_render(
                     self.backend,
-                    self.capabilities,
                     messages,
-                    primer=req.get('primer'),
                     options=req.get('options', {}),
                     tools=req.get('tools'),
-                    images=req.get('images', []),
-                    max_image_size=req.get('maxImageSize', 768),
                     reasoning_effort=req.get('reasoning_effort'),
-                    cache_path=req.get('cache_path'),
-                    cache_trim_tokens=req.get('cache_trim_tokens'),
                 )
 
             elif method == 'generate':
@@ -133,6 +127,9 @@ class Server:
                     options=req.get('options', {}),
                     images=images if images else None,
                     max_image_size=req.get('maxImageSize', 768),
+                    primer=req.get('primer'),
+                    cache_path=req.get('cache_path'),
+                    cache_trim_tokens=req.get('cache_trim_tokens'),
                 )
 
             elif method == 'completion':

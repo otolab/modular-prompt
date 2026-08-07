@@ -4,7 +4,7 @@ import { MlxDriver } from './mlx-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 
 const mockCapabilities = {
-  methods: ['chat', 'completion', 'format_test', 'capabilities'],
+  methods: ['render', 'completion', 'format_test', 'capabilities', 'generate'],
   special_tokens: {},
   features: {
     apply_chat_template: true,
@@ -22,6 +22,7 @@ const mockProcess = {
   ensureInitialized: vi.fn().mockResolvedValue(undefined),
   getCapabilities: vi.fn().mockResolvedValue(mockCapabilities),
   chat: vi.fn(),
+  render: vi.fn().mockResolvedValue({ formatted_prompt: 'formatted', error: null }),
   completion: vi.fn(),
   generate: vi.fn(),
   cancelActiveRequest: vi.fn(),
@@ -45,7 +46,7 @@ const prompt: CompiledPrompt = {
 describe('MlxDriver defaultOptions.mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcess.chat.mockResolvedValue(createMockStream(['ok']));
+    mockProcess.render.mockResolvedValue({ formatted_prompt: 'formatted', error: null });
     mockProcess.generate.mockResolvedValue(createMockStream(['ok']));
   });
 
@@ -71,6 +72,40 @@ describe('MlxDriver defaultOptions.mode', () => {
     await driver.query(prompt);
 
     expect(mockProcess.generate).toHaveBeenCalled();
-    expect(mockProcess.chat).not.toHaveBeenCalled();
+    expect(mockProcess.render).not.toHaveBeenCalled();
+  });
+
+  it('uses render + generate for chat API path', async () => {
+    const driver = new MlxDriver({
+      model: 'test-model',
+      defaultOptions: { mode: 'chat' },
+    });
+
+    await driver.query(prompt);
+
+    expect(mockProcess.render).toHaveBeenCalled();
+    expect(mockProcess.generate).toHaveBeenCalled();
+    expect(mockProcess.generate.mock.calls[0]?.[0]).toBe('formatted');
+  });
+
+  it('uses generateMergedPrompt when chat template is unavailable', async () => {
+    mockProcess.getCapabilities.mockResolvedValue({
+      ...mockCapabilities,
+      features: {
+        ...mockCapabilities.features,
+        apply_chat_template: false,
+      },
+    });
+
+    const driver = new MlxDriver({
+      model: 'test-model',
+      defaultOptions: { mode: 'chat' },
+    });
+
+    await driver.query(prompt);
+
+    expect(mockProcess.render).not.toHaveBeenCalled();
+    expect(mockProcess.generate).toHaveBeenCalled();
+    expect(mockProcess.generate.mock.calls[0]?.[0]).toContain('<!-- begin of');
   });
 });

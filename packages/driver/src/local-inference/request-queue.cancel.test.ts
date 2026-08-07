@@ -19,7 +19,7 @@ describe('InferenceRequestQueue.cancelActiveRequest', () => {
   it('calls cancelActiveStream while a streaming request is in flight', async () => {
     const { queue, cancelActiveStream } = createRequestQueue();
 
-    const streamPromise = queue.addChatRequest([{ role: 'user', content: 'hi' }]);
+    const streamPromise = queue.addGenerateRequest('hello prompt');
     await streamPromise;
 
     queue.cancelActiveRequest();
@@ -36,10 +36,10 @@ describe('InferenceRequestQueue.cancelActiveRequest', () => {
   it('unblocks the queue after request completion following cancel', async () => {
     const { queue, sendToProcess } = createRequestQueue();
 
-    await queue.addChatRequest([{ role: 'user', content: 'first' }]);
+    await queue.addGenerateRequest('first prompt');
     queue.onRequestCompleted();
 
-    await queue.addChatRequest([{ role: 'user', content: 'second' }]);
+    await queue.addGenerateRequest('second prompt');
     expect(sendToProcess).toHaveBeenCalledTimes(2);
   });
 });

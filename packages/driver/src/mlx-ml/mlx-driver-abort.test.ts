@@ -10,7 +10,7 @@ function createMockStream(chunks: string[]): Readable {
 }
 
 const mockCapabilities = {
-  methods: ['chat', 'completion', 'format_test', 'capabilities'],
+  methods: ['render', 'completion', 'format_test', 'capabilities', 'generate'],
   special_tokens: {},
   features: {
     apply_chat_template: true,
@@ -28,6 +28,7 @@ const mockProcess = {
   ensureInitialized: vi.fn().mockResolvedValue(undefined),
   getCapabilities: vi.fn().mockResolvedValue(mockCapabilities),
   chat: vi.fn(),
+  render: vi.fn(),
   completion: vi.fn(),
   generate: vi.fn(),
   cancelActiveRequest: vi.fn(),
@@ -48,7 +49,8 @@ describe('MlxDriver abort signal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcess.getCapabilities.mockResolvedValue(mockCapabilities);
-    mockProcess.chat.mockResolvedValue(
+    mockProcess.render.mockResolvedValue({ formatted_prompt: 'formatted', error: null });
+    mockProcess.generate.mockResolvedValue(
       createMockStream(['partial ', `answer${META_MARKER}{"prompt_tokens":10,"generation_tokens":3}`]),
     );
   });
@@ -70,14 +72,15 @@ describe('MlxDriver abort signal', () => {
       content: '',
       finishReason: 'error',
     });
-    expect(mockProcess.chat).not.toHaveBeenCalled();
+    expect(mockProcess.render).not.toHaveBeenCalled();
+    expect(mockProcess.generate).not.toHaveBeenCalled();
   });
 
   it('invokes cancelActiveRequest when aborted during stream', async () => {
     const driver = new MlxDriver({ model: 'test-model' });
     const controller = new AbortController();
 
-    mockProcess.chat.mockResolvedValue(createMockStream(['partial ']));
+    mockProcess.generate.mockResolvedValue(createMockStream(['partial ']));
 
     const { stream } = await driver.streamQuery(prompt, { signal: controller.signal });
     const iterator = stream[Symbol.asyncIterator]();
@@ -95,7 +98,7 @@ describe('MlxDriver abort signal', () => {
         this.destroy(new Error('stream failed'));
       },
     });
-    mockProcess.chat.mockResolvedValue(failingStream);
+    mockProcess.generate.mockResolvedValue(failingStream);
 
     const { stream, result } = await driver.streamQuery(prompt);
     await expect(async () => {
