@@ -4,6 +4,8 @@ import type {
   InferenceCapabilitiesRequest,
   InferenceFormatTestRequest,
   InferenceFormatTestResult,
+  InferenceRenderRequest,
+  InferenceRenderResult,
   InferenceTokenizeRequest,
   InferenceTokenizeResult,
   InferenceChatRequest,
@@ -46,6 +48,13 @@ export interface FormatTestQueueItem extends BaseQueueItem {
   expectJsonResponse: true;
 }
 
+export interface RenderQueueItem extends BaseQueueItem {
+  request: InferenceRenderRequest;
+  resolve: (value: InferenceRenderResult) => void;
+  reject: (reason: Error) => void;
+  expectJsonResponse: true;
+}
+
 export interface TokenizeQueueItem extends BaseQueueItem {
   request: InferenceTokenizeRequest;
   resolve: (value: InferenceTokenizeResult) => void;
@@ -70,6 +79,7 @@ export interface StreamingQueueItem extends BaseQueueItem {
 export type QueueItem =
   | CapabilitiesQueueItem
   | FormatTestQueueItem
+  | RenderQueueItem
   | TokenizeQueueItem
   | CachePrefillQueueItem
   | StreamingQueueItem;

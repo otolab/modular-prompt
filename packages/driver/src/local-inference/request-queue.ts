@@ -8,6 +8,7 @@ import type {
   InferenceCapabilitiesRequest,
   InferenceFormatTestRequest,
   InferenceFormatTestResult,
+  InferenceRenderResult,
   InferenceTokenizeRequest,
   InferenceTokenizeResult,
   InferenceChatRequest,
@@ -23,6 +24,7 @@ import type {
   QueueItem,
   CapabilitiesQueueItem,
   FormatTestQueueItem,
+  RenderQueueItem,
   TokenizeQueueItem,
   CachePrefillQueueItem,
   StreamingQueueItem,
@@ -82,6 +84,36 @@ export class InferenceRequestQueue {
     });
   }
 
+  addRenderRequest(
+    messages: InferenceMessage[],
+    options?: InferenceSamplingOptions & { primer?: string },
+    tools?: InferenceToolDefinition[],
+    reasoningEffort?: 'low' | 'medium' | 'high',
+  ): Promise<InferenceRenderResult> {
+    return new Promise((resolve, reject) => {
+      const mappedOptions = options
+        ? {
+            ...(this.mapSamplingOptions(options) ?? {}),
+            ...(options.primer ? { primer: options.primer } : {}),
+          }
+        : undefined;
+      const request = {
+        method: 'render' as const,
+        messages,
+        ...(mappedOptions && Object.keys(mappedOptions).length > 0 ? { options: mappedOptions } : {}),
+        ...(tools && { tools }),
+        ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
+      };
+      this.queue.push({
+        request,
+        resolve,
+        reject,
+        expectJsonResponse: true,
+      } as RenderQueueItem);
+      this.processNext();
+    });
+  }
+
   addTokenizeRequest(
     messages: InferenceMessage[],
     tools?: InferenceToolDefinition[],
@@ -101,42 +133,6 @@ export class InferenceRequestQueue {
         expectJsonResponse: true,
       } as TokenizeQueueItem);
       this.processNext();
-    });
-  }
-
-  addChatRequest(
-    messages: InferenceMessage[],
-    primer?: string,
-    options?: unknown,
-    tools?: InferenceToolDefinition[],
-    images?: string[],
-    maxImageSize?: number,
-    reasoningEffort?: 'low' | 'medium' | 'high',
-    cachePath?: string,
-    cacheTrimTokens?: number,
-  ): Promise<Readable> {
-    return new Promise((resolve, reject) => {
-      try {
-        const request: InferenceChatRequest = {
-          method: 'chat',
-          messages,
-          primer,
-          tools,
-          options: this.mapSamplingOptions(options),
-          ...(images?.length ? { images, maxImageSize } : {}),
-          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-          ...(cachePath ? { cache_path: cachePath } : {}),
-          ...(cacheTrimTokens != null ? { cache_trim_tokens: cacheTrimTokens } : {}),
-        };
-        this.queue.push({
-          request,
-          resolve,
-          reject,
-        } as StreamingQueueItem);
-        this.processNext();
-      } catch (error) {
-        reject(error);
-      }
     });
   }
 
@@ -202,14 +198,20 @@ export class InferenceRequestQueue {
     options?: unknown,
     images?: string[],
     maxImageSize?: number,
+    cachePath?: string,
+    cacheTrimTokens?: number,
+    primer?: string,
   ): Promise<Readable> {
     return new Promise((resolve, reject) => {
       try {
         const request: InferenceGenerateRequest = {
           method: 'generate',
           prompt,
+          ...(primer ? { primer } : {}),
           options: this.mapSamplingOptions(options),
           ...(images?.length ? { images, maxImageSize } : {}),
+          ...(cachePath ? { cache_path: cachePath } : {}),
+          ...(cacheTrimTokens != null ? { cache_trim_tokens: cacheTrimTokens } : {}),
         };
         this.queue.push({
           request,
@@ -259,6 +261,15 @@ export class InferenceRequestQueue {
                 error: jsonResponse.error || 'Malformed format_test response',
               });
             }
+          } else if (queueItem.request.method === 'render') {
+            if ('formatted_prompt' in jsonResponse || jsonResponse.error) {
+              (queueItem as RenderQueueItem).resolve(jsonResponse);
+            } else {
+              (queueItem as RenderQueueItem).resolve({
+                formatted_prompt: null,
+                error: jsonResponse.error || 'Malformed render response',
+              });
+            }
           } else if (queueItem.request.method === 'tokenize') {
             if ('token_count' in jsonResponse) {
               (queueItem as TokenizeQueueItem).resolve(jsonResponse);
@@ -288,6 +299,11 @@ export class InferenceRequestQueue {
               formatted_prompt: null,
               template_applied: false,
               model_specific_processing: null,
+              error: e instanceof Error ? e.message : 'Unknown error',
+            });
+          } else if (queueItem.request.method === 'render') {
+            (queueItem as RenderQueueItem).resolve({
+              formatted_prompt: null,
               error: e instanceof Error ? e.message : 'Unknown error',
             });
           } else if (queueItem.request.method === 'tokenize') {

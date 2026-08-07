@@ -61,11 +61,22 @@ class TestServerDispatch:
         assert '"model_kind"' in captured.out
         assert captured.out.endswith('\0')
 
-    def test_chat_missing_messages(self, capsys):
+    def test_render_missing_messages(self, capsys):
         server = self._make_server()
-        server._dispatch({"method": "chat"})
+        server._dispatch({"method": "render"})
         captured = capsys.readouterr()
         assert captured.out.endswith('\0')
+
+    def test_render_dispatch(self, capsys):
+        server = self._make_server()
+        with patch('server.handle_render') as mock_render:
+            server._dispatch({
+                "method": "render",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            mock_render.assert_called_once()
+        captured = capsys.readouterr()
+        assert captured.out == '' or captured.out.endswith('\0')
 
     def test_completion_missing_prompt(self, capsys):
         server = self._make_server()
@@ -78,6 +89,22 @@ class TestServerDispatch:
         server._dispatch({"method": "generate"})
         captured = capsys.readouterr()
         assert captured.out.endswith('\0')
+
+    def test_generate_dispatch_passes_cache_and_primer(self, capsys):
+        server = self._make_server()
+        with patch('server.handle_generate') as mock_generate:
+            server._dispatch({
+                "method": "generate",
+                "prompt": "hello",
+                "primer": "partial",
+                "cache_path": "/tmp/cache.bin",
+                "cache_trim_tokens": 128,
+            })
+            mock_generate.assert_called_once()
+            kwargs = mock_generate.call_args.kwargs
+            assert kwargs["primer"] == "partial"
+            assert kwargs["cache_path"] == "/tmp/cache.bin"
+            assert kwargs["cache_trim_tokens"] == 128
 
     def test_generate_dispatch(self, capsys):
         server = self._make_server()

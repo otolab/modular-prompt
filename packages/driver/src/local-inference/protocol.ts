@@ -10,6 +10,7 @@ import type { SpecialToken, SpecialTokenPair } from '../formatter/types.js';
 export type InferenceMethod =
   | 'capabilities'
   | 'format_test'
+  | 'render'
   | 'chat'
   | 'completion'
   | 'generate'
@@ -98,6 +99,17 @@ export interface InferenceTokenizeRequest extends InferenceBaseRequest {
   reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
+export interface InferenceRenderRequest extends InferenceBaseRequest {
+  method: 'render';
+  messages: InferenceMessage[];
+  options?: InferenceSamplingOptions & {
+    primer?: string;
+  };
+  tools?: InferenceToolDefinition[];
+  reasoning_effort?: 'low' | 'medium' | 'high';
+}
+
+/** @deprecated Python chat ハンドラ廃止。render + generate を使用すること。 */
 export interface InferenceChatRequest extends InferenceBaseRequest {
   method: 'chat';
   messages: InferenceMessage[];
@@ -109,6 +121,11 @@ export interface InferenceChatRequest extends InferenceBaseRequest {
   reasoning_effort?: 'low' | 'medium' | 'high';
   cache_path?: string;
   cache_trim_tokens?: number;
+}
+
+export interface InferenceRenderResult {
+  formatted_prompt: string | null;
+  error: string | null;
 }
 
 export interface InferenceCompletionRequest extends InferenceBaseRequest {
@@ -123,9 +140,12 @@ export interface InferenceCompletionRequest extends InferenceBaseRequest {
 export interface InferenceGenerateRequest extends InferenceBaseRequest {
   method: 'generate';
   prompt: string | number[];
+  primer?: string;
   options?: InferenceSamplingOptions;
   images?: string[];
   maxImageSize?: number;
+  cache_path?: string;
+  cache_trim_tokens?: number;
 }
 
 export interface InferenceCachePrefillRequest extends InferenceBaseRequest {
@@ -150,6 +170,7 @@ export interface InferenceCachePrefillResult {
 export type InferenceRequest =
   | InferenceCapabilitiesRequest
   | InferenceFormatTestRequest
+  | InferenceRenderRequest
   | InferenceTokenizeRequest
   | InferenceChatRequest
   | InferenceCompletionRequest

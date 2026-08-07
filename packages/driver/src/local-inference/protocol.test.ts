@@ -12,7 +12,7 @@ import type { MlxMessage as PublicMlxMessage } from '../mlx-ml/types.js';
 
 describe('local-inference protocol aliases', () => {
   const sampleCapabilities: InferenceCapabilities = {
-    methods: ['capabilities', 'chat', 'completion'],
+    methods: ['capabilities', 'render', 'completion'],
     special_tokens: {},
     features: {
       apply_chat_template: true,
@@ -26,7 +26,7 @@ describe('local-inference protocol aliases', () => {
 
   it('MlxRuntimeInfo is assignable from InferenceCapabilities', () => {
     const runtimeInfo: MlxRuntimeInfo = sampleCapabilities;
-    expect(runtimeInfo.methods).toContain('chat');
+    expect(runtimeInfo.methods).toContain('render');
   });
 
   it('InferenceCapabilities is assignable from MlxRuntimeInfo', () => {
