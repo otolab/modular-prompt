@@ -16,6 +16,7 @@ import type {
   InferenceCachePrefillResult,
   InferenceMessage,
   InferenceToolDefinition,
+  InferenceSamplingOptions,
 } from './protocol.js';
 import {
   ProcessCommunication,
@@ -113,16 +114,11 @@ export class InferenceProcessClient {
 
   async render(
     messages: InferenceMessage[],
-    options?: unknown,
+    options?: InferenceSamplingOptions & { primer?: string },
     tools?: InferenceToolDefinition[],
     reasoningEffort?: 'low' | 'medium' | 'high',
   ): Promise<InferenceRenderResult> {
-    return this.requestQueue.addRenderRequest(
-      messages,
-      options as Parameters<InferenceRequestQueue['addRenderRequest']>[1],
-      tools,
-      reasoningEffort,
-    );
+    return this.requestQueue.addRenderRequest(messages, options, tools, reasoningEffort);
   }
 
   async tokenize(

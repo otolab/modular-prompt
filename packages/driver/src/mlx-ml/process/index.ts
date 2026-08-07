@@ -22,6 +22,7 @@ import type {
   MlxToolDefinition,
 } from './types.js';
 import { mapOptionsToPython } from './parameter-mapper.js';
+import { generateMergedPrompt } from './prompt-builder.js';
 
 const packageRoot = resolvePackageRootFromProcessModule(import.meta.url);
 const mlxPythonDir = getMlxPythonDir(packageRoot);
@@ -140,18 +141,35 @@ export class MlxProcess {
     cachePath?: string,
     cacheTrimTokens?: number,
   ): Promise<Readable> {
-    const renderResult = await this.render(
-      messages,
-      primer ? { ...options, primer } : options,
-      tools,
-      reasoningEffort,
-    );
-    if (renderResult.error || renderResult.formatted_prompt == null) {
-      throw new Error(renderResult.error ?? 'render failed');
+    const capabilities = await this.getCapabilities();
+    let formattedPrompt: string;
+
+    if (capabilities.features.apply_chat_template) {
+      const renderResult = await this.render(
+        messages,
+        primer ? { ...options, primer } : options,
+        tools,
+        reasoningEffort,
+      );
+      if (renderResult.error || renderResult.formatted_prompt == null) {
+        throw new Error(renderResult.error ?? 'render failed');
+      }
+      formattedPrompt = String(renderResult.formatted_prompt);
+    } else {
+      formattedPrompt = generateMergedPrompt(messages, capabilities.special_tokens);
+      if (primer) {
+        formattedPrompt += primer;
+      }
     }
+
+    const generateOptions = options ? { ...options } : undefined;
+    if (generateOptions) {
+      delete generateOptions.trustRemoteCode;
+    }
+
     return this.generate(
-      renderResult.formatted_prompt,
-      options,
+      formattedPrompt,
+      generateOptions,
       images,
       maxImageSize,
       cachePath,

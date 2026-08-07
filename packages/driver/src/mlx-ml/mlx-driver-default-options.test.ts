@@ -87,4 +87,25 @@ describe('MlxDriver defaultOptions.mode', () => {
     expect(mockProcess.generate).toHaveBeenCalled();
     expect(mockProcess.generate.mock.calls[0]?.[0]).toBe('formatted');
   });
+
+  it('uses generateMergedPrompt when chat template is unavailable', async () => {
+    mockProcess.getCapabilities.mockResolvedValue({
+      ...mockCapabilities,
+      features: {
+        ...mockCapabilities.features,
+        apply_chat_template: false,
+      },
+    });
+
+    const driver = new MlxDriver({
+      model: 'test-model',
+      defaultOptions: { mode: 'chat' },
+    });
+
+    await driver.query(prompt);
+
+    expect(mockProcess.render).not.toHaveBeenCalled();
+    expect(mockProcess.generate).toHaveBeenCalled();
+    expect(mockProcess.generate.mock.calls[0]?.[0]).toContain('<!-- begin of');
+  });
 });
