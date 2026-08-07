@@ -11,6 +11,10 @@ export interface RuntimeManifest {
   platform: string;
   pythonVersion: string;
   createdAt: string;
+  /** PyTorch 等の runtime variant（例: cpu-minimal） */
+  variant?: string;
+  /** セットアップ時に記録した torch バージョン */
+  torchVersion?: string;
   packages?: Record<string, string>;
 }
 

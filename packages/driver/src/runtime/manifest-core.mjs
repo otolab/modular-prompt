@@ -1,6 +1,13 @@
 import { execSync } from 'child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { getManifestPath, getRuntimeDir } from './paths-core.mjs';
+
+function resolveVenvPython(venvPath) {
+  return process.platform === 'win32'
+    ? join(venvPath, 'Scripts', 'python.exe')
+    : join(venvPath, 'bin', 'python');
+}
 
 /**
  * @param {string} pythonDir
@@ -9,12 +16,9 @@ import { getManifestPath, getRuntimeDir } from './paths-core.mjs';
  */
 export function collectInstalledPackages(pythonDir, venvPath) {
   try {
-    const output = execSync('uv pip list --format=json', {
+    const venvPython = resolveVenvPython(venvPath);
+    const output = execSync(`uv pip list --format=json --python "${venvPython}"`, {
       cwd: pythonDir,
-      env: {
-        ...process.env,
-        UV_PROJECT_ENVIRONMENT: venvPath,
-      },
       encoding: 'utf8',
     });
     const list = JSON.parse(output);
@@ -58,5 +62,7 @@ export function writeManifest(profile, manifest) {
  * @property {string} platform
  * @property {string} pythonVersion
  * @property {string} createdAt
+ * @property {string} [variant]
+ * @property {string} [torchVersion]
  * @property {Record<string, string>} [packages]
  */

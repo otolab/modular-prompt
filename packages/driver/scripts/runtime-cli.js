@@ -174,14 +174,25 @@ function setupPytorch() {
   }
 }
 
+function formatManifestDetail(manifest) {
+  const parts = [`driver ${manifest.driverVersion}`];
+  if (manifest.variant) {
+    parts.push(`variant ${manifest.variant}`);
+  }
+  const torchVersion = manifest.torchVersion ?? manifest.packages?.torch;
+  if (torchVersion) {
+    parts.push(`torch ${torchVersion}`);
+  }
+  parts.push(manifest.createdAt);
+  return ` (${parts.join(', ')})`;
+}
+
 function printStatus() {
   console.log(`modular-prompt home: ${getModularPromptHome()}\n`);
   for (const profile of RUNTIME_PROFILES) {
     const ready = isRuntimeReady(profile);
     const manifest = ready ? readManifest(profile) : null;
-    const detail = manifest
-      ? ` (driver ${manifest.driverVersion}, ${manifest.createdAt})`
-      : '';
+    const detail = manifest ? formatManifestDetail(manifest) : '';
     const icon = ready ? '✅' : '❌';
     const runtimePath = getRuntimeDir(profile);
     console.log(`${icon} ${profile}: ${ready ? 'ready' : 'not installed'}${detail}`);
