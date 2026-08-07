@@ -27,6 +27,15 @@ def read():
             continue
 
 
+def _is_valid_generate_prompt(prompt) -> bool:
+    """prompt は非空文字列または非空のトークン ID リスト"""
+    if isinstance(prompt, str):
+        return bool(prompt)
+    if isinstance(prompt, list):
+        return len(prompt) > 0
+    return False
+
+
 class Server:
     def __init__(self, backend: ModelBackend, capabilities: dict):
         self.backend = backend
@@ -114,7 +123,7 @@ class Server:
 
             elif method == 'generate':
                 prompt = req.get('prompt')
-                if not prompt:
+                if not _is_valid_generate_prompt(prompt):
                     self._error_response("'prompt' field is required for generate method")
                     return
                 images = req.get('images', [])

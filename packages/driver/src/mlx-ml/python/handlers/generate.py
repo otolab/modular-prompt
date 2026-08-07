@@ -23,7 +23,10 @@ def handle_generate(
     if images:
         final_options["max_image_size"] = max_image_size
         if os.getenv('MLX_DEBUG'):
-            display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', prompt)
+            if isinstance(prompt, str):
+                display_prompt = re.sub(r'(<\|image_pad\|>)+', '<|image_pad|>...', prompt)
+            else:
+                display_prompt = f"<token ids: len={len(prompt)}>"
             sys.stderr.write(
                 f"--- vlm generate (images: {len(images)}, max_size: {max_image_size})\n{display_prompt}\n"
             )

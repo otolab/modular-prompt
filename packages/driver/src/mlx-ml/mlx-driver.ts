@@ -309,6 +309,7 @@ export class MlxDriver implements AIDriver {
     if (api === 'completion') {
       let formattedPrompt = formatCompletionPrompt(augmentedPrompt, this.formatterOptions);
       formattedPrompt = this.modelProcessor.applyCompletionSpecificProcessing(formattedPrompt);
+      // LIP generate（wire method: "generate"。Python 側は旧 completion と同一 handle_generate）
       stream = await this.process.generate(formattedPrompt, mlxOptions);
     } else {
       const messages = formatPromptAsMessages(augmentedPrompt, this.formatterOptions);
