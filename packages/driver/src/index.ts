@@ -107,7 +107,22 @@ export type {
   MlxContentPart
 } from './mlx-ml/types.js';
 
-export type { MlxQueryOptions } from './mlx-ml/mlx-options.js';
+export type {
+  MlxQueryOptions
+} from './mlx-ml/mlx-options.js';
+
+// PyTorch driver
+export {
+  PyTorchDriver,
+  type PyTorchDriverConfig,
+  type PyTorchModelCapabilities,
+} from './pytorch/pytorch-driver.js';
+
+export {
+  PyTorchProcess,
+} from './pytorch/process/index.js';
+
+export type { PyTorchQueryOptions } from './pytorch/pytorch-options.js';
 
 // Local Inference Protocol (LIP)
 export type {
@@ -150,6 +165,7 @@ export {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchPythonDir,
   resolvePackageRoot,
   resolvePackageRootFromProcessModule,
   readManifest,

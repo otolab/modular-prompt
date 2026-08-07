@@ -7,4 +7,5 @@ export function getRuntimeDir(profile: string): string;
 export function getVenvPath(profile: string): string;
 export function getManifestPath(profile: string): string;
 export function getMlxPythonDir(packageRoot: string): string;
+export function getPytorchPythonDir(packageRoot: string): string;
 export function isRuntimeReady(profile: string): boolean;

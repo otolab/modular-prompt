@@ -21,6 +21,8 @@ export interface ProcessCommunicationConfig {
   modelName: string;
   /** `__main__.py` と modelName の後に付与する追加引数 */
   extraArgs?: string[];
+  /** 子プロセス spawn 時にマージする追加環境変数 */
+  extraEnv?: Record<string, string>;
   loggerPrefix?: string;
   loggerContext?: string;
   processExitErrorMessage?: (code: number | null, signal: string | null) => string;
@@ -62,6 +64,7 @@ export class ProcessCommunication {
       env: {
         ...process.env,
         UV_PROJECT_ENVIRONMENT: config.venvPath,
+        ...config.extraEnv,
       },
     });
 

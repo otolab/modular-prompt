@@ -14,6 +14,7 @@ export type DriverProvider =
   | 'vertexai'
   | 'googlegenai'
   | 'mlx'
+  | 'pytorch'
   | 'ollama'
   | 'vllm'
   | 'echo'  // テスト用

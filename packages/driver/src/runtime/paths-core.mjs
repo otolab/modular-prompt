@@ -6,7 +6,7 @@ import path from 'path';
 export const MODULAR_PROMPT_DIR = '.modular-prompt';
 
 /** サポートする runtime profile */
-export const RUNTIME_PROFILES = ['mlx'];
+export const RUNTIME_PROFILES = ['mlx', 'pytorch'];
 
 /**
  * ~/.modular-prompt のルートパス
@@ -38,9 +38,9 @@ export function getManifestPath(profile) {
 /**
  * @modular-prompt/driver パッケージルートから MLX Python プロジェクトを解決
  */
-export function getMlxPythonDir(packageRoot) {
-  const distPython = path.join(packageRoot, 'dist', 'mlx-ml', 'python');
-  const srcPython = path.join(packageRoot, 'src', 'mlx-ml', 'python');
+function resolvePythonProjectDir(packageRoot, segment) {
+  const distPython = path.join(packageRoot, 'dist', segment, 'python');
+  const srcPython = path.join(packageRoot, 'src', segment, 'python');
   if (existsSync(distPython)) {
     return distPython;
   }
@@ -48,6 +48,14 @@ export function getMlxPythonDir(packageRoot) {
     return srcPython;
   }
   return srcPython;
+}
+
+export function getMlxPythonDir(packageRoot) {
+  return resolvePythonProjectDir(packageRoot, 'mlx-ml');
+}
+
+export function getPytorchPythonDir(packageRoot) {
+  return resolvePythonProjectDir(packageRoot, 'pytorch');
 }
 
 export function isRuntimeReady(profile) {

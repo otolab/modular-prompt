@@ -3,7 +3,8 @@
 /**
  * Python runtime 管理 CLI
  *
- * setup mlx    — ~/.modular-prompt/runtimes/mlx に venv を作成
+ * setup mlx     — ~/.modular-prompt/runtimes/mlx に venv を作成
+ * setup pytorch — ~/.modular-prompt/runtimes/pytorch に cpu-minimal venv を作成
  * setup --status
  * cleanup mlx [--yes]
  * cleanup --all [--yes]
@@ -31,6 +32,7 @@ const {
   getRuntimeDir,
   getVenvPath,
   getMlxPythonDir,
+  getPytorchPythonDir,
   isRuntimeReady,
 } = await import(runtimeModuleUrl('paths-core.mjs'));
 
@@ -62,7 +64,7 @@ function ensureUv() {
 function setupMlx() {
   if (process.platform !== 'darwin') {
     console.error('❌ MLX runtime is only available on macOS (Apple Silicon).');
-    console.error('   For local inference on this platform, use vLLM or a future PyTorch runtime.');
+    console.error('   For local inference on this platform, use setup-pytorch or vLLM.');
     process.exit(1);
   }
 
@@ -110,6 +112,68 @@ function setupMlx() {
   }
 }
 
+const PYTORCH_CPU_INDEX = 'https://download.pytorch.org/whl/cpu';
+const PYTORCH_PYTHON_VERSION = '3.12';
+
+function setupPytorch() {
+  const pythonDir = getPytorchPythonDir(packageRoot);
+  if (!existsSync(pythonDir)) {
+    console.error(`❌ PyTorch Python project not found: ${pythonDir}`);
+    process.exit(1);
+  }
+
+  const venvPath = getVenvPath('pytorch');
+  const runtimeDir = getRuntimeDir('pytorch');
+
+  console.log('🚀 Setting up PyTorch runtime (cpu-minimal)...\n');
+  console.log(`📁 Python project: ${pythonDir}`);
+  console.log(`📁 Runtime venv:  ${venvPath}`);
+  console.log(`📦 torch index:    ${PYTORCH_CPU_INDEX}\n`);
+
+  ensureUv();
+  mkdirSync(runtimeDir, { recursive: true });
+
+  const env = {
+    ...process.env,
+    UV_PROJECT_ENVIRONMENT: venvPath,
+  };
+
+  try {
+    execSync(`uv venv --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
+    const venvPython =
+      process.platform === 'win32'
+        ? join(venvPath, 'Scripts', 'python.exe')
+        : join(venvPath, 'bin', 'python');
+    execSync(`uv pip install --python "${venvPython}" "torch==2.9.1" --index-url ${PYTORCH_CPU_INDEX}`, {
+      cwd: pythonDir,
+      stdio: 'inherit',
+      env,
+    });
+    execSync(`uv pip install --python "${venvPython}" -e .`, { cwd: pythonDir, stdio: 'inherit', env });
+
+    const packages = collectInstalledPackages(pythonDir, venvPath);
+    writeManifest('pytorch', {
+      profile: 'pytorch',
+      variant: 'cpu-minimal',
+      driverVersion,
+      platform: process.platform,
+      pythonVersion: PYTORCH_PYTHON_VERSION,
+      torchVersion: packages?.torch,
+      createdAt: new Date().toISOString(),
+      packages,
+    });
+
+    console.log('\n✅ PyTorch runtime setup completed (cpu-minimal).');
+    console.log(`   Home: ${getModularPromptHome()}`);
+    console.log('   You can now use PyTorchDriver from @modular-prompt/driver');
+    console.log('   For CUDA / custom environments, see docs/LOCAL_MODEL_SETUP.md');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('❌ Failed to setup PyTorch runtime:', message);
+    process.exit(1);
+  }
+}
+
 function printStatus() {
   console.log(`modular-prompt home: ${getModularPromptHome()}\n`);
   for (const profile of RUNTIME_PROFILES) {
@@ -123,8 +187,15 @@ function printStatus() {
     console.log(`${icon} ${profile}: ${ready ? 'ready' : 'not installed'}${detail}`);
     console.log(`   ${runtimePath}`);
   }
-  if (!isRuntimeReady('mlx')) {
-    console.log('\nRun: pnpm run setup-mlx -w @modular-prompt/driver');
+  const setupHints = [];
+  if (!isRuntimeReady('mlx') && process.platform === 'darwin') {
+    setupHints.push('pnpm run setup-mlx -w @modular-prompt/driver');
+  }
+  if (!isRuntimeReady('pytorch')) {
+    setupHints.push('pnpm run setup-pytorch -w @modular-prompt/driver');
+  }
+  if (setupHints.length > 0) {
+    console.log(`\nRun: ${setupHints.join('  or  ')}`);
   }
 }
 
@@ -171,13 +242,15 @@ async function cleanupAll() {
 
 function printUsage() {
   console.log(`Usage:
-  node scripts/runtime-cli.js setup mlx       Set up MLX Python runtime (macOS only)
-  node scripts/runtime-cli.js setup --status  Show runtime status
-  node scripts/runtime-cli.js cleanup mlx     Remove MLX runtime
-  node scripts/runtime-cli.js cleanup --all   Remove entire ~/.modular-prompt
-  node scripts/runtime-cli.js cleanup ... --yes  Skip confirmation
+  node scripts/runtime-cli.js setup mlx         Set up MLX Python runtime (macOS only)
+  node scripts/runtime-cli.js setup pytorch     Set up PyTorch runtime (cpu-minimal)
+  node scripts/runtime-cli.js setup --status    Show runtime status
+  node scripts/runtime-cli.js cleanup mlx       Remove MLX runtime
+  node scripts/runtime-cli.js cleanup pytorch   Remove PyTorch runtime
+  node scripts/runtime-cli.js cleanup --all     Remove entire ~/.modular-prompt
+  node scripts/runtime-cli.js cleanup ... --yes   Skip confirmation
 
-  npm scripts: setup-mlx, runtime:status, runtime:cleanup`);
+  npm scripts: setup-mlx, setup-pytorch, runtime:status, runtime:cleanup`);
 }
 
 async function main() {
@@ -197,6 +270,10 @@ async function main() {
       setupMlx();
       return;
     }
+    if (target === 'pytorch') {
+      setupPytorch();
+      return;
+    }
     console.error(`Unknown setup target: ${target ?? '(none)'}`);
     printUsage();
     process.exit(1);
@@ -207,8 +284,8 @@ async function main() {
       await cleanupAll();
       return;
     }
-    if (target === 'mlx') {
-      await cleanupProfile('mlx');
+    if (target === 'mlx' || target === 'pytorch') {
+      await cleanupProfile(target);
       return;
     }
     console.error(`Unknown cleanup target: ${target ?? '(none)'}`);

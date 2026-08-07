@@ -37,6 +37,7 @@ export interface InferenceProcessClientConfig {
   /** 指定時は起動前に runtime venv の存在を確認する */
   runtimeProfile?: RuntimeProfile;
   extraSpawnArgs?: string[];
+  extraEnv?: Record<string, string>;
   loggerPrefix?: string;
   mapSamplingOptions?: SamplingOptionsMapper;
   processExitErrorMessage?: (code: number | null, signal: string | null) => string;
@@ -88,6 +89,7 @@ export class InferenceProcessClient {
         venvPath: config.venvPath,
         modelName: config.modelName,
         extraArgs: config.extraSpawnArgs,
+        extraEnv: config.extraEnv,
         loggerPrefix: config.loggerPrefix,
         processExitErrorMessage: config.processExitErrorMessage,
       },

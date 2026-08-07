@@ -10,6 +10,11 @@
   - [テスト用モデルのダウンロード](#テスト用モデルのダウンロード)
   - [任意のモデルのダウンロード](#任意のモデルのダウンロード)
   - [トラブルシューティング](#トラブルシューティング-mlx)
+- [PyTorch (Transformers, cpu-minimal)](#pytorch-transformers-cpu-minimal)
+  - [環境要件](#環境要件-pytorch)
+  - [初回セットアップ](#初回セットアップ-pytorch)
+  - [手動カスタマイズ](#手動カスタマイズ-pytorch)
+  - [トラブルシューティング](#トラブルシューティング-pytorch)
 - [Ollama](#ollama)
   - [インストール](#インストール)
   - [サービスの起動](#サービスの起動)
@@ -142,6 +147,96 @@ npm run download-model
 #### メモリ不足エラー
 
 より小さいモデル（テスト用の270MBモデルなど）を使用するか、他のアプリケーションを終了してメモリを確保してください。
+
+## PyTorch (Transformers, cpu-minimal)
+
+Windows / Linux など **MLX が使えない環境**向けの Thin Python 推論ドライバ（Local Inference Protocol）。
+
+- **自動セットアップは CPU 最小構成のみ**（`torch` CPU wheel + `transformers`）
+- CUDA / GPU / 量子化は **手動調整**（下記「手動カスタマイズ」）
+- Linux + NVIDIA で本番寄りの推論が必要な場合は [vLLM](#vllm-cuda-gpu) を検討
+
+### 環境要件 (PyTorch)
+
+- **OS**: Windows / Linux / macOS（macOS では MLX を推奨）
+- **Python**: 3.12（`setup-pytorch` が venv に使用）
+- **uv**: パッケージマネージャー（未インストール時は自動インストール）
+
+### 初回セットアップ (PyTorch)
+
+```bash
+# プロジェクトルートから
+pnpm run setup-pytorch -w @modular-prompt/driver
+
+# 状態確認
+pnpm run runtime:status -w @modular-prompt/driver
+```
+
+Python 環境は `~/.modular-prompt/runtimes/pytorch/.venv` に作成されます。
+
+**セットアップ内容：**
+
+1. `uv venv --python 3.12`
+2. `torch==2.9.1` を **CPU index** からインストール
+3. `transformers` 等の最小依存を editable install
+
+### 手動カスタマイズ (PyTorch)
+
+#### CUDA 版 torch への差し替え
+
+```bash
+PYTORCH_DIR=~/.modular-prompt/runtimes/pytorch
+cd node_modules/@modular-prompt/driver/src/pytorch/python
+
+# 例: CUDA 12.4（環境に合わせて index を選ぶ）
+UV_PROJECT_ENVIRONMENT=$PYTORCH_DIR/.venv \
+  uv pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu124
+
+UV_PROJECT_ENVIRONMENT=$PYTORCH_DIR/.venv \
+  uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+[CUDA 対応表は PyTorch 公式](https://pytorch.org/get-started/locally/)を参照してください。
+
+#### 外部 venv / conda の利用
+
+```typescript
+import { PyTorchDriver } from '@modular-prompt/driver';
+
+const driver = new PyTorchDriver({
+  model: 'gpt2',
+  venvPath: '/path/to/existing/.venv',
+  device: 'cuda',
+});
+```
+
+または環境変数 `MODULAR_PROMPT_PYTORCH_VENV` で venv パスを指定できます。
+
+#### 追加依存（accelerate / 量子化など）
+
+```bash
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/pytorch/.venv \
+  uv pip install accelerate
+```
+
+モデル要件に応じてユーザーが選択する想定です。`setup-pytorch` には含めません。
+
+### トラブルシューティング (PyTorch)
+
+#### venv が見つからない
+
+```bash
+pnpm run setup-pytorch -w @modular-prompt/driver
+```
+
+#### CUDA が有効にならない
+
+手動カスタマイズの CUDA 差し替え手順を実施し、ドライバと CUDA バージョンの整合を確認してください。CPU に戻す場合:
+
+```bash
+pnpm run runtime:cleanup -w @modular-prompt/driver pytorch -- --yes
+pnpm run setup-pytorch -w @modular-prompt/driver
+```
 
 ## Ollama
 
@@ -421,6 +516,27 @@ await driver.close();
 - VLM対応モデルを画像なしで使用したい場合
 - VLMモデルの起動を高速化したい場合（`mlx-vlm`の代わりに`mlx-lm`で起動）
 - VLMモデルでテキストのみのベンチマークを行う場合
+
+### PyTorch
+
+```typescript
+import { PyTorchDriver } from '@modular-prompt/driver';
+
+const driver = new PyTorchDriver({
+  model: 'gpt2',
+  defaultOptions: {
+    maxTokens: 128,
+    temperature: 0.7,
+  },
+});
+
+const result = await driver.query(prompt);
+console.log(result.content);
+
+await driver.close();
+```
+
+事前に `pnpm run setup-pytorch -w @modular-prompt/driver` が必要です。
 
 ### Ollama
 
