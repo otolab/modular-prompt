@@ -9,7 +9,9 @@ export class RuntimeNotReadyError extends Error {
     const setupCommand =
       profile === 'mlx'
         ? 'pnpm run setup-mlx -w @modular-prompt/driver'
-        : `node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup ${profile}`;
+        : profile === 'pytorch'
+          ? 'pnpm run setup-pytorch -w @modular-prompt/driver'
+          : `node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup ${profile}`;
     super(
       `${profile} runtime is not set up at ${getVenvPath(profile)}. ` +
       `Run: ${setupCommand}`

@@ -14,7 +14,8 @@
     "dist",
     "scripts",
     "skills",
-    "src/mlx-ml/python"
+    "src/mlx-ml/python",
+    "src/pytorch/python"
   ],
   "scripts": {
     "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs dist/runtime/",
@@ -29,6 +30,7 @@
     "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills",
     "clean": "rm -rf dist skills tsconfig.tsbuildinfo",
     "setup-mlx": "node scripts/runtime-cli.js setup mlx",
+    "setup-pytorch": "node scripts/runtime-cli.js setup pytorch",
     "runtime:status": "node scripts/runtime-cli.js setup --status",
     "runtime:cleanup": "node scripts/runtime-cli.js cleanup"
   },

@@ -9,6 +9,7 @@ import {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchPythonDir,
   isRuntimeReady,
 } from './paths-core.mjs';
 
@@ -20,11 +21,12 @@ export {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchPythonDir,
   isRuntimeReady,
 };
 
 /** サポートする runtime profile */
-export type RuntimeProfile = 'mlx';
+export type RuntimeProfile = 'mlx' | 'pytorch';
 
 export const RUNTIME_PROFILES: RuntimeProfile[] = RUNTIME_PROFILES_CORE as RuntimeProfile[];
 

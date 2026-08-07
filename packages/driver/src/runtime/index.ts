@@ -7,6 +7,7 @@ export {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchPythonDir,
   resolvePackageRoot,
   resolvePackageRootFromProcessModule,
   type RuntimeProfile,

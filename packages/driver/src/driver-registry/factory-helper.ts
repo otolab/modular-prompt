@@ -9,6 +9,7 @@ import type { AIDriver } from '../types.js';
 import { logger } from '@modular-prompt/utils';
 
 // 個別ドライバーのインポート（型安全性のため）
+import type { PyTorchDriver } from '../pytorch/pytorch-driver.js';
 import type { MlxDriver } from '../mlx-ml/mlx-driver.js';
 import type { OpenAIDriver } from '../openai/openai-driver.js';
 import type { AnthropicDriver } from '../anthropic/anthropic-driver.js';
@@ -58,6 +59,7 @@ export function registerStandardDriverFactories(
   registry: DriverRegistry,
   drivers: {
     MlxDriver?: typeof MlxDriver;
+    PyTorchDriver?: typeof PyTorchDriver;
     OpenAIDriver?: typeof OpenAIDriver;
     AnthropicDriver?: typeof AnthropicDriver;
     VertexAIDriver?: typeof VertexAIDriver;
@@ -80,6 +82,19 @@ export function registerStandardDriverFactories(
         textOnly: spec.metadata?.textOnly as boolean | undefined,
         drafterModel: spec.metadata?.drafterModel as string | undefined,
         draftBlockSize: spec.metadata?.draftBlockSize as number | undefined
+      });
+    });
+  }
+
+  // PyTorch Driver
+  if (drivers.PyTorchDriver) {
+    const Driver = drivers.PyTorchDriver;
+    registry.registerFactory('pytorch', (spec: ModelSpec) => {
+      return new Driver({
+        model: spec.model,
+        defaultOptions: validateAndClampMaxTokens(spec, spec.defaultOptions),
+        venvPath: spec.metadata?.venvPath as string | undefined,
+        device: spec.metadata?.device as string | undefined,
       });
     });
   }

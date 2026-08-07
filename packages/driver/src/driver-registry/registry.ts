@@ -8,6 +8,7 @@ import { Logger } from '@modular-prompt/utils';
 
 // 標準ドライバーを個別インポート
 import { MlxDriver } from '../mlx-ml/mlx-driver.js';
+import { PyTorchDriver } from '../pytorch/pytorch-driver.js';
 import { OpenAIDriver } from '../openai/openai-driver.js';
 import { AnthropicDriver } from '../anthropic/anthropic-driver.js';
 import { VertexAIDriver } from '../vertexai/vertexai-driver.js';
@@ -49,6 +50,7 @@ export class DriverRegistry implements IDriverRegistry {
     // 標準ドライバーを登録
     registerStandardDriverFactories(this, {
       MlxDriver,
+      PyTorchDriver,
       OpenAIDriver,
       AnthropicDriver,
       VertexAIDriver,
@@ -183,7 +185,7 @@ export class DriverRegistry implements IDriverRegistry {
 
       // 選択理由を生成
       const reasons: string[] = [];
-      if (spec.provider === 'mlx' && criteria.preferLocal) {
+      if ((spec.provider === 'mlx' || spec.provider === 'pytorch') && criteria.preferLocal) {
         reasons.push('Local execution preferred');
       }
       if (capabilities.includes('fast') && criteria.preferFast) {
