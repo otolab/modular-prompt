@@ -65,3 +65,20 @@ export {
   InferenceProcessClient,
   type InferenceProcessClientConfig,
 } from './process-client.js';
+
+/** バックエンド非依存の LIP ドライバー骨格（公開 API） */
+export {
+  LocalInferenceDriver,
+  type LocalInferenceDriverConfig,
+} from './driver.js';
+
+export type { InferenceProcessPort } from './process-port.js';
+export type {
+  LocalInferenceAdapters,
+  LocalInferenceCacheSupport,
+  InferenceModelProcessor,
+  InferenceResponseProcessor,
+} from './adapters.js';
+
+export { createStreamIterable, extractStreamMeta, META_MARKER } from './stream-utils.js';
+export { hasMessageElement } from './prompt-utils.js';

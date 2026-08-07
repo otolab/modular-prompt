@@ -129,6 +129,15 @@ export type {
 export {
   InferenceProcessClient,
   type InferenceProcessClientConfig,
+  LocalInferenceDriver,
+  type LocalInferenceDriverConfig,
+  type InferenceProcessPort,
+  type LocalInferenceAdapters,
+  type LocalInferenceCacheSupport,
+  createStreamIterable,
+  extractStreamMeta,
+  META_MARKER,
+  hasMessageElement,
 } from './local-inference/index.js';
 
 // Python runtime (MLX venv under ~/.modular-prompt)
