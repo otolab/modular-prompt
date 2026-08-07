@@ -7,23 +7,19 @@
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import { Readable } from 'stream';
 import { StringDecoder } from 'string_decoder';
-import path from "path";
-import { fileURLToPath } from "url";
 import { Logger } from '@modular-prompt/utils';
+import {
+  assertRuntimeReady,
+  getMlxPythonDir,
+  getVenvPath,
+  resolvePackageRootFromProcessModule,
+} from '../../runtime/index.js';
 
 const logger = new Logger({ prefix: 'MLX', context: 'process' });
 
-// Get the mlx-ml/python directory
-// From dist/mlx-ml/process/ -> go up 3 levels to package root, then to src/mlx-ml/python
-const packageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..', '..', '..'  // dist/mlx-ml/process -> dist/mlx-ml -> dist -> package root
-);
-
-const mlxDriverDir = path.join(
-  packageRoot,
-  'src', 'mlx-ml', 'python'
-);
+const packageRoot = resolvePackageRootFromProcessModule(import.meta.url);
+const mlxDriverDir = getMlxPythonDir(packageRoot);
+const mlxVenvPath = getVenvPath('mlx');
 
 export interface ProcessCommunicationCallbacks {
   onJsonResponse: (jsonData: string) => void;
@@ -49,6 +45,8 @@ export class ProcessCommunication {
     this.callbacks = callbacks;
     this.decoder = new StringDecoder('utf8');
 
+    assertRuntimeReady('mlx');
+
     const args = [
       '--project',
       mlxDriverDir,
@@ -68,7 +66,11 @@ export class ProcessCommunication {
     }
 
     this.process = spawn('uv', args, {
-      cwd: mlxDriverDir
+      cwd: mlxDriverDir,
+      env: {
+        ...process.env,
+        UV_PROJECT_ENVIRONMENT: mlxVenvPath,
+      },
     });
 
     this.setupProcessHandlers();

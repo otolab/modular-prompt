@@ -4,17 +4,30 @@ import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import os from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pythonDir = join(__dirname, '..', 'src', 'mlx-ml', 'python');
 const distPythonDir = join(__dirname, '..', 'dist', 'mlx-ml', 'python');
 
+function getMlxVenvPath() {
+  const home = process.env.MODULAR_PROMPT_HOME ?? join(os.homedir(), '.modular-prompt');
+  return join(home, 'runtimes', 'mlx', '.venv');
+}
+
 // Check Python directory
 const targetDir = existsSync(distPythonDir) ? distPythonDir : pythonDir;
+const venvPath = getMlxVenvPath();
 
 if (!existsSync(targetDir)) {
   console.error('❌ MLX Python directory not found.');
-  console.error('   Please run "npm run setup-mlx" first.');
+  console.error('   Please run "pnpm run setup-mlx -w @modular-prompt/driver" first.');
+  process.exit(1);
+}
+
+if (!existsSync(join(venvPath, 'bin', 'python'))) {
+  console.error('❌ MLX runtime is not set up.');
+  console.error('   Please run "pnpm run setup-mlx -w @modular-prompt/driver" first.');
   process.exit(1);
 }
 
@@ -29,7 +42,11 @@ try {
     `uv run mlx_lm.generate --model ${modelName} --prompt 'test' --max-tokens 1`,
     {
       cwd: targetDir,
-      stdio: 'inherit'
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        UV_PROJECT_ENVIRONMENT: venvPath,
+      },
     }
   );
   console.log('\n✅ Model downloaded successfully!');

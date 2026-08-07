@@ -163,14 +163,15 @@ export class CustomDriver implements AIDriver {
 
 ### MLX（Apple Silicon）
 
-MLXドライバーはインストール時に自動でPython環境をセットアップします。手動で実行する場合:
+MLX ドライバーを使う前に Python ランタイムのセットアップが必要です（macOS のみ）:
 
 ```bash
-cd node_modules/@modular-prompt/driver
-npm run setup-mlx
+npm run setup-mlx -w @modular-prompt/driver
 ```
 
-前提条件: Python 3.11以上、Apple Silicon Mac、uv。
+ランタイムは `~/.modular-prompt/runtimes/mlx/` に作成されます。状態確認は `npm run runtime:status -w @modular-prompt/driver`。
+
+前提条件: Python 3.13、Apple Silicon Mac、uv。
 
 #### VLMモデルのtext-only使用
 

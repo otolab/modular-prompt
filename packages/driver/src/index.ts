@@ -109,6 +109,27 @@ export type {
 
 export type { MlxQueryOptions } from './mlx-ml/mlx-options.js';
 
+// Python runtime (MLX venv under ~/.modular-prompt)
+export {
+  MODULAR_PROMPT_DIR,
+  RUNTIME_PROFILES,
+  getModularPromptHome,
+  getRuntimesRoot,
+  getRuntimeDir,
+  getVenvPath,
+  getManifestPath,
+  getMlxPythonDir,
+  resolvePackageRoot,
+  resolvePackageRootFromProcessModule,
+  readManifest,
+  writeManifest,
+  RuntimeNotReadyError,
+  isRuntimeReady,
+  assertRuntimeReady,
+  type RuntimeProfile,
+  type RuntimeManifest,
+} from './runtime/index.js';
+
 // VertexAI driver
 export {
   VertexAIDriver,
