@@ -15,6 +15,7 @@ export {
 export {
   readManifest,
   writeManifest,
+  collectInstalledPackages,
   type RuntimeManifest,
 } from './manifest.js';
 

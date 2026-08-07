@@ -17,7 +17,7 @@
     "src/mlx-ml/python"
   ],
   "scripts": {
-    "build": "tsc -b --force",
+    "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs dist/runtime/",
     "test": "vitest",
     "test:run": "vitest run",
     "test:system": "vitest run --config vitest.config.system.ts",
@@ -29,7 +29,6 @@
     "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-skills",
     "clean": "rm -rf dist skills tsconfig.tsbuildinfo",
     "setup-mlx": "node scripts/runtime-cli.js setup mlx",
-    "setup": "node scripts/runtime-cli.js setup",
     "runtime:status": "node scripts/runtime-cli.js setup --status",
     "runtime:cleanup": "node scripts/runtime-cli.js cleanup"
   },

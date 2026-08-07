@@ -10,18 +10,35 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, rmSync, mkdirSync } from 'fs';
 import { createInterface } from 'readline';
 import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import os from 'os';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(__dirname, '..');
 const driverVersion = readPackageVersion();
 
-const MODULAR_PROMPT_DIR = '.modular-prompt';
-const RUNTIME_PROFILES = ['mlx'];
+function runtimeModuleUrl(name) {
+  const distPath = join(packageRoot, 'dist', 'runtime', name);
+  const srcPath = join(packageRoot, 'src', 'runtime', name);
+  return pathToFileURL(existsSync(distPath) ? distPath : srcPath).href;
+}
+
+const {
+  RUNTIME_PROFILES,
+  getModularPromptHome,
+  getRuntimeDir,
+  getVenvPath,
+  getMlxPythonDir,
+  isRuntimeReady,
+} = await import(runtimeModuleUrl('paths-core.mjs'));
+
+const {
+  collectInstalledPackages,
+  readManifest,
+  writeManifest,
+} = await import(runtimeModuleUrl('manifest-core.mjs'));
 
 function readPackageVersion() {
   try {
@@ -30,35 +47,6 @@ function readPackageVersion() {
   } catch {
     return 'unknown';
   }
-}
-
-function getHome() {
-  return process.env.MODULAR_PROMPT_HOME ?? join(os.homedir(), MODULAR_PROMPT_DIR);
-}
-
-function getRuntimeDir(profile) {
-  return join(getHome(), 'runtimes', profile);
-}
-
-function getVenvPath(profile) {
-  return join(getRuntimeDir(profile), '.venv');
-}
-
-function getManifestPath(profile) {
-  return join(getRuntimeDir(profile), 'manifest.json');
-}
-
-function getMlxPythonDir() {
-  const distPython = join(packageRoot, 'dist', 'mlx-ml', 'python');
-  const srcPython = join(packageRoot, 'src', 'mlx-ml', 'python');
-  if (existsSync(distPython)) return distPython;
-  if (existsSync(srcPython)) return srcPython;
-  return srcPython;
-}
-
-function isRuntimeReady(profile) {
-  const venv = getVenvPath(profile);
-  return existsSync(join(venv, 'bin', 'python')) || existsSync(join(venv, 'Scripts', 'python.exe'));
 }
 
 function ensureUv() {
@@ -78,7 +66,7 @@ function setupMlx() {
     process.exit(1);
   }
 
-  const pythonDir = getMlxPythonDir();
+  const pythonDir = getMlxPythonDir(packageRoot);
   if (!existsSync(pythonDir)) {
     console.error(`❌ MLX Python project not found: ${pythonDir}`);
     process.exit(1);
@@ -103,17 +91,17 @@ function setupMlx() {
     execSync('uv venv --python 3.13', { cwd: pythonDir, stdio: 'inherit', env });
     execSync('uv pip install -e .', { cwd: pythonDir, stdio: 'inherit', env });
 
-    const manifest = {
+    writeManifest('mlx', {
       profile: 'mlx',
       driverVersion,
       platform: process.platform,
       pythonVersion: '3.13',
       createdAt: new Date().toISOString(),
-    };
-    writeFileSync(getManifestPath('mlx'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+      packages: collectInstalledPackages(pythonDir, venvPath),
+    });
 
     console.log('\n✅ MLX runtime setup completed.');
-    console.log(`   Home: ${getHome()}`);
+    console.log(`   Home: ${getModularPromptHome()}`);
     console.log('   You can now use MlxDriver from @modular-prompt/driver');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -123,19 +111,13 @@ function setupMlx() {
 }
 
 function printStatus() {
-  console.log(`modular-prompt home: ${getHome()}\n`);
+  console.log(`modular-prompt home: ${getModularPromptHome()}\n`);
   for (const profile of RUNTIME_PROFILES) {
     const ready = isRuntimeReady(profile);
-    const manifestPath = getManifestPath(profile);
-    let detail = '';
-    if (ready && existsSync(manifestPath)) {
-      try {
-        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-        detail = ` (driver ${manifest.driverVersion}, ${manifest.createdAt})`;
-      } catch {
-        detail = '';
-      }
-    }
+    const manifest = ready ? readManifest(profile) : null;
+    const detail = manifest
+      ? ` (driver ${manifest.driverVersion}, ${manifest.createdAt})`
+      : '';
     const icon = ready ? '✅' : '❌';
     const runtimePath = getRuntimeDir(profile);
     console.log(`${icon} ${profile}: ${ready ? 'ready' : 'not installed'}${detail}`);
@@ -173,7 +155,7 @@ async function cleanupProfile(profile) {
 }
 
 async function cleanupAll() {
-  const home = getHome();
+  const home = getModularPromptHome();
   if (!existsSync(home)) {
     console.log(`ℹ️  Nothing to clean (${home} does not exist)`);
     return;

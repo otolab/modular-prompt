@@ -2,22 +2,22 @@
 
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import os from 'os';
+import { dirname, join } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const pythonDir = join(__dirname, '..', 'src', 'mlx-ml', 'python');
-const distPythonDir = join(__dirname, '..', 'dist', 'mlx-ml', 'python');
+const packageRoot = join(__dirname, '..');
 
-function getMlxVenvPath() {
-  const home = process.env.MODULAR_PROMPT_HOME ?? join(os.homedir(), '.modular-prompt');
-  return join(home, 'runtimes', 'mlx', '.venv');
+function runtimeModuleUrl(name) {
+  const distPath = join(packageRoot, 'dist', 'runtime', name);
+  const srcPath = join(packageRoot, 'src', 'runtime', name);
+  return pathToFileURL(existsSync(distPath) ? distPath : srcPath).href;
 }
 
-// Check Python directory
-const targetDir = existsSync(distPythonDir) ? distPythonDir : pythonDir;
-const venvPath = getMlxVenvPath();
+const { getMlxPythonDir, getVenvPath } = await import(runtimeModuleUrl('paths-core.mjs'));
+
+const targetDir = getMlxPythonDir(packageRoot);
+const venvPath = getVenvPath('mlx');
 
 if (!existsSync(targetDir)) {
   console.error('❌ MLX Python directory not found.');
@@ -34,7 +34,6 @@ if (!existsSync(join(venvPath, 'bin', 'python'))) {
 console.log('📦 Downloading test model...');
 console.log(`📁 Working directory: ${targetDir}\n`);
 
-// Get model name from command line arguments or use default
 const modelName = process.argv[2] || 'mlx-community/gemma-3-270m-it-4bit';
 
 try {

@@ -1,6 +1,9 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import type { RuntimeProfile } from './paths.js';
-import { getManifestPath, getRuntimeDir } from './paths.js';
+import {
+  collectInstalledPackages,
+  readManifest as readManifestCore,
+  writeManifest as writeManifestCore,
+} from './manifest-core.mjs';
 
 export interface RuntimeManifest {
   profile: RuntimeProfile;
@@ -12,15 +15,11 @@ export interface RuntimeManifest {
 }
 
 export function readManifest(profile: RuntimeProfile): RuntimeManifest | null {
-  try {
-    const raw = readFileSync(getManifestPath(profile), 'utf8');
-    return JSON.parse(raw) as RuntimeManifest;
-  } catch {
-    return null;
-  }
+  return readManifestCore(profile) as RuntimeManifest | null;
 }
 
 export function writeManifest(profile: RuntimeProfile, manifest: RuntimeManifest): void {
-  mkdirSync(getRuntimeDir(profile), { recursive: true });
-  writeFileSync(getManifestPath(profile), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  writeManifestCore(profile, manifest);
 }
+
+export { collectInstalledPackages };

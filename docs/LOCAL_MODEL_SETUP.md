@@ -78,21 +78,32 @@ npm run download-model
 
 ### 任意のモデルのダウンロード
 
-Hugging Face上の任意のMLXモデルをダウンロードできます：
+Hugging Face上の任意のMLXモデルをダウンロードできます。
+
+**推奨（テスト用モデル）:**
+
+```bash
+pnpm run download-model -w @modular-prompt/driver
+```
+
+**手動で任意モデルを取得する場合**（`UV_PROJECT_ENVIRONMENT` でホーム venv を指定）:
 
 ```bash
 cd node_modules/@modular-prompt/driver/src/mlx-ml/python
-uv run mlx_lm.generate --model <model-name> --prompt "test" --max-tokens 1
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
+  uv run mlx_lm.generate --model <model-name> --prompt "test" --max-tokens 1
 ```
 
 **例：**
 
 ```bash
 # Gemma 2B
-uv run mlx_lm.generate --model mlx-community/gemma-2-2b-it-4bit --prompt "test" --max-tokens 1
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
+  uv run mlx_lm.generate --model mlx-community/gemma-2-2b-it-4bit --prompt "test" --max-tokens 1
 
 # Llama 3.2 3B
-uv run mlx_lm.generate --model mlx-community/Llama-3.2-3B-Instruct-4bit --prompt "test" --max-tokens 1
+UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
+  uv run mlx_lm.generate --model mlx-community/Llama-3.2-3B-Instruct-4bit --prompt "test" --max-tokens 1
 ```
 
 **モデルの保存場所：**
