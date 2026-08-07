@@ -16,5 +16,7 @@ export type {
   DriverProvider,
   DriverCapability,
   ModelSpec,
-  DriverFactory
+  DriverFactory,
+  MlxBackendMode,
+  MlxModelDriverOptions,
 } from './types.js';

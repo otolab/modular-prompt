@@ -11,11 +11,15 @@ export type WorkflowMode = 'direct' | 'default' | 'agentic';
 export interface ModelReference {
   provider: string;
   model: string;
+  /** MLX バックエンド等の実行モード（mlx_lm / mlx_vlm / mlx_optiq / mlx / pytorch） */
+  driver?: string;
 }
 
 export interface DialogProfile {
   /** Model name to use (CLI -m override) */
   model?: string;
+  /** 実行ドライバー（CLI --driver / profile で指定） */
+  driver?: string;
   /** PromptModule inline definition (objective, instructions, guidelines, etc.) */
   module?: Record<string, any>;
   /** Pre-message from assistant after system prompt */
@@ -104,6 +108,8 @@ export interface SimpleChatOptions {
   maxTokens?: number;
   /** Image file paths for VLM */
   images?: string[];
+  /** 実行ドライバー（mlx_lm / mlx_vlm / mlx_optiq / mlx / pytorch） */
+  driver?: string;
   /** VLMモデルをtext-onlyモードで使用する */
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */

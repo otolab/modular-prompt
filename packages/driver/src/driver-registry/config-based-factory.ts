@@ -110,6 +110,7 @@ export function registerFactories(
     return new MlxDriver({
       model: spec.model,
       defaultOptions: mergeDefaults(spec),
+      backend: driverOpts?.backend,
       textOnly: driverOpts?.textOnly,
       maxImageSize: driverOpts?.maxImageSize,
       drafterModel: driverOpts?.drafterModel,

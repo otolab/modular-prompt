@@ -29,6 +29,7 @@ program
   .option('-p, --profile <path>', 'Dialog profile file path (YAML)')
   .option('-l, --log [path]', 'Chat log file path (JSON), show log if no message')
   .option('-m, --model <model>', 'Override model name')
+  .option('--driver <driver>', 'Driver backend: mlx_lm, mlx_vlm, mlx_optiq, mlx, pytorch')
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
   .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
@@ -84,6 +85,7 @@ program
         userMessage,
         useStdin: hasStdinFlag || !!options.stdin,
         model: options.model,
+        driver: options.driver,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
         images: options.image,

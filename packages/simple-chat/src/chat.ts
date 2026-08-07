@@ -25,6 +25,7 @@ import {
   performAIChat,
   closeDriver,
 } from './ai-chat.js';
+import { parseDriverKind } from './driver-selection.js';
 import { loadResourceFiles } from './resource-files.js';
 import type { MaterialContext } from '@modular-prompt/process';
 import { Spinner } from './spinner.js';
@@ -96,6 +97,12 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
 
   // Apply overrides
   if (options.model) profile.model = options.model;
+  if (options.driver) {
+    profile.driver = parseDriverKind(options.driver);
+    logger.info(chalk.gray(`Driver: ${profile.driver}`));
+  } else if (options.textOnly) {
+    profile.textOnly = true;
+  }
   if (options.temperature !== undefined) {
     profile.options = profile.options || {};
     profile.options.temperature = options.temperature;
@@ -104,7 +111,6 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile.options = profile.options || {};
     profile.options.maxTokens = options.maxTokens;
   }
-  if (options.textOnly) profile.textOnly = true;
   if (options.drafterModel) {
     profile.drafterModel = options.drafterModel;
     logger.info(chalk.gray(`⚡ Drafter model: ${options.drafterModel}`));

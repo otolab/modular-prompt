@@ -6,7 +6,28 @@ from utils.vlm_utils import detect_model_kind
 from server import Server
 
 model_name = sys.argv[1] if len(sys.argv) > 1 else "mlx-community/gemma-3-270m-it-qat-4bit"
-text_only = "--text-only" in sys.argv
+
+VALID_BACKENDS = {"auto", "lm", "vlm", "optiq"}
+
+
+def parse_backend_mode() -> str:
+    if "--backend" in sys.argv:
+        idx = sys.argv.index("--backend")
+        if idx + 1 < len(sys.argv):
+            mode = sys.argv[idx + 1]
+            if mode not in VALID_BACKENDS:
+                sys.stderr.write(
+                    f"Invalid --backend value: {mode}. "
+                    f"Use one of: {', '.join(sorted(VALID_BACKENDS))}\n"
+                )
+                sys.exit(1)
+            return mode
+    if "--text-only" in sys.argv:
+        return "lm"
+    return "auto"
+
+
+backend_mode = parse_backend_mode()
 
 drafter_model = None
 if "--drafter" in sys.argv:
@@ -25,8 +46,26 @@ if "--draft-block-size" in sys.argv:
             sys.exit(1)
 
 
-def create_backend(model_name: str, text_only: bool = False):
-    model_kind = "lm" if text_only else detect_model_kind(model_name)
+def ensure_optiq_registered() -> None:
+    import optiq  # noqa: F401 - registers vendored architectures into mlx-lm
+
+
+def create_backend(model_name: str, mode: str = "auto"):
+    if mode == "optiq":
+        ensure_optiq_registered()
+        mode = "lm"
+
+    if mode == "lm":
+        backend = MlxLmBackend()
+        backend.load(model_name)
+        return backend, "lm"
+
+    if mode == "vlm":
+        backend = MlxVlmBackend()
+        backend.load(model_name)
+        return backend, "vlm"
+
+    model_kind = detect_model_kind(model_name)
 
     if model_kind == "vlm":
         backend = MlxVlmBackend()
@@ -42,7 +81,7 @@ def create_backend(model_name: str, text_only: bool = False):
 
 
 if __name__ == "__main__":
-    backend, model_kind = create_backend(model_name, text_only)
+    backend, model_kind = create_backend(model_name, backend_mode)
 
     if drafter_model:
         backend.load_drafter(drafter_model)
