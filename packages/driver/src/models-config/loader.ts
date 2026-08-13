@@ -73,7 +73,8 @@ export function normalizeModelsSection(
       if (typeof id !== 'string' || !id) {
         continue;
       }
-      const { id: _id, ...rest } = record;
+      const rest = { ...record };
+      delete rest.id;
       result[id] = rest as unknown as ModelSpecEntry;
     }
     return result;
