@@ -60,16 +60,76 @@ const module: PromptModule<{ query: string }> = {
 export default module;
 ```
 
-### 3. 実行
+### 3. 段階的な検証と実行
+
+experiment 設定は、次の順で段階的に確認するのがおすすめです。
+
+1. **`format`** — LLM/API キー不要。コンパイル済みプロンプトの中身を確認（§4）
+2. **`--dry-run`** — 実行計画（モデル・モジュール・テストケースの組み合わせ）を確認
+3. **本番実行** — 実際に LLM を呼び出して実験
 
 ```bash
-npx modular-experiment experiment.yaml --dry-run    # 確認
-npx modular-experiment experiment.yaml              # 実行
-npx modular-experiment experiment.yaml --evaluate   # 評価付き
-npx modular-experiment experiment.yaml --repeat 10  # 複数回実行
+npx modular-experiment format experiment.yaml              # 1. プロンプト確認
+npx modular-experiment experiment.yaml --dry-run           # 2. 実行計画確認
+npx modular-experiment experiment.yaml                     # 3. 本番実行
+npx modular-experiment experiment.yaml --evaluate          # 評価付き
+npx modular-experiment experiment.yaml --repeat 10         # 複数回実行
 ```
 
-#### CLIオプション
+### 4. プロンプト整形（LLM 呼び出しなし）
+
+experiment 設定からコンパイル済みプロンプトを整形出力する。API キーやモデル起動は不要。
+
+```bash
+# デフォルト（completion 形式）
+npx modular-experiment format experiment.yaml
+
+# テストケース・モジュールでフィルター
+npx modular-experiment format experiment.yaml --test-case "基本テスト" --modules my-module
+
+# 出力形式の切り替え
+npx modular-experiment format experiment.yaml --format messages   # ChatMessage[] を JSON 出力
+npx modular-experiment format experiment.yaml --format compiled   # CompiledPrompt を JSON 出力
+
+# ファイル出力
+npx modular-experiment format experiment.yaml --output prompts.txt --verbose
+```
+
+#### format サブコマンドのオプション
+
+| オプション | 説明 | デフォルト |
+|-----------|------|-----------|
+| `<config>` | 設定ファイルパス（YAML / TypeScript） | （必須） |
+| `--test-case <name>` | テストケース名フィルター | all |
+| `--modules <names>` | カンマ区切りのモジュール名 | all |
+| `--format <type>` | 出力形式: `completion`, `messages`, `compiled` | completion |
+| `--output <path>` | 出力先ファイル（未指定時は stdout） | stdout |
+| `--verbose` | 詳細ログ出力 | false |
+
+**completion 出力例:**
+
+```
+=== my-module / 基本テスト ===
+# Instructions
+...
+```
+
+**messages / compiled:** JSON 形式（複数の testCase × module は配列）
+
+#### 出力の挙動
+
+`format` 実行時、メタ情報バナー（`Prompt Format` ヘッダー等）は **stderr ではなく stdout** に出力されます。
+
+- **stdout 出力時**（`--output` 未指定）: バナーとプロンプト本文が stdout に混在します。パイプで後段に渡す場合はバナーが混入する点に注意してください
+- **`--output` 指定時**: プロンプト本文のみファイルに書き出し、バナーと完了メッセージは stdout に残ります
+- パイプでクリーンなプロンプトだけ欲しい場合は `--output` を使ってください
+
+#### 注意事項
+
+- **フィルター競合**: CLI の `--modules` と設定ファイル内の `testCase.modules` が矛盾すると、エラーなく**空出力**になることがあります（実験 runner と同様）。意図した組み合わせになっているか確認してください
+- **開発用ショートカット**: リポジトリルートの `pnpm run experiment` / `scripts/experiment.mjs` は `run-comparison.js` を直叩きするため **`format` サブコマンド非対応**です。`format` を使う正本は package bin 経由の `npx modular-experiment format <config>`
+
+#### CLIオプション（実験実行）
 
 | オプション | 説明 | デフォルト |
 |-----------|------|-----------|

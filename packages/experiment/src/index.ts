@@ -18,6 +18,14 @@ export { baseEvaluationModule } from './base-evaluation-module.js';
 export { DriverManager } from './runner/driver-manager.js';
 export { ExperimentRunner } from './runner/experiment.js';
 export { EvaluatorRunner } from './runner/evaluator.js';
+export {
+  compileModulePrompt,
+  formatCompiledPrompt,
+  buildFormatPlan,
+  renderFormattedOutput,
+  type PromptFormatType,
+  type FormattedPromptItem,
+} from './prompt-formatter.js';
 
 // Reporters
 export { StatisticsReporter } from './reporter/statistics.js';

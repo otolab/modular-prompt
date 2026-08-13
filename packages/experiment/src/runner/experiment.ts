@@ -2,9 +2,8 @@
  * Experiment runner - orchestrates the entire experiment
  */
 
-import { compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
-import { formatCompletionPrompt } from '@modular-prompt/driver';
+import { compileModulePrompt, formatCompiledPrompt } from '../prompt-formatter.js';
 import type { AIService, QueryResult, ModelSpec } from '@modular-prompt/driver';
 import {
   defaultProcess, streamProcess, concatProcess, dialogueProcess,
@@ -123,8 +122,8 @@ export class ExperimentRunner {
           : this.modules;
 
         for (const module of modulesToTest) {
-          const compiled = compile(module.module, testCase.input);
-          const prompt = formatCompletionPrompt(compiled);
+          const compiled = compileModulePrompt(module.module, testCase.input);
+          const prompt = formatCompiledPrompt(compiled, 'completion');
 
           plan.push({
             order: order++,
