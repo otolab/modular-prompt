@@ -69,7 +69,47 @@ npx modular-experiment experiment.yaml --evaluate   # 評価付き
 npx modular-experiment experiment.yaml --repeat 10  # 複数回実行
 ```
 
-#### CLIオプション
+### 4. プロンプト整形（LLM 呼び出しなし）
+
+experiment 設定からコンパイル済みプロンプトを整形出力する。API キーやモデル起動は不要。
+
+```bash
+# デフォルト（completion 形式）
+npx modular-experiment format experiment.yaml
+
+# テストケース・モジュールでフィルター
+npx modular-experiment format experiment.yaml --test-case "基本テスト" --modules my-module
+
+# 出力形式の切り替え
+npx modular-experiment format experiment.yaml --format messages   # ChatMessage[] を JSON 出力
+npx modular-experiment format experiment.yaml --format compiled   # CompiledPrompt を JSON 出力
+
+# ファイル出力
+npx modular-experiment format experiment.yaml --output prompts.txt --verbose
+```
+
+#### format サブコマンドのオプション
+
+| オプション | 説明 | デフォルト |
+|-----------|------|-----------|
+| `<config>` | 設定ファイルパス（YAML / TypeScript） | （必須） |
+| `--test-case <name>` | テストケース名フィルター | all |
+| `--modules <names>` | カンマ区切りのモジュール名 | all |
+| `--format <type>` | 出力形式: `completion`, `messages`, `compiled` | completion |
+| `--output <path>` | 出力先ファイル（未指定時は stdout） | stdout |
+| `--verbose` | 詳細ログ出力 | false |
+
+**completion 出力例:**
+
+```
+=== my-module / 基本テスト ===
+# Instructions
+...
+```
+
+**messages / compiled:** JSON 形式（複数の testCase × module は配列）
+
+#### CLIオプション（実験実行）
 
 | オプション | 説明 | デフォルト |
 |-----------|------|-----------|

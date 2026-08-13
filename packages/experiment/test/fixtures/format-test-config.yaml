@@ -1,0 +1,38 @@
+# Format command test configuration
+
+models:
+  test-model:
+    model: "test-model"
+    provider: "test"
+    capabilities: ["test"]
+
+drivers:
+  test: {}
+
+evaluation:
+  enabled: false
+
+modules:
+  - name: test-module
+    path: ./test-module.ts
+    description: Test module A
+  - name: test-module-b
+    path: ./test-module-b.ts
+    description: Test module B
+
+testCases:
+  - name: Test Case 1
+    description: First test case
+    input:
+      query: test input one
+      context: context one
+
+  - name: Test Case 2
+    description: Second test case
+    input:
+      query: test input two
+      context: context two
+    modules:
+      - test-module
+
+evaluators: []

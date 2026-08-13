@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "modular-experiment": "./dist/run-comparison.js"
+    "modular-experiment": "./dist/cli/main.js"
   },
   "files": [
     "dist",

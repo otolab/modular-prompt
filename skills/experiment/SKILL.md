@@ -53,6 +53,53 @@ npx modular-experiment config.yaml --log-file experiment.jsonl --verbose
 | `--log-file <path>` | JSONLログファイルパス |
 | `--verbose` | 詳細な内部操作を表示 |
 
+## プロンプト整形コマンド（`format`）
+
+**ステータス: 実装済み**
+
+LLM/API キーなしで experiment 設定からコンパイル済みプロンプトを整形出力する CLI サブコマンド。
+
+```bash
+# デフォルト（completion 形式）
+npx modular-experiment format config.yaml
+
+# フィルター
+npx modular-experiment format config.yaml --test-case "基本テスト" --modules baseline,optimized
+
+# 出力形式
+npx modular-experiment format config.yaml --format messages   # ChatMessage[] JSON
+npx modular-experiment format config.yaml --format compiled   # CompiledPrompt JSON
+
+# ファイル出力
+npx modular-experiment format config.yaml --output prompts.txt --verbose
+```
+
+### CLI オプション
+
+| オプション | 説明 |
+|-----------|------|
+| `<config>` | 設定ファイルパス（YAML or TypeScript） |
+| `--test-case <name>` | テストケース名フィルター |
+| `--modules <names>` | カンマ区切りモジュール名フィルター |
+| `--format <type>` | 出力形式: `completion`（デフォルト）, `messages`, `compiled` |
+| `--output <path>` | 出力先ファイル（未指定時は stdout） |
+| `--verbose` | 詳細ログ |
+
+### 処理フロー
+
+1. `loadExperimentConfig` で設定読み込み
+2. `loadModules` でモジュールロード
+3. 各 `testCase × module` について `compile` → `formatCompletionPrompt` / `formatPromptAsMessages`
+4. **ドライバー作成・LLM 呼び出しは行わない**
+
+### 既存コマンドとの使い分け
+
+| コマンド | 用途 |
+|---------|------|
+| `modular-experiment format` | プロンプト文字列の確認・デバッグ（LLM 不要） |
+| `modular-experiment --dry-run` | 実験実行計画の確認（モデル情報含む） |
+| `modular-experiment` | 実験の本番実行 |
+
 ## 設定ファイル（YAML）
 
 ```yaml
