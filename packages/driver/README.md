@@ -79,7 +79,42 @@ if (result.logEntries) {
 - **構造化出力**: JSONスキーマによる出力制御
 - **AIService**: 能力ベースのモデル自動選択
 
-## 推論キャンセル（AbortSignal）
+## ユーザーモデル設定（`~/.modular-prompt/models.yaml`）
+
+マシン共通のモデル定義を `~/.modular-prompt/models.yaml` に置けます（`MODULAR_PROMPT_HOME` で上書き可）。プロジェクト固有の定義は `{projectRoot}/.modular-prompt/models.yaml` に置き、**プロジェクト > ユーザー** の優先順位で解決します。
+
+```yaml
+defaults:
+  mlx-lm: mlx-community/gemma-3-270m-it-4bit
+
+models:
+  local-chat:
+    provider: mlx
+    runtime: mlx-lm
+    model: mlx-community/gemma-3-270m-it-4bit
+    capabilities: [local, chat, tools]
+```
+
+```typescript
+import {
+  resolveModelsConfig,
+  registerModelsFromConfig,
+  DriverRegistry,
+} from '@modular-prompt/driver';
+
+const config = resolveModelsConfig({
+  projectRoot: process.cwd(),
+  mode: 'merge', // 'merge' | 'override'
+});
+
+const registry = new DriverRegistry();
+registerModelsFromConfig(registry, config);
+```
+
+`mode: 'merge'` は user + project の models を浅いマージ、`mode: 'override'` は project の models で user models を置き換えます（drivers / defaults は浅いマージ）。
+
+simple-chat では profile に `modelsConfig.mode` を指定し、`workflow.models.default.ref` で alias 参照できます。
+
 
 ```typescript
 import { MlxDriver } from '@modular-prompt/driver';

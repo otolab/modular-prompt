@@ -2,15 +2,19 @@
  * Simple chat application types
  */
 
-import type { ApplicationConfig } from '@modular-prompt/driver';
+import type { ApplicationConfig, ModelsMergeMode } from '@modular-prompt/driver';
 
 /** Workflow mode */
 export type WorkflowMode = 'direct' | 'default' | 'agentic';
 
 /** Model reference in workflow */
 export interface ModelReference {
-  provider: string;
-  model: string;
+  /** models.yaml の alias（`provider`+`model` の代わりに使用可） */
+  ref?: string;
+  /** runtime profile 名（defaults から解決） */
+  runtime?: string;
+  provider?: string;
+  model?: string;
 }
 
 export interface DialogProfile {
@@ -45,6 +49,13 @@ export interface DialogProfile {
   };
   /** Driver provider configurations */
   drivers?: ApplicationConfig['drivers'];
+  /** ~/.modular-prompt/models.yaml との統合オプション */
+  modelsConfig?: {
+    /** models セクションのマージモード（デフォルト: merge） */
+    mode?: ModelsMergeMode;
+    /** プロジェクトルート（未指定時は cwd） */
+    projectRoot?: string;
+  };
   /** Workflow configuration */
   workflow?: {
     /** Execution mode (default: 'direct') */

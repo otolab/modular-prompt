@@ -228,3 +228,26 @@ export type {
   ModelSpec,
   DriverFactory
 } from './driver-registry/index.js';
+
+// User / project models.yaml
+export {
+  loadModelsConfigFile,
+  loadUserModelsConfig,
+  resolveModelsConfig,
+  mergeModelsConfig,
+  toApplicationConfig,
+  entryToModelSpec,
+  resolveModelAlias,
+  resolveModelReference,
+  resolveDefaultModel,
+  buildApplicationConfig,
+  registerModelsFromConfig,
+  getUserModelsConfigPath,
+  getProjectModelsConfigPath,
+  MODELS_CONFIG_FILENAME,
+  type ModelsMergeMode,
+  type ModelsConfigOptions,
+  type ModelSpecEntry,
+  type ModelsConfig,
+  type ModelReferenceInput,
+} from './models-config/index.js';
