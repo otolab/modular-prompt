@@ -16,6 +16,42 @@ Moduler Promptフレームワークを使用したチャットアプリケーシ
 npm install @modular-prompt/simple-chat
 ```
 
+## 初回セットアップ（MLX）
+
+simple-chat のデフォルトは MLX ローカル推論です。初回利用前に Python ランタイムの**明示的なセットアップ**が必要です（`npm install` では自動実行されません）。
+
+Python 環境はマシン共有の `~/.modular-prompt/runtimes/mlx/` に作成されます（プロジェクトや `node_modules` 内には作られません）。
+
+**前提条件**: macOS（Apple Silicon）、Python 3.13、uv（未インストール時はセットアップ中に自動インストール）
+
+### monorepo から利用する場合
+
+```bash
+# リポジトリルートから
+pnpm run setup-mlx
+
+# または workspace 指定
+pnpm run setup-mlx -w @modular-prompt/driver
+```
+
+### 公開パッケージとして利用する場合
+
+```bash
+node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup mlx
+```
+
+### 状態確認
+
+```bash
+# simple-chat CLI
+simple-chat --check
+
+# driver の runtime CLI
+node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup --status
+```
+
+詳細は [@modular-prompt/driver README](../driver/README.md) および [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
+
 ## 使用方法
 
 ### CLIとして使用
