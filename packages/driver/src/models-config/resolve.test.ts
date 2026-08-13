@@ -152,7 +152,7 @@ models:
         overlay: {
           models: {
             shared: { provider: 'mlx', model: 'overlay/shared' },
-            overlay-only: { provider: 'mlx', model: 'overlay/only' },
+            'overlay-only': { provider: 'mlx', model: 'overlay/only' },
           },
         },
       });
