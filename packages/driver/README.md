@@ -64,6 +64,7 @@ if (result.logEntries) {
 | `GoogleGenAIDriver` | Google | APIキーのみで利用可能 |
 | `OllamaDriver` | Ollama | ローカルLLM |
 | `MlxDriver` | MLX | Apple Silicon専用（VLM対応） |
+| `PyTorchDriver` | PyTorch | Transformers + PyTorch（LIP、cpu-minimal 自動セットアップ） |
 | `VllmDriver` | vLLM | CUDA GPU推論（Linux） |
 | `TestDriver` | - | モックレスポンス |
 | `EchoDriver` | - | プロンプトをそのまま返す |

@@ -77,6 +77,15 @@ Moduler Promptは4層のレイヤードアーキテクチャで構成される�
 - ストリーミングレスポンス
 - 構造化出力（Structured Outputs）
 
+**ローカル推論の2系統：**
+
+| 系統 | 代表 | 特徴 |
+|------|------|------|
+| **Server 型** | vLLM, Ollama | 整形・ツールパースをサーバー側に委譲 |
+| **Thin Python 推論型（LIP）** | MLX, PyTorch | stdio JSON-RPC の Local Inference Protocol を共有。TS がフォーマッタ、アダプタ、ツールパースを担い、Python は `generate` / `render` 等の推論エンジンに限定 |
+
+LIP のセットアップと使い分けは [ローカルモデルセットアップ](./LOCAL_MODEL_SETUP.md) を参照。
+
 詳細は[Driver APIリファレンス](./DRIVER_API.md)を参照。
 
 ### @modular-prompt/utils
