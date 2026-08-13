@@ -226,5 +226,7 @@ export type {
   DriverProvider,
   DriverCapability,
   ModelSpec,
-  DriverFactory
+  DriverFactory,
+  MlxBackendMode,
+  MlxModelDriverOptions,
 } from './driver-registry/index.js';

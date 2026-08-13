@@ -39,6 +39,7 @@ export type {
 };
 
 export interface MlxProcessOptions {
+  backend?: import('../../driver-registry/types.js').MlxBackendMode;
   textOnly?: boolean;
   drafterModel?: string;
   draftBlockSize?: number;
@@ -46,7 +47,9 @@ export interface MlxProcessOptions {
 
 function buildMlxSpawnArgs(options?: MlxProcessOptions): string[] {
   const args: string[] = [];
-  if (options?.textOnly) {
+  if (options?.backend && options.backend !== 'auto') {
+    args.push('--backend', options.backend);
+  } else if (options?.textOnly) {
     args.push('--text-only');
   }
   if (options?.drafterModel) {

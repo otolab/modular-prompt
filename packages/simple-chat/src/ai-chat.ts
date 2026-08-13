@@ -13,6 +13,10 @@ import {
   registerFactories,
   type ApplicationConfig,
 } from '@modular-prompt/driver';
+import {
+  buildMlxDriverOptions,
+  resolveInferenceSelection,
+} from './inference-selection.js';
 import type { DialogProfile, ChatLog, WorkflowMode } from './types.js';
 import chalk from 'chalk';
 import { Spinner } from './spinner.js';
@@ -97,22 +101,18 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   };
   registerFactories(registry, appConfig);
 
-  const driverOptions =
-    (profile.textOnly || profile.drafterModel || profile.draftBlockSize !== undefined || profile.cacheDir)
-      ? {
-          ...(profile.textOnly && { textOnly: true }),
-          ...(profile.drafterModel && { drafterModel: profile.drafterModel }),
-          ...(profile.draftBlockSize !== undefined && { draftBlockSize: profile.draftBlockSize }),
-          ...(profile.cacheDir && { cacheDir: profile.cacheDir }),
-        }
-      : undefined;
+  const selection = resolveInferenceSelection(profile);
+  const driverOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
+
+  const resolveProvider = (fallback: DriverProvider): DriverProvider =>
+    selection.provider ?? fallback;
 
   // 1. workflow.models.default があればそれを使う
   const modelRef = profile.workflow?.models?.default;
   if (modelRef) {
     return registry.createDriver({
       model: modelRef.model,
-      provider: modelRef.provider as DriverProvider,
+      provider: resolveProvider(modelRef.provider as DriverProvider),
       capabilities: [],
       driverOptions,
     });
@@ -122,7 +122,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   if (profile.model) {
     return registry.createDriver({
       model: profile.model,
-      provider: inferProvider(profile.model),
+      provider: resolveProvider(inferProvider(profile.model)),
       capabilities: [],
       driverOptions,
     });
@@ -131,7 +131,7 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   // 3. デフォルト: MLX ローカル
   return registry.createDriver({
     model: DEFAULT_MODEL,
-    provider: 'mlx',
+    provider: resolveProvider('mlx'),
     capabilities: [],
     driverOptions,
   });
