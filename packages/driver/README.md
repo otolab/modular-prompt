@@ -80,7 +80,53 @@ if (result.logEntries) {
 - **構造化出力**: JSONスキーマによる出力制御
 - **AIService**: 能力ベースのモデル自動選択
 
-## 推論キャンセル（AbortSignal）
+## ユーザーモデル設定（`~/.modular-prompt/models.yaml`）
+
+マシン共通のモデル定義を `~/.modular-prompt/models.yaml` に置けます（`MODULAR_PROMPT_HOME` で上書き可）。**プロジェクト配下の暗黙探索は行いません。** 利用側アプリが overlay を明示投入し、**overlay > ユーザー** の優先順位で解決します。
+
+```yaml
+defaults:
+  mlx-lm: mlx-community/gemma-3-270m-it-4bit
+
+models:
+  local-chat:
+    provider: mlx
+    runtime: mlx-lm
+    model: mlx-community/gemma-3-270m-it-4bit
+    capabilities: [local, chat, tools]
+```
+
+```typescript
+import {
+  resolveModelsConfig,
+  registerModelsFromConfig,
+  DriverRegistry,
+} from '@modular-prompt/driver';
+
+const overlay = {
+  models: {
+    local-chat: {
+      provider: 'mlx',
+      model: 'my-app/default-model',
+    },
+  },
+};
+
+const config = resolveModelsConfig({
+  overlay,
+  mode: 'merge', // 'merge' | 'override'
+});
+
+const registry = new DriverRegistry();
+registerModelsFromConfig(registry, config);
+```
+
+`mode: 'merge'` は user + overlay の models を浅いマージ、`mode: 'override'` は overlay の models で user models を置き換えます（drivers / defaults は浅いマージ）。
+
+simple-chat では profile の `modelsConfig` に inline の `models` / `defaults` / `drivers` を載せ、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合、または `runtime` に対応する `defaults` が無い場合は **エラーで停止**します（黙ってハードコードデフォルトへフォールバックしません）。
+
+不正な YAML は `loadModelsConfigFile()` が **例外を throw** します（js-yaml のパースエラーをそのまま伝播）。
+
 
 ```typescript
 import { MlxDriver } from '@modular-prompt/driver';

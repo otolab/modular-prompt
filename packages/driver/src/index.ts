@@ -230,3 +230,25 @@ export type {
   MlxBackendMode,
   MlxModelDriverOptions,
 } from './driver-registry/index.js';
+
+// User models.yaml (+ overlay via models-config API)
+export {
+  loadModelsConfigFile,
+  loadUserModelsConfig,
+  resolveModelsConfig,
+  mergeModelsConfig,
+  toApplicationConfig,
+  entryToModelSpec,
+  resolveModelAlias,
+  resolveModelReference,
+  resolveDefaultModel,
+  buildApplicationConfig,
+  registerModelsFromConfig,
+  getUserModelsConfigPath,
+  MODELS_CONFIG_FILENAME,
+  type ModelsMergeMode,
+  type ModelsConfigOptions,
+  type ModelSpecEntry,
+  type ModelsConfig,
+  type ModelReferenceInput,
+} from './models-config/index.js';

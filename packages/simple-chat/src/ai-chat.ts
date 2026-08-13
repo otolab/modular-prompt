@@ -9,9 +9,15 @@ import { defaultProcess, agenticProcess } from '@modular-prompt/process';
 import {
   type AIDriver,
   type DriverProvider,
+  type ModelSpec,
+  type ModelsConfig,
   DriverRegistry,
   registerFactories,
   type ApplicationConfig,
+  resolveModelsConfig,
+  mergeModelsConfig,
+  resolveModelReference,
+  resolveDefaultModel,
   RuntimeNotReadyError,
 } from '@modular-prompt/driver';
 import { formatRuntimeNotReadyMessage } from './runtime-status.js';
@@ -93,15 +99,37 @@ function inferProvider(model: string): DriverProvider {
 }
 
 /**
- * Create driver from profile configuration
+ * profile から overlay ModelsConfig を組み立てる
  */
-export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
-  const registry = new DriverRegistry();
-  const appConfig: ApplicationConfig = {
-    drivers: profile.drivers,
-    defaultOptions: profile.options,
-  };
-  registerFactories(registry, appConfig);
+function buildModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
+  const overlay: ModelsConfig = {};
+  const mc = profile.modelsConfig;
+
+  if (mc?.models) overlay.models = mc.models;
+  if (mc?.defaults) overlay.defaults = mc.defaults;
+  if (mc?.drivers) overlay.drivers = mc.drivers;
+  if (profile.drivers) {
+    overlay.drivers = { ...(overlay.drivers ?? {}), ...profile.drivers };
+  }
+
+  if (Object.keys(overlay).length === 0) {
+    return undefined;
+  }
+  return overlay;
+}
+
+function resolveProfileModelsConfig(profile: DialogProfile): ModelsConfig {
+  return resolveModelsConfig({
+    overlay: buildModelsOverlay(profile),
+    mode: profile.modelsConfig?.mode,
+  });
+}
+
+/**
+ * Profile と models.yaml から使用する ModelSpec を解決する（テスト・デバッグ用）
+ */
+export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
+  const resolvedModels = resolveProfileModelsConfig(profile);
 
   const selection = resolveInferenceSelection(profile);
   const driverOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
@@ -109,34 +137,84 @@ export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   const resolveProvider = (fallback: DriverProvider): DriverProvider =>
     selection.provider ?? fallback;
 
-  // 1. workflow.models.default があればそれを使う
+  const attachDriverOptions = (spec: ModelSpec): ModelSpec => ({
+    ...spec,
+    driverOptions: driverOptions ?? spec.driverOptions,
+  });
+
   const modelRef = profile.workflow?.models?.default;
   if (modelRef) {
-    return registry.createDriver({
-      model: modelRef.model,
-      provider: resolveProvider(modelRef.provider as DriverProvider),
-      capabilities: [],
-      driverOptions,
-    });
+    const spec = resolveModelReference(modelRef, resolvedModels);
+    if (spec) {
+      return attachDriverOptions({
+        ...spec,
+        provider: resolveProvider(spec.provider),
+      });
+    }
+    if (modelRef.ref) {
+      throw new Error(
+        `Unknown model ref '${modelRef.ref}' in models configuration`,
+      );
+    }
+    if (modelRef.runtime) {
+      throw new Error(
+        `No default model for runtime '${modelRef.runtime}' in models configuration`,
+      );
+    }
+    if (modelRef.provider && modelRef.model) {
+      return attachDriverOptions({
+        model: modelRef.model,
+        provider: resolveProvider(modelRef.provider as DriverProvider),
+        capabilities: [],
+      });
+    }
+    throw new Error(
+      'workflow.models.default is incomplete: specify ref, runtime, or provider+model',
+    );
   }
 
-  // 2. CLI -m オーバーライド
   if (profile.model) {
-    return registry.createDriver({
+    return attachDriverOptions({
       model: profile.model,
       provider: resolveProvider(inferProvider(profile.model)),
       capabilities: [],
-      driverOptions,
     });
   }
 
-  // 3. デフォルト: MLX ローカル
-  return registry.createDriver({
+  const defaultFromConfig = resolveDefaultModel('mlx-lm', resolvedModels);
+  if (defaultFromConfig) {
+    return attachDriverOptions({
+      ...defaultFromConfig,
+      provider: resolveProvider(defaultFromConfig.provider),
+    });
+  }
+
+  return attachDriverOptions({
     model: DEFAULT_MODEL,
     provider: resolveProvider('mlx'),
     capabilities: [],
-    driverOptions,
   });
+}
+
+/**
+ * Create driver from profile configuration
+ */
+export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
+  const resolvedModels = resolveProfileModelsConfig(profile);
+
+  const mergedConfig = mergeModelsConfig(resolvedModels, {
+    defaultOptions: profile.options,
+  });
+
+  const registry = new DriverRegistry();
+  const appConfig: ApplicationConfig = {
+    drivers: mergedConfig.drivers,
+    defaultOptions: mergedConfig.defaultOptions,
+  };
+  registerFactories(registry, appConfig);
+
+  const spec = resolveProfileModelSpec(profile);
+  return registry.createDriver(spec);
 }
 
 /**

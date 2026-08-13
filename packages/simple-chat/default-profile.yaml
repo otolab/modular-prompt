@@ -24,19 +24,23 @@ module:
 # drivers:
 #   googlegenai:
 #     apiKey: "${GOOGLE_GENAI_API_KEY}"
-#   vertexai:
-#     project: "my-project"
-#     location: "us-central1"
-#   openai:
-#     apiKey: "${OPENAI_API_KEY}"
+
+# ~/.modular-prompt/models.yaml との統合（overlay は profile 内で明示定義）
+# modelsConfig:
+#   mode: merge          # merge | override
+#   models:
+#     local-chat:
+#       provider: mlx
+#       model: mlx-community/gemma-4-31b-4bit
+#   defaults:
+#     mlx-lm: mlx-community/gemma-3-270m-it-4bit
 
 # ワークフロー設定（オプション）
 # workflow:
   # mode: default
   # models:
   #   default:
-  #     provider: mlx
-  #     model: mlx-community/gemma-4-31b-4bit
+  #     ref: local-chat   # models.yaml / modelsConfig の alias
 
 # workflow:
 #   mode: default       # direct | default | agentic

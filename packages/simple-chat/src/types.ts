@@ -2,15 +2,19 @@
  * Simple chat application types
  */
 
-import type { ApplicationConfig } from '@modular-prompt/driver';
+import type { ApplicationConfig, ModelsConfig, ModelsMergeMode } from '@modular-prompt/driver';
 
 /** Workflow mode */
 export type WorkflowMode = 'direct' | 'default' | 'agentic';
 
 /** Model reference in workflow */
 export interface ModelReference {
-  provider: string;
-  model: string;
+  /** models.yaml の alias（`provider`+`model` の代わりに使用可） */
+  ref?: string;
+  /** runtime profile 名（defaults から解決） */
+  runtime?: string;
+  provider?: string;
+  model?: string;
   /** MLX 内の実行モード（auto / lm / vlm / optiq） */
   backend?: string;
 }
@@ -51,6 +55,15 @@ export interface DialogProfile {
   };
   /** Driver provider configurations */
   drivers?: ApplicationConfig['drivers'];
+  /** ~/.modular-prompt/models.yaml との統合（overlay は profile 内で明示定義） */
+  modelsConfig?: {
+    /** models セクションのマージモード（デフォルト: merge） */
+    mode?: ModelsMergeMode;
+    /** overlay: defaults / models / drivers */
+    defaults?: ModelsConfig['defaults'];
+    models?: ModelsConfig['models'];
+    drivers?: ModelsConfig['drivers'];
+  };
   /** Workflow configuration */
   workflow?: {
     /** Execution mode (default: 'direct') */
