@@ -9,9 +9,11 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { Logger } from '@modular-prompt/utils';
+import { RuntimeNotReadyError } from '@modular-prompt/driver';
 import { runChat } from './chat.js';
 import type { SimpleChatOptions } from './types.js';
 import { logger as baseLogger } from './logger.js';
+import { printRuntimeStatus } from './runtime-status.js';
 
 const logger = baseLogger.context('cli');
 
@@ -50,11 +52,17 @@ program
     throw new InvalidArgumentError('must be true, false, or read-only');
   })
   .option('--stdin', 'Read user message from stdin')
+  .option('--check', 'Check MLX Python runtime setup status')
   .option('-q, --quiet', 'Suppress all output except errors')
   .option('-v, --verbose', 'Show verbose output')
   .option('--debug', 'Show debug output (includes MLX process logs)')
   .action(async (messageArgs: string[], options) => {
     try {
+      if (options.check) {
+        const mlxReady = printRuntimeStatus();
+        process.exit(mlxReady ? 0 : 1);
+      }
+
       // Configure log level
       if (options.quiet) {
         Logger.configure({ level: 'error' });
@@ -99,6 +107,10 @@ program
       
       await runChat(chatOptions);
     } catch (error) {
+      if (error instanceof RuntimeNotReadyError) {
+        // performAIChat already logged actionable setup guidance
+        process.exit(1);
+      }
       logger.error(`${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }

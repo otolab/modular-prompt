@@ -12,7 +12,9 @@ import {
   DriverRegistry,
   registerFactories,
   type ApplicationConfig,
+  RuntimeNotReadyError,
 } from '@modular-prompt/driver';
+import { formatRuntimeNotReadyMessage } from './runtime-status.js';
 import {
   buildMlxDriverOptions,
   resolveInferenceSelection,
@@ -282,6 +284,10 @@ export async function performAIChat(
     return { response, driver };
   } catch (error) {
     spinner.stop();
+    if (error instanceof RuntimeNotReadyError) {
+      logger.error(formatRuntimeNotReadyMessage(error.profile, error.setupCommand));
+      throw error;
+    }
     logger.error(`AI chat error: ${error}`);
     throw error;
   }
