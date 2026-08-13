@@ -41,11 +41,16 @@ export type DriverCapability =
   | 'json'           // JSON出力対応
   | 'function-calling'; // 関数呼び出し対応
 
+/** MLX Python バックエンド選択 */
+export type MlxBackendMode = 'auto' | 'lm' | 'vlm' | 'optiq';
+
 /**
  * MLXドライバー固有オプション
  */
 export interface MlxModelDriverOptions {
-  /** VLMモデルをtext-onlyモードで使用する */
+  /** MLX Python バックエンド（デフォルト: auto） */
+  backend?: MlxBackendMode;
+  /** VLMモデルをtext-onlyモードで使用する（backend: lm と同等。後方互換） */
   textOnly?: boolean;
   /** VLM画像の最大辺ピクセル数 */
   maxImageSize?: number;
@@ -69,6 +74,9 @@ export interface ModelSpec {
 
   /** プロバイダー名 */
   provider: DriverProvider;
+
+  /** MLX 内の実行モード（provider が mlx のとき。driverOptions.backend より優先） */
+  backend?: MlxBackendMode;
 
   /** モデルの能力フラグ */
   capabilities: DriverCapability[];

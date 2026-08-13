@@ -37,6 +37,7 @@ describe('MlxProcess', () => {
 
   it('constructs InferenceProcessClient with MLX paths and spawn args', () => {
     const process = new MlxProcess('my-model', {
+      backend: 'optiq',
       textOnly: true,
       drafterModel: 'draft-model',
       draftBlockSize: 8,
@@ -49,11 +50,18 @@ describe('MlxProcess', () => {
       pythonProjectDir: '/test/mlx/python',
       venvPath: '/test/mlx/venv',
       runtimeProfile: 'mlx',
-      extraSpawnArgs: ['--text-only', '--drafter', 'draft-model', '--draft-block-size', '8'],
+      extraSpawnArgs: ['--backend', 'optiq', '--drafter', 'draft-model', '--draft-block-size', '8'],
       loggerPrefix: 'MLX',
       mapSamplingOptions: expect.any(Function),
       processExitErrorMessage: expect.any(Function),
     });
+  });
+
+  it('uses --text-only when backend is unset and textOnly is true', () => {
+    new MlxProcess('model', { textOnly: true });
+
+    const config = vi.mocked(InferenceProcessClient).mock.calls[0][0];
+    expect(config.extraSpawnArgs).toEqual(['--text-only']);
   });
 
   it('wires mapSamplingOptions to mapOptionsToPython', () => {

@@ -15,11 +15,17 @@ export interface ModelReference {
   runtime?: string;
   provider?: string;
   model?: string;
+  /** MLX 内の実行モード（auto / lm / vlm / optiq） */
+  backend?: string;
 }
 
 export interface DialogProfile {
   /** Model name to use (CLI -m override) */
   model?: string;
+  /** 推論プロバイダー（CLI --provider / profile で指定） */
+  provider?: string;
+  /** MLX 内の実行モード（CLI --backend / profile で指定） */
+  backend?: string;
   /** PromptModule inline definition (objective, instructions, guidelines, etc.) */
   module?: Record<string, any>;
   /** Pre-message from assistant after system prompt */
@@ -115,6 +121,10 @@ export interface SimpleChatOptions {
   maxTokens?: number;
   /** Image file paths for VLM */
   images?: string[];
+  /** 推論プロバイダー（pytorch 等） */
+  provider?: string;
+  /** MLX 内の実行モード（auto / lm / vlm / optiq） */
+  backend?: string;
   /** VLMモデルをtext-onlyモードで使用する */
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */

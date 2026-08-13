@@ -1,3 +1,4 @@
+import type { MlxBackendMode } from '../driver-registry/types.js';
 import { LocalInferenceDriver } from '../local-inference/driver.js';
 import { hasMessageElement } from '../local-inference/prompt-utils.js';
 import type { PromptCacheController } from '../cache-controller.js';
@@ -23,7 +24,9 @@ export interface MlxDriverConfig {
   formatterOptions?: FormatterOptions;
   /** VLM画像の最大辺ピクセル数（デフォルト: 768） */
   maxImageSize?: number;
-  /** VLMモデルをtext-onlyモードで使用する（VLM判定を抑制） */
+  /** MLX Python バックエンド（デフォルト: auto） */
+  backend?: MlxBackendMode;
+  /** VLMモデルをtext-onlyモードで使用する（backend: lm と同等。後方互換） */
   textOnly?: boolean;
   /** Speculative decoding用のdrafter model名 */
   drafterModel?: string;
@@ -44,6 +47,7 @@ export class MlxDriver extends LocalInferenceDriver {
 
   constructor(config: MlxDriverConfig) {
     const mlxProcess = new MlxProcess(config.model, {
+      backend: config.backend,
       textOnly: config.textOnly,
       drafterModel: config.drafterModel,
       draftBlockSize: config.draftBlockSize,

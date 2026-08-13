@@ -18,6 +18,10 @@ import {
   resolveModelReference,
   resolveDefaultModel,
 } from '@modular-prompt/driver';
+import {
+  buildMlxDriverOptions,
+  resolveInferenceSelection,
+} from './inference-selection.js';
 import type { DialogProfile, ChatLog, WorkflowMode } from './types.js';
 import chalk from 'chalk';
 import { Spinner } from './spinner.js';
@@ -108,15 +112,11 @@ export function resolveProfileModelSpec(
     mode: profile.modelsConfig?.mode,
   });
 
-  const driverOptions =
-    (profile.textOnly || profile.drafterModel || profile.draftBlockSize !== undefined || profile.cacheDir)
-      ? {
-          ...(profile.textOnly && { textOnly: true }),
-          ...(profile.drafterModel && { drafterModel: profile.drafterModel }),
-          ...(profile.draftBlockSize !== undefined && { draftBlockSize: profile.draftBlockSize }),
-          ...(profile.cacheDir && { cacheDir: profile.cacheDir }),
-        }
-      : undefined;
+  const selection = resolveInferenceSelection(profile);
+  const driverOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
+
+  const resolveProvider = (fallback: DriverProvider): DriverProvider =>
+    selection.provider ?? fallback;
 
   const attachDriverOptions = (spec: ModelSpec): ModelSpec => ({
     ...spec,
@@ -127,12 +127,15 @@ export function resolveProfileModelSpec(
   if (modelRef) {
     const spec = resolveModelReference(modelRef, resolvedModels);
     if (spec) {
-      return attachDriverOptions(spec);
+      return attachDriverOptions({
+        ...spec,
+        provider: resolveProvider(spec.provider),
+      });
     }
     if (modelRef.provider && modelRef.model) {
       return attachDriverOptions({
         model: modelRef.model,
-        provider: modelRef.provider as DriverProvider,
+        provider: resolveProvider(modelRef.provider as DriverProvider),
         capabilities: [],
       });
     }
@@ -141,19 +144,22 @@ export function resolveProfileModelSpec(
   if (profile.model) {
     return attachDriverOptions({
       model: profile.model,
-      provider: inferProvider(profile.model),
+      provider: resolveProvider(inferProvider(profile.model)),
       capabilities: [],
     });
   }
 
   const defaultFromConfig = resolveDefaultModel('mlx-lm', resolvedModels);
   if (defaultFromConfig) {
-    return attachDriverOptions(defaultFromConfig);
+    return attachDriverOptions({
+      ...defaultFromConfig,
+      provider: resolveProvider(defaultFromConfig.provider),
+    });
   }
 
   return attachDriverOptions({
     model: DEFAULT_MODEL,
-    provider: 'mlx',
+    provider: resolveProvider('mlx'),
     capabilities: [],
   });
 }

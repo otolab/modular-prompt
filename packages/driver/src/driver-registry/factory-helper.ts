@@ -4,7 +4,7 @@
  */
 
 import type { DriverRegistry } from './registry.js';
-import type { ModelSpec, DriverProvider } from './types.js';
+import type { ModelSpec, DriverProvider, MlxModelDriverOptions, MlxBackendMode } from './types.js';
 import type { AIDriver } from '../types.js';
 import { logger } from '@modular-prompt/utils';
 
@@ -49,6 +49,11 @@ function validateAndClampMaxTokens(
   return defaultOptions;
 }
 
+function resolveMlxBackend(spec: ModelSpec): MlxBackendMode | undefined {
+  const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
+  return spec.backend ?? driverOpts?.backend;
+}
+
 /**
  * 標準ドライバーのファクトリー関数を登録
  *
@@ -73,15 +78,17 @@ export function registerStandardDriverFactories(
     const Driver = drivers.MlxDriver;
     // TODO: metadata経由でドライバー固有オプションを渡す仕組みを整理したい
     registry.registerFactory('mlx', (spec: ModelSpec) => {
+      const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
       return new Driver({
         model: spec.model,
         defaultOptions: validateAndClampMaxTokens(
           spec,
           spec.defaultOptions
         ),
-        textOnly: spec.metadata?.textOnly as boolean | undefined,
-        drafterModel: spec.metadata?.drafterModel as string | undefined,
-        draftBlockSize: spec.metadata?.draftBlockSize as number | undefined
+        backend: resolveMlxBackend(spec),
+        textOnly: driverOpts?.textOnly ?? (spec.metadata?.textOnly as boolean | undefined),
+        drafterModel: driverOpts?.drafterModel ?? (spec.metadata?.drafterModel as string | undefined),
+        draftBlockSize: driverOpts?.draftBlockSize ?? (spec.metadata?.draftBlockSize as number | undefined),
       });
     });
   }

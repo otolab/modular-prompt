@@ -29,6 +29,8 @@ program
   .option('-p, --profile <path>', 'Dialog profile file path (YAML)')
   .option('-l, --log [path]', 'Chat log file path (JSON), show log if no message')
   .option('-m, --model <model>', 'Override model name')
+  .option('--provider <provider>', 'Inference provider (e.g. mlx, pytorch)')
+  .option('--backend <backend>', 'MLX backend mode: auto, lm, vlm, optiq')
   .option('--temperature <value>', 'Temperature (0.0-2.0)', parseFloat)
   .option('--max-tokens <value>', 'Maximum tokens', parseInt)
   .option('-i, --image <path>', 'Image file path for VLM models (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
@@ -84,6 +86,8 @@ program
         userMessage,
         useStdin: hasStdinFlag || !!options.stdin,
         model: options.model,
+        provider: options.provider,
+        backend: options.backend,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
         images: options.image,
