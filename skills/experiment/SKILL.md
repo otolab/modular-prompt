@@ -1,6 +1,6 @@
 ---
 name: experiment
-description: modular-promptの実験フレームワーク（@modular-prompt/experiment）の使い方ガイド。プロンプトモジュールの比較・評価実験の設定、実行、評価器の定義を参照する。
+description: modular-promptの実験フレームワーク（@modular-prompt/experiment）の使い方ガイド。プロンプトモジュールの比較・評価実験の設定、実行、評価器の定義、およびプロンプト整形コマンド（`format`）を参照する。
 ---
 
 # 実験フレームワーク使い方ガイド
@@ -19,10 +19,13 @@ description: modular-promptの実験フレームワーク（@modular-prompt/expe
 ## CLI
 
 ```bash
-# 設定検証・実行計画表示（まずこれで確認）
+# 1. プロンプト確認（LLM 不要）
+npx modular-experiment format config.yaml
+
+# 2. 設定検証・実行計画表示
 npx modular-experiment config.yaml --dry-run
 
-# 実験実行
+# 3. 実験実行
 npx modular-experiment config.yaml
 
 # 評価付き実行
@@ -52,6 +55,35 @@ npx modular-experiment config.yaml --log-file experiment.jsonl --verbose
 | `--evaluators <names>` | カンマ区切り評価器名フィルター |
 | `--log-file <path>` | JSONLログファイルパス |
 | `--verbose` | 詳細な内部操作を表示 |
+
+### 段階的な検証フロー
+
+experiment 設定は、次の順で段階的に確認するのがおすすめです。
+
+1. **`format`** — LLM/API キー不要。コンパイル済みプロンプトの中身を確認
+2. **`<config> --dry-run`** — 実行計画（モデル・モジュール・テストケースの組み合わせ）を確認
+3. **本番実行** — 実際に LLM を呼び出して実験
+
+### 既存コマンドとの使い分け
+
+| コマンド | 用途 |
+|---------|------|
+| `modular-experiment format <config>` | プロンプト文字列の確認・デバッグ（LLM 不要） |
+| `modular-experiment <config> --dry-run` | 実験実行計画の確認（モデル情報含む） |
+| `modular-experiment <config>` | 実験の本番実行 |
+
+### 出力の挙動
+
+`format` 実行時、メタ情報バナー（`Prompt Format` ヘッダー等）は **stderr ではなく stdout** に出力されます。
+
+- **stdout 出力時**（`--output` 未指定）: バナーとプロンプト本文が stdout に混在します。パイプで後段に渡す場合はバナーが混入する点に注意してください
+- **`--output` 指定時**: プロンプト本文のみファイルに書き出し、バナーと完了メッセージは stdout に残ります
+- パイプでクリーンなプロンプトだけ欲しい場合は `--output` を使ってください
+
+### 注意事項
+
+- **フィルター競合**: CLI の `--modules` と設定ファイル内の `testCase.modules` が矛盾すると、エラーなく**空出力**になることがあります（実験 runner と同様）。意図した組み合わせになっているか確認してください
+- **開発用ショートカット**: リポジトリルートの `pnpm run experiment` / `scripts/experiment.mjs` は `run-comparison.js` を直叩きするため **`format` サブコマンド非対応**です。`format` を使う正本は package bin 経由の `npx modular-experiment format <config>`
 
 ## プロンプト整形コマンド（`format`）
 
@@ -91,14 +123,6 @@ npx modular-experiment format config.yaml --output prompts.txt --verbose
 2. `loadModules` でモジュールロード
 3. 各 `testCase × module` について `compile` → `formatCompletionPrompt` / `formatPromptAsMessages`
 4. **ドライバー作成・LLM 呼び出しは行わない**
-
-### 既存コマンドとの使い分け
-
-| コマンド | 用途 |
-|---------|------|
-| `modular-experiment format` | プロンプト文字列の確認・デバッグ（LLM 不要） |
-| `modular-experiment --dry-run` | 実験実行計画の確認（モデル情報含む） |
-| `modular-experiment` | 実験の本番実行 |
 
 ## 設定ファイル（YAML）
 

@@ -60,13 +60,20 @@ const module: PromptModule<{ query: string }> = {
 export default module;
 ```
 
-### 3. 実行
+### 3. 段階的な検証と実行
+
+experiment 設定は、次の順で段階的に確認するのがおすすめです。
+
+1. **`format`** — LLM/API キー不要。コンパイル済みプロンプトの中身を確認（§4）
+2. **`--dry-run`** — 実行計画（モデル・モジュール・テストケースの組み合わせ）を確認
+3. **本番実行** — 実際に LLM を呼び出して実験
 
 ```bash
-npx modular-experiment experiment.yaml --dry-run    # 確認
-npx modular-experiment experiment.yaml              # 実行
-npx modular-experiment experiment.yaml --evaluate   # 評価付き
-npx modular-experiment experiment.yaml --repeat 10  # 複数回実行
+npx modular-experiment format experiment.yaml              # 1. プロンプト確認
+npx modular-experiment experiment.yaml --dry-run           # 2. 実行計画確認
+npx modular-experiment experiment.yaml                     # 3. 本番実行
+npx modular-experiment experiment.yaml --evaluate          # 評価付き
+npx modular-experiment experiment.yaml --repeat 10         # 複数回実行
 ```
 
 ### 4. プロンプト整形（LLM 呼び出しなし）
@@ -108,6 +115,19 @@ npx modular-experiment format experiment.yaml --output prompts.txt --verbose
 ```
 
 **messages / compiled:** JSON 形式（複数の testCase × module は配列）
+
+#### 出力の挙動
+
+`format` 実行時、メタ情報バナー（`Prompt Format` ヘッダー等）は **stderr ではなく stdout** に出力されます。
+
+- **stdout 出力時**（`--output` 未指定）: バナーとプロンプト本文が stdout に混在します。パイプで後段に渡す場合はバナーが混入する点に注意してください
+- **`--output` 指定時**: プロンプト本文のみファイルに書き出し、バナーと完了メッセージは stdout に残ります
+- パイプでクリーンなプロンプトだけ欲しい場合は `--output` を使ってください
+
+#### 注意事項
+
+- **フィルター競合**: CLI の `--modules` と設定ファイル内の `testCase.modules` が矛盾すると、エラーなく**空出力**になることがあります（実験 runner と同様）。意図した組み合わせになっているか確認してください
+- **開発用ショートカット**: リポジトリルートの `pnpm run experiment` / `scripts/experiment.mjs` は `run-comparison.js` を直叩きするため **`format` サブコマンド非対応**です。`format` を使う正本は package bin 経由の `npx modular-experiment format <config>`
 
 #### CLIオプション（実験実行）
 
