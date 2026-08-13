@@ -231,7 +231,7 @@ export type {
   MlxModelDriverOptions,
 } from './driver-registry/index.js';
 
-// User / project models.yaml
+// User models.yaml (+ overlay via models-config API)
 export {
   loadModelsConfigFile,
   loadUserModelsConfig,

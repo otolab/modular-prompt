@@ -66,7 +66,7 @@ describe('resolveProfileModelSpec with models.yaml', () => {
       modelsConfig: {
         mode: 'merge',
         models: {
-          local-chat: {
+          'local-chat': {
             provider: 'mlx',
             model: 'overlay/model',
           },
