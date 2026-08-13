@@ -1,2 +1,15 @@
 packages:
   - 'packages/*'
+
+# pnpm 11: .npmrc は auth/registry のみ。それ以外はここに記載
+shamefullyHoist: false
+autoInstallPeers: true
+strictPeerDependencies: false
+preferFrozenLockfile: true
+enableGlobalVirtualStore: true
+minimumReleaseAgeExclude:
+  - '@modular-prompt/*'
+allowBuilds:
+  '@google/genai': true
+  esbuild: true
+  protobufjs: true
