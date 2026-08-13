@@ -25,18 +25,22 @@ module:
 #   googlegenai:
 #     apiKey: "${GOOGLE_GENAI_API_KEY}"
 
-# ~/.modular-prompt/models.yaml との統合（オプション）
+# ~/.modular-prompt/models.yaml との統合（overlay は profile 内で明示定義）
 # modelsConfig:
 #   mode: merge          # merge | override
-#   projectRoot: .       # 未指定時は cwd
+#   models:
+#     local-chat:
+#       provider: mlx
+#       model: mlx-community/gemma-4-31b-4bit
+#   defaults:
+#     mlx-lm: mlx-community/gemma-3-270m-it-4bit
 
 # ワークフロー設定（オプション）
 # workflow:
   # mode: default
   # models:
   #   default:
-  #     ref: local-chat   # models.yaml の alias
-  #     # または provider + model を直接指定
+  #     ref: local-chat   # models.yaml / modelsConfig の alias
 
 # workflow:
 #   mode: default       # direct | default | agentic

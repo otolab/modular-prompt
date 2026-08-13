@@ -10,6 +10,7 @@ import {
   type AIDriver,
   type DriverProvider,
   type ModelSpec,
+  type ModelsConfig,
   DriverRegistry,
   registerFactories,
   type ApplicationConfig,
@@ -96,21 +97,37 @@ function inferProvider(model: string): DriverProvider {
 }
 
 /**
- * Profile と models.yaml から使用する ModelSpec を解決する（テスト・デバッグ用）
+ * profile から overlay ModelsConfig を組み立てる
  */
-export function resolveProfileModelSpec(
-  profile: DialogProfile,
-  options?: { projectRoot?: string },
-): ModelSpec {
-  const projectRoot =
-    options?.projectRoot ??
-    profile.modelsConfig?.projectRoot ??
-    process.cwd();
+function buildModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
+  const overlay: ModelsConfig = {};
+  const mc = profile.modelsConfig;
 
-  const resolvedModels = resolveModelsConfig({
-    projectRoot,
+  if (mc?.models) overlay.models = mc.models;
+  if (mc?.defaults) overlay.defaults = mc.defaults;
+  if (mc?.drivers) overlay.drivers = mc.drivers;
+  if (profile.drivers) {
+    overlay.drivers = { ...(overlay.drivers ?? {}), ...profile.drivers };
+  }
+
+  if (Object.keys(overlay).length === 0) {
+    return undefined;
+  }
+  return overlay;
+}
+
+function resolveProfileModelsConfig(profile: DialogProfile): ModelsConfig {
+  return resolveModelsConfig({
+    overlay: buildModelsOverlay(profile),
     mode: profile.modelsConfig?.mode,
   });
+}
+
+/**
+ * Profile と models.yaml から使用する ModelSpec を解決する（テスト・デバッグ用）
+ */
+export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
+  const resolvedModels = resolveProfileModelsConfig(profile);
 
   const selection = resolveInferenceSelection(profile);
   const driverOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
@@ -180,22 +197,10 @@ export function resolveProfileModelSpec(
 /**
  * Create driver from profile configuration
  */
-export async function createDriver(
-  profile: DialogProfile,
-  options?: { projectRoot?: string },
-): Promise<AIDriver> {
-  const projectRoot =
-    options?.projectRoot ??
-    profile.modelsConfig?.projectRoot ??
-    process.cwd();
-
-  const resolvedModels = resolveModelsConfig({
-    projectRoot,
-    mode: profile.modelsConfig?.mode,
-  });
+export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
+  const resolvedModels = resolveProfileModelsConfig(profile);
 
   const mergedConfig = mergeModelsConfig(resolvedModels, {
-    drivers: profile.drivers,
     defaultOptions: profile.options,
   });
 
@@ -206,7 +211,7 @@ export async function createDriver(
   };
   registerFactories(registry, appConfig);
 
-  const spec = resolveProfileModelSpec(profile, options);
+  const spec = resolveProfileModelSpec(profile);
   return registry.createDriver(spec);
 }
 

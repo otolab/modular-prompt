@@ -245,7 +245,6 @@ export {
   buildApplicationConfig,
   registerModelsFromConfig,
   getUserModelsConfigPath,
-  getProjectModelsConfigPath,
   MODELS_CONFIG_FILENAME,
   type ModelsMergeMode,
   type ModelsConfigOptions,

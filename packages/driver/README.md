@@ -81,7 +81,7 @@ if (result.logEntries) {
 
 ## ユーザーモデル設定（`~/.modular-prompt/models.yaml`）
 
-マシン共通のモデル定義を `~/.modular-prompt/models.yaml` に置けます（`MODULAR_PROMPT_HOME` で上書き可）。プロジェクト固有の定義は `{projectRoot}/.modular-prompt/models.yaml` に置き、**プロジェクト > ユーザー** の優先順位で解決します。
+マシン共通のモデル定義を `~/.modular-prompt/models.yaml` に置けます（`MODULAR_PROMPT_HOME` で上書き可）。**プロジェクト配下の暗黙探索は行いません。** 利用側アプリが overlay を明示投入し、**overlay > ユーザー** の優先順位で解決します。
 
 ```yaml
 defaults:
@@ -102,8 +102,17 @@ import {
   DriverRegistry,
 } from '@modular-prompt/driver';
 
+const overlay = {
+  models: {
+    local-chat: {
+      provider: 'mlx',
+      model: 'my-app/default-model',
+    },
+  },
+};
+
 const config = resolveModelsConfig({
-  projectRoot: process.cwd(),
+  overlay,
   mode: 'merge', // 'merge' | 'override'
 });
 
@@ -111,9 +120,9 @@ const registry = new DriverRegistry();
 registerModelsFromConfig(registry, config);
 ```
 
-`mode: 'merge'` は user + project の models を浅いマージ、`mode: 'override'` は project の models で user models を置き換えます（drivers / defaults は浅いマージ）。
+`mode: 'merge'` は user + overlay の models を浅いマージ、`mode: 'override'` は overlay の models で user models を置き換えます（drivers / defaults は浅いマージ）。
 
-simple-chat では profile に `modelsConfig.mode` を指定し、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合、または `runtime` に対応する `defaults` が無い場合は **エラーで停止**します（黙ってハードコードデフォルトへフォールバックしません）。
+simple-chat では profile の `modelsConfig` に inline の `models` / `defaults` / `drivers` を載せ、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合、または `runtime` に対応する `defaults` が無い場合は **エラーで停止**します（黙ってハードコードデフォルトへフォールバックしません）。
 
 不正な YAML は `loadModelsConfigFile()` が **例外を throw** します（js-yaml のパースエラーをそのまま伝播）。
 

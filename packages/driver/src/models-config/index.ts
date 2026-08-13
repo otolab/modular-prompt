@@ -24,7 +24,6 @@ export {
 export {
   MODELS_CONFIG_FILENAME,
   getUserModelsConfigPath,
-  getProjectModelsConfigPath,
 } from './paths.js';
 
 export type {

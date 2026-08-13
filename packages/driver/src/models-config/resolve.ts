@@ -6,7 +6,7 @@ import type { DriverRegistry } from '../driver-registry/registry.js';
 import type { ApplicationConfig } from '../driver-registry/config-based-factory.js';
 import type { DriverProvider, ModelSpec } from '../driver-registry/types.js';
 import { loadModelsConfigFile } from './loader.js';
-import { getProjectModelsConfigPath, getUserModelsConfigPath } from './paths.js';
+import { getUserModelsConfigPath } from './paths.js';
 import type {
   ModelReferenceInput,
   ModelSpecEntry,
@@ -78,19 +78,16 @@ export function loadUserModelsConfig(): ModelsConfig {
 }
 
 /**
- * ユーザーレベル + プロジェクトローカルの models.yaml を解決する
+ * ユーザーデフォルトと利用側 overlay を解決する
  */
 export function resolveModelsConfig(options?: ModelsConfigOptions): ModelsConfig {
-  const userConfig = loadModelsConfigFile(getUserModelsConfigPath());
+  const userConfig = loadUserModelsConfig();
 
-  let projectConfig: ModelsConfig | null = null;
-  if (options?.projectRoot) {
-    projectConfig = loadModelsConfigFile(
-      getProjectModelsConfigPath(options.projectRoot)
-    );
+  if (!options?.overlay) {
+    return userConfig;
   }
 
-  return mergeModelsConfig(userConfig, projectConfig, options?.mode ?? 'merge');
+  return mergeModelsConfig(userConfig, options.overlay, options.mode ?? 'merge');
 }
 
 /**

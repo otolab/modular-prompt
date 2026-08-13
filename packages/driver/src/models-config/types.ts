@@ -8,12 +8,12 @@ import type { DriverCapability, DriverProvider, ModelSpec } from '../driver-regi
 /** models セクションのマージモード */
 export type ModelsMergeMode = 'merge' | 'override';
 
-/** 利用側ツール（profile / experiment）での models 解決オプション */
+/** 利用側が明示投入する overlay とマージモード */
 export interface ModelsConfigOptions {
   /** models セクションのマージモード（デフォルト: merge） */
   mode?: ModelsMergeMode;
-  /** プロジェクトルート（`.modular-prompt/models.yaml` の探索起点） */
-  projectRoot?: string;
+  /** 利用側 overlay（未指定ならユーザーデフォルトのみ） */
+  overlay?: ModelsConfig;
 }
 
 /** YAML 上のモデルエントリ（alias は親 Record のキー） */

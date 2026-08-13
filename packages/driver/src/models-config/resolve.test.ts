@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
@@ -16,7 +16,7 @@ import {
   registerModelsFromConfig,
   entryToModelSpec,
 } from './index.js';
-import { getProjectModelsConfigPath, getUserModelsConfigPath } from './paths.js';
+import { getUserModelsConfigPath } from './paths.js';
 import { DriverRegistry } from '../driver-registry/registry.js';
 
 describe('models-config', () => {
@@ -114,7 +114,7 @@ models:
       expect(merged.defaults?.['mlx-lm']).toBe('project-default');
     });
 
-    it('overrides user models in override mode when project has models', () => {
+    it('overrides user models in override mode when overlay has models', () => {
       const merged = mergeModelsConfig(
         {
           models: {
@@ -137,8 +137,7 @@ models:
   });
 
   describe('resolveModelsConfig', () => {
-    it('merges user and project configs with project priority', () => {
-      const projectRoot = mkdtempSync(join(tmpdir(), 'project-'));
+    it('merges user config with overlay (overlay priority)', () => {
       writeFileSync(
         getUserModelsConfigPath(),
         `models:
@@ -147,25 +146,33 @@ models:
     model: user/shared
 `
       );
-      const projectPath = getProjectModelsConfigPath(projectRoot);
-      mkdirSync(join(projectRoot, '.modular-prompt'), { recursive: true });
+
+      const resolved = resolveModelsConfig({
+        mode: 'merge',
+        overlay: {
+          models: {
+            shared: { provider: 'mlx', model: 'overlay/shared' },
+            overlay-only: { provider: 'mlx', model: 'overlay/only' },
+          },
+        },
+      });
+
+      expect(resolved.models?.shared?.model).toBe('overlay/shared');
+      expect(resolved.models?.['overlay-only']?.model).toBe('overlay/only');
+    });
+
+    it('returns user config only when overlay is omitted', () => {
       writeFileSync(
-        projectPath,
+        getUserModelsConfigPath(),
         `models:
-  shared:
+  local:
     provider: mlx
-    model: project/shared
-  project-only:
-    provider: mlx
-    model: project/only
+    model: user/local
 `
       );
 
-      const resolved = resolveModelsConfig({ projectRoot, mode: 'merge' });
-      expect(resolved.models?.shared?.model).toBe('project/shared');
-      expect(resolved.models?.['project-only']?.model).toBe('project/only');
-
-      rmSync(projectRoot, { recursive: true, force: true });
+      const resolved = resolveModelsConfig();
+      expect(resolved.models?.local?.model).toBe('user/local');
     });
   });
 
