@@ -132,6 +132,16 @@ export function resolveProfileModelSpec(
         provider: resolveProvider(spec.provider),
       });
     }
+    if (modelRef.ref) {
+      throw new Error(
+        `Unknown model ref '${modelRef.ref}' in models configuration`,
+      );
+    }
+    if (modelRef.runtime) {
+      throw new Error(
+        `No default model for runtime '${modelRef.runtime}' in models configuration`,
+      );
+    }
     if (modelRef.provider && modelRef.model) {
       return attachDriverOptions({
         model: modelRef.model,
@@ -139,6 +149,9 @@ export function resolveProfileModelSpec(
         capabilities: [],
       });
     }
+    throw new Error(
+      'workflow.models.default is incomplete: specify ref, runtime, or provider+model',
+    );
   }
 
   if (profile.model) {

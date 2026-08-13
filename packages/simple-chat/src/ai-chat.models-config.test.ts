@@ -121,4 +121,19 @@ describe('resolveProfileModelSpec with models.yaml', () => {
     const spec = resolveProfileModelSpec(profile, { projectRoot });
     expect(spec.model).toBe('cli-model');
   });
+
+  it('throws on unknown model ref', () => {
+    const profile: DialogProfile = {
+      modelsConfig: { projectRoot },
+      workflow: {
+        models: {
+          default: { ref: 'missing-alias' },
+        },
+      },
+    };
+
+    expect(() => resolveProfileModelSpec(profile, { projectRoot })).toThrow(
+      /Unknown model ref 'missing-alias'/,
+    );
+  });
 });

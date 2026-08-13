@@ -64,6 +64,12 @@ describe('models-config', () => {
       expect(loadModelsConfigFile('/nonexistent/models.yaml')).toBeNull();
     });
 
+    it('throws on invalid YAML', () => {
+      const badPath = join(tempHome, 'bad-models.yaml');
+      writeFileSync(badPath, ':\n  [invalid');
+      expect(() => loadModelsConfigFile(badPath)).toThrow();
+    });
+
     it('loads user models.yaml from MODULAR_PROMPT_HOME', () => {
       const yaml = `
 defaults:

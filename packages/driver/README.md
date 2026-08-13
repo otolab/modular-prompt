@@ -113,7 +113,9 @@ registerModelsFromConfig(registry, config);
 
 `mode: 'merge'` は user + project の models を浅いマージ、`mode: 'override'` は project の models で user models を置き換えます（drivers / defaults は浅いマージ）。
 
-simple-chat では profile に `modelsConfig.mode` を指定し、`workflow.models.default.ref` で alias 参照できます。
+simple-chat では profile に `modelsConfig.mode` を指定し、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合、または `runtime` に対応する `defaults` が無い場合は **エラーで停止**します（黙ってハードコードデフォルトへフォールバックしません）。
+
+不正な YAML は `loadModelsConfigFile()` が **例外を throw** します（js-yaml のパースエラーをそのまま伝播）。
 
 
 ```typescript
