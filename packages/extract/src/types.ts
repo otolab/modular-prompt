@@ -15,8 +15,10 @@ export interface ExtractSessionOptions<TContext = unknown> {
   corpus: ExtractCorpus;
   /** Output schema (Phase 3: structured output). Accepted at session creation. */
   schema?: object;
-  /** Cache controller (Phase 2). Accepted but unused in Phase 1. */
+  /** Cache controller (Phase 2). When set, session orchestrates KV cache lifecycle. */
   cacheController?: PromptCacheController;
+  /** Model identifier for cache prepare. Required when cacheController is set. */
+  model?: string;
 }
 
 export interface ExtractRequest {

@@ -1,5 +1,6 @@
 import type { Attachment, ToolCall, ToolResultKind } from '@modular-prompt/core';
 import type { LogEntry } from '@modular-prompt/utils';
+import type { CacheHandle } from './cache-controller.js';
 
 // Re-export from core for convenience
 export type { Attachment, CompiledPrompt, ToolCall, ToolResultKind } from '@modular-prompt/core';
@@ -179,6 +180,11 @@ export interface QueryOptions {
    * - undefined: driver default behavior
    */
   cache?: boolean | 'read-only';
+  /**
+   * Externally prepared cache handle. When set, drivers that support KV caching
+   * skip internal prepare() and use this handle for generation.
+   */
+  cacheHandle?: CacheHandle;
   /**
    * Abort signal for cancelling in-flight inference.
    * Unsupported drivers ignore this option.
