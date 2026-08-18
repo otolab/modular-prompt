@@ -191,7 +191,11 @@ export class LocalInferenceDriver implements AIDriver {
     const cacheGrowthBefore = this.cacheSupport?.getGrowthBefore() ?? 0;
     const trustRemoteCode = samplingOptions.trustRemoteCode;
 
-    if (this.cacheSupport && queryOptions?.cache !== false && trustRemoteCode === undefined) {
+    const externalHandle = queryOptions?.cacheHandle;
+    if (externalHandle?.ref) {
+      cachePath = externalHandle.ref;
+      cacheTrimTokens = externalHandle.trimTokens;
+    } else if (this.cacheSupport && queryOptions?.cache !== false && trustRemoteCode === undefined) {
       const prefix = extractCacheablePrefix(augmentedPrompt);
       const hasCacheableContent = prefix.instructions.length > 0 || prefix.data.length > 0;
 

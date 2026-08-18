@@ -1,6 +1,14 @@
 import { merge, compile } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import { buildCorpusModule, buildRequestModule } from './build-modules.js';
+import {
+  buildCacheModule,
+  ensureCacheControllerReady,
+  prepareSessionCache,
+  releaseSessionCache,
+  resolveModelName,
+  type CacheLifecycleState,
+} from './cache-lifecycle.js';
 import type { ExtractRequest, ExtractResult, ExtractSession, ExtractSessionOptions } from './types.js';
 
 function buildSessionBaseModule<TContext>(
@@ -21,10 +29,18 @@ function buildSessionBaseModule<TContext>(
 export function createExtractSession<TContext = unknown>(
   options: ExtractSessionOptions<TContext>
 ): ExtractSession {
-  const { driver, baseModule, corpus, schema } = options;
+  const { driver, baseModule, corpus, schema, cacheController } = options;
+  const cacheEnabled = cacheController != null;
+  const model = resolveModelName(options.model, cacheEnabled);
+  const ownsCacheController = false;
+
   const sessionBaseModule = buildSessionBaseModule(baseModule, schema);
   const corpusModule = buildCorpusModule(corpus);
   const history: ExtractResult[] = [];
+  const cacheState: CacheLifecycleState = {
+    handle: null,
+    controllerReady: false,
+  };
   let closed = false;
 
   return {
@@ -33,10 +49,30 @@ export function createExtractSession<TContext = unknown>(
         throw new Error('ExtractSession is closed');
       }
 
+      if (cacheEnabled && cacheController && model) {
+        await ensureCacheControllerReady(driver, cacheState);
+        const cacheModule = buildCacheModule(sessionBaseModule, corpusModule, request);
+        await prepareSessionCache(
+          cacheController,
+          model,
+          cacheModule,
+          request,
+          cacheState,
+        );
+      }
+
       const requestModule = buildRequestModule(request);
       const merged = merge(sessionBaseModule, corpusModule, requestModule);
       const compiled = compile(merged);
-      const queryResult = await driver.query(compiled, request.options);
+      const queryOptions = cacheEnabled && cacheState.handle
+        ? {
+            ...request.options,
+            cache: false as const,
+            cacheHandle: cacheState.handle,
+          }
+        : request.options;
+
+      const queryResult = await driver.query(compiled, queryOptions);
 
       const result: ExtractResult = {
         text: queryResult.content,
@@ -58,6 +94,14 @@ export function createExtractSession<TContext = unknown>(
         return;
       }
       closed = true;
+
+      if (cacheEnabled && cacheController) {
+        releaseSessionCache(cacheController, cacheState);
+        if (ownsCacheController) {
+          await cacheController.close();
+        }
+      }
+
       await driver.close();
     },
   };
