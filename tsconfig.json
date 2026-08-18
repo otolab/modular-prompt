@@ -6,6 +6,7 @@
     { "path": "packages/utils" },
     { "path": "packages/driver" },
     { "path": "packages/process" },
+    { "path": "packages/extract" },
     { "path": "packages/simple-chat" }
   ]
 }

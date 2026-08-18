@@ -1,0 +1,63 @@
+{
+  "name": "@modular-prompt/extract",
+  "version": "0.1.0",
+  "description": "Document extraction session API for modular prompt framework",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc -b --force",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run clean && pnpm build"
+  },
+  "dependencies": {
+    "@modular-prompt/core": "workspace:*",
+    "@modular-prompt/driver": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@types/node": "20.19.27",
+    "@typescript-eslint/eslint-plugin": "8.50.0",
+    "@typescript-eslint/parser": "8.50.0",
+    "@vitest/ui": "3.2.4",
+    "eslint": "9.39.2",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/otolab/modular-prompt.git",
+    "directory": "packages/extract"
+  },
+  "keywords": [
+    "prompt",
+    "module",
+    "ai",
+    "llm",
+    "extract",
+    "document"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
