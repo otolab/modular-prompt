@@ -41,7 +41,8 @@ export function buildCacheModule<TContext>(
   request: ExtractRequest,
 ): PromptModule {
   const requestModule = buildRequestModule(request);
-  const { cue: _cue, ...cacheableRequest } = requestModule;
+  const cacheableRequest: PromptModule = { ...requestModule };
+  delete cacheableRequest.cue;
   return merge(sessionBaseModule, corpusModule, cacheableRequest);
 }
 
