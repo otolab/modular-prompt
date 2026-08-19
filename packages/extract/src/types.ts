@@ -9,8 +9,8 @@ export interface ExtractCorpus {
 
 export interface ExtractSessionOptions<TContext = unknown> {
   driver: AIDriver;
-  /** Base prompt for extraction task (objective, instructions, etc.). */
-  baseModule: PromptModule<TContext>;
+  /** Base prompt for extraction task (objective, instructions, etc.). Defaults to {@link defaultExtractBaseModule}. */
+  baseModule?: PromptModule<TContext>;
   /** Immutable document corpus for this session. */
   corpus: ExtractCorpus;
   /** Output schema (Phase 3: structured output). Accepted at session creation. */

@@ -9,6 +9,7 @@ import {
   resolveModelName,
   type CacheLifecycleState,
 } from './cache-lifecycle.js';
+import { defaultExtractBaseModule } from './default-base-module.js';
 import type { ExtractRequest, ExtractResult, ExtractSession, ExtractSessionOptions } from './types.js';
 
 function buildSessionBaseModule<TContext>(
@@ -29,7 +30,7 @@ function buildSessionBaseModule<TContext>(
 export function createExtractSession<TContext = unknown>(
   options: ExtractSessionOptions<TContext>
 ): ExtractSession {
-  const { driver, baseModule, corpus, schema, cacheController } = options;
+  const { driver, baseModule = defaultExtractBaseModule, corpus, schema, cacheController } = options;
   const cacheEnabled = cacheController != null;
   const model = resolveModelName(options.model, cacheEnabled);
   const ownsCacheController = false;
