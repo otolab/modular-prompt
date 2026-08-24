@@ -95,20 +95,31 @@ import { chatPromptModule, performAIChat } from '@modular-prompt/simple-chat';
 ### プロファイルの構造
 
 ```yaml
-# 使用するAIモデル
-model: "mlx-community/gemma-3-270m-it-qat-4bit"
+# PromptModule の定義。systemPrompt ではなく module を使用します。
+module:
+  objective:
+    - チャットアシスタントとして、ユーザーの質問に回答する
+  instructions:
+    - 日本語で自然に応答する
+    - 不確実な情報は不確実であると明確に伝える
 
-# ドライバータイプ（現在はmlxのみサポート）
-driver: "mlx"
+# モデルは直接指定することも、models.yaml の alias を参照することもできます。
+workflow:
+  mode: direct
+  models:
+    default:
+      ref: local-chat
+
+# ~/.modular-prompt/models.yaml への inline overlay（必要な場合のみ）
+modelsConfig:
+  mode: merge
+  models:
+    local-chat:
+      provider: mlx
+      model: mlx-community/gemma-3-270m-it-qat-4bit
 
 # VLMモデルをtext-onlyモードで使用（オプション）
-textOnly: false  # trueにするとVLM対応モデルを画像なしで使用
-
-# システムプロンプト - AIの基本的な振る舞いを定義
-systemPrompt: |
-  あなたは親切で知識豊富なAIアシスタントです。
-  ユーザーの質問に対して、正確で分かりやすい回答を提供してください。
-  日本語で応答してください。
+textOnly: false
 
 # 初回メッセージ（オプション）- 新規セッション開始時の挨拶
 preMessage: "こんにちは！何かお手伝いできることはありますか？"
@@ -120,35 +131,49 @@ resourceFiles:
 
 # 生成オプション
 options:
-  temperature: 0.7      # 生成の創造性（0.0-2.0）
-  maxTokens: 4000      # 最大トークン数
-  topP: 0.9            # トップP サンプリング
+  temperature: 0.7
+  maxTokens: 4000
+  topP: 0.9
 
 # KVキャッシュ（MLX専用、オプション）
-cacheDir: ".cache/mlx-kv"  # プロンプトの静的部分をキャッシュして推論を高速化
+cacheDir: ".cache/mlx-kv"
+
+# チャットログ（オプション）
+logPath: "./chat.log.json"
 ```
 
 ### デフォルトプロファイル
 
-プロファイルを指定しない場合、以下のデフォルト設定が使用されます：
+`-p` でプロファイルを指定しない場合、`loadDefaultProfile()` が次の設定をコードから生成します。リポジトリにあった `default-profile.yaml` は実行時には読み込みません。
 
-- **model**: mlx-community/gemma-3-270m-it-qat-4bit
-- **systemPrompt**: 親切で知識豊富なAIアシスタントとしての基本設定
-- **temperature**: 0.7
-- **maxTokens**: 4000
+- **`module.objective`**: 最新のユーザーメッセージに対する返答を作成
+- **`module.instructions`**: 自然な日本語の対話とコンテキスト理解を重視
+- **`options.temperature`**: 1.0
+- **`options.maxTokens`**: 4000
+- **`options.topP`**: 0.95
+
+モデルはデフォルトプロファイルに固定せず、次の順序で解決されます。
+
+1. `workflow.models.default` の `ref` / `runtime` / `provider` + `model`
+2. プロファイルまたは CLI の `model`（`--model`）
+3. `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）の `defaults.mlx-lm`
+4. コード側のフォールバック `LiquidAI/LFM2.5-1.2B-JP-MLX-4bit`
+
+プロファイルの `modelsConfig` はユーザーの `models.yaml` への明示的な overlay です。`mode: merge`（既定）では overlay が優先され、`workflow.models.default.ref` で alias を解決できます。`module` はチャット基盤の PromptModule と合成されるため、基盤側の日本語応答指示も含まれます。
 
 ### プロファイルの活用例
 
 #### 1. 技術サポート用プロファイル
 
 ```yaml
-model: "mlx-community/gemma-3-270m-it-qat-4bit"
-systemPrompt: |
-  あなたはソフトウェア開発の専門家です。
-  技術的な質問に対して、具体的なコード例を交えて回答してください。
-  エラーの解決方法を段階的に説明してください。
+module:
+  objective:
+    - ソフトウェア開発の専門家として技術的な質問に回答する
+  instructions:
+    - 具体的なコード例を交えて説明する
+    - エラーの解決方法を段階的に説明する
 options:
-  temperature: 0.3  # より正確な回答のため低めに設定
+  temperature: 0.3
 ```
 
 #### 2. VLMモデルで画像入力（Image-Text-to-Text）
@@ -182,10 +207,10 @@ VLMモデルは`config.json`の`model_type`から自動検出されます。画�
 
 ```yaml
 model: "mlx-community/Qwen2-VL-2B-Instruct-4bit"
-textOnly: true  # VLMモデルを画像なしで使用
-systemPrompt: |
-  あなたは親切で知識豊富なAIアシスタントです。
-  テキストによる質問に回答してください。
+textOnly: true
+module:
+  objective:
+    - テキストによるユーザーの質問に回答する
 options:
   temperature: 0.7
   maxTokens: 4000
@@ -194,13 +219,15 @@ options:
 #### 4. 創作支援用プロファイル
 
 ```yaml
-model: "mlx-community/gemma-3-270m-it-qat-4bit"  
-systemPrompt: |
-  あなたは創造的な文章作成を支援するアシスタントです。
-  ユーザーのアイデアを発展させ、独創的な提案を行ってください。
+module:
+  objective:
+    - 創造的な文章作成を支援する
+  instructions:
+    - ユーザーのアイデアを発展させる
+    - 独創的な提案を行う
 options:
-  temperature: 1.2  # 創造性を高めるため高めに設定
-  maxTokens: 8000  # 長い文章生成に対応
+  temperature: 1.2
+  maxTokens: 8000
 ```
 
 ### KVキャッシュの活用（MLX専用）
@@ -208,7 +235,6 @@ options:
 `cacheDir`を指定すると、プロンプトの静的部分（システムプロンプト、会話履歴、資料など）のKV状態をファイルに保存し、2回目以降の推論を高速化できます。
 
 ```yaml
-model: "mlx-community/gemma-3-270m-it-qat-4bit"
 cacheDir: ".cache/mlx-kv"  # キャッシュファイルの保存先
 options:
   temperature: 0.7
@@ -230,4 +256,4 @@ options:
 3. **型安全なコンテキスト**: `ChatContext`による型定義
 4. **段階的なデータバインディング**: createContext → データ設定 → compile
 
-詳細は[プロンプトモジュール仕様書](../../docs/PROMPT_MODULE_SPECIFICATION.md)の実装例セクションを参照してください。
+詳細は[プロンプトモジュール仕様書](../../docs/PROMPT_MODULE_SPEC.md)の実装例セクションを参照してください。

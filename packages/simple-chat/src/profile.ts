@@ -3,22 +3,40 @@
  */
 
 import { readFile } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import type { DialogProfile } from './types.js';
 import { validateProfileOptions } from './utils/profile-validator.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/** Path to the default profile bundled with the package */
-const DEFAULT_PROFILE_PATH = join(__dirname, '../default-profile.yaml');
+/**
+ * Create the default profile used when no profile file is specified.
+ *
+ * Keep model selection out of this profile so the user's models.yaml can
+ * provide the default model before ai-chat's built-in fallback is used.
+ */
+function createDefaultProfile(): DialogProfile {
+  return {
+    module: {
+      objective: [
+        'チャットアシスタントとして、最新のユーザメッセージに対する返答メッセージを作成する',
+      ],
+      instructions: [
+        '日本語の対話として自然になるように務めます',
+        'コンテキストの理解を重視してください',
+      ],
+    },
+    options: {
+      temperature: 1.0,
+      maxTokens: 4000,
+      topP: 0.95,
+    },
+  };
+}
 
 /**
- * Load default profile
+ * Load the default profile without reading a package file.
  */
 export async function loadDefaultProfile(): Promise<DialogProfile> {
-  return loadDialogProfile(DEFAULT_PROFILE_PATH);
+  return createDefaultProfile();
 }
 
 /**
