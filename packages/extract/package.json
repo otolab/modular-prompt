@@ -12,7 +12,9 @@
     }
   },
   "files": [
-    "dist/**/*"
+    "bin",
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc -b --force",
@@ -59,5 +61,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "bin": {
+    "modular-extract": "./bin/modular-extract.js"
   }
 }
