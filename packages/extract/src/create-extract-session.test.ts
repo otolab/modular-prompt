@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { CompiledPrompt, PromptModule } from '@modular-prompt/core';
 import { TestDriver } from '@modular-prompt/driver';
 import { createExtractSession } from './create-extract-session.js';
+import { inputChunk } from './extract-elements.js';
+import { createMockCacheController } from './test-helpers.js';
 
 function serializePrompt(prompt: CompiledPrompt): string {
   return JSON.stringify({
@@ -23,23 +25,31 @@ describe('createExtractSession', () => {
 
   const corpus = {
     materials: [{
-      type: 'material' as const,
-      id: 'doc-1',
       title: 'Meeting Notes',
       content: 'Alice met Bob in Paris to discuss the project.',
     }],
     messages: [{
-      type: 'message' as const,
       role: 'user' as const,
       content: 'Please summarize the meeting context.',
     }],
   };
 
+  function createSession(driver: TestDriver) {
+    const { controller } = createMockCacheController();
+    return createExtractSession({
+      driver,
+      baseModule,
+      corpus,
+      cacheController: controller,
+      model: 'test-model',
+    });
+  }
+
   it('extracts multiple times with different cues and accumulates history', async () => {
     const driver = new TestDriver({
       responses: (prompt) => `response:${extractCueText(prompt)}`,
     });
-    const session = createExtractSession({ driver, baseModule, corpus });
+    const session = createSession(driver);
 
     const result1 = await session.extract({ cue: 'List characters' });
     const result2 = await session.extract({ cue: 'List locations' });
@@ -57,22 +67,23 @@ describe('createExtractSession', () => {
     await session.close();
   });
 
-  it('reflects inputs in the prompt data section', async () => {
+  it('reflects ChunkElement inputs in the prompt data section', async () => {
     const driver = new TestDriver({
       responses: (prompt) => {
         const dataContent = serializePrompt(prompt);
         expect(dataContent).toContain('previousExtractions');
         expect(dataContent).toContain('Alice found the key');
+        expect(dataContent).toContain('"type":"chunk"');
         return 'ok';
       },
     });
-    const session = createExtractSession({ driver, baseModule, corpus });
+    const session = createSession(driver);
 
     await session.extract({
       cue: 'Find relationships',
-      inputs: {
-        previousExtractions: ['Alice found the key'],
-      },
+      inputs: inputChunk(
+        JSON.stringify({ previousExtractions: ['Alice found the key'] }, null, 2),
+      ),
     });
 
     await session.close();
@@ -94,37 +105,35 @@ describe('createExtractSession', () => {
         return 'ok';
       },
     });
-    const session = createExtractSession({ driver, baseModule, corpus });
+    const session = createSession(driver);
 
     await session.extract({
       cue: 'Extract unresolved topics',
-      inputs: { hint: 'hint-from-inputs' },
+      inputs: inputChunk('hint-from-inputs'),
     });
 
     await session.close();
   });
 
-  it('accepts SectionContent for cue and inputs', async () => {
+  it('accepts SectionContent for cue', async () => {
     const driver = new TestDriver({
       responses: (prompt) => {
         const serialized = serializePrompt(prompt);
         expect(serialized).toContain('custom-cue-line');
-        expect(serialized).toContain('custom-input-line');
-        return 'section-content-ok';
+        return 'custom-cue-ok';
       },
     });
-    const session = createExtractSession({ driver, baseModule, corpus });
+    const session = createSession(driver);
 
     const result = await session.extract({
       cue: ['custom-cue-line'],
-      inputs: ['custom-input-line'],
     });
 
-    expect(result.text).toBe('section-content-ok');
+    expect(result.text).toBe('custom-cue-ok');
     await session.close();
   });
 
-  it('delegates close to the driver', async () => {
+  it('does not close the driver on session close', async () => {
     let closed = false;
     const driver = new TestDriver({ responses: ['done'] });
     const originalClose = driver.close.bind(driver);
@@ -133,16 +142,16 @@ describe('createExtractSession', () => {
       await originalClose();
     };
 
-    const session = createExtractSession({ driver, baseModule, corpus });
+    const session = createSession(driver);
     await session.extract({ cue: 'test' });
     await session.close();
 
-    expect(closed).toBe(true);
+    expect(closed).toBe(false);
   });
 
   it('rejects extract after close', async () => {
     const driver = new TestDriver({ responses: ['done'] });
-    const session = createExtractSession({ driver, baseModule, corpus });
+    const session = createSession(driver);
 
     await session.close();
 

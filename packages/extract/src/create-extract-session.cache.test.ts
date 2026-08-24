@@ -1,118 +1,82 @@
-import { describe, it, expect, vi } from 'vitest';
-import { merge, compile } from '@modular-prompt/core';
+import { describe, it, expect } from 'vitest';
 import type { PromptModule } from '@modular-prompt/core';
-import type { CacheHandle, CachePrepareParams, PromptCacheController } from '@modular-prompt/driver';
-import { TestDriver } from '@modular-prompt/driver';
+import type { CacheHandle } from '@modular-prompt/driver';
+import { partitionPrompt, TestDriver } from '@modular-prompt/driver';
 import {
-  buildCacheModule,
   prepareSessionCache,
   releaseSessionCache,
   resolveModelName,
   type CacheLifecycleState,
 } from './cache-lifecycle.js';
 import { createExtractSession } from './create-extract-session.js';
-
-function createTrackingCacheController(): {
-  controller: PromptCacheController;
-  prepares: CachePrepareParams[];
-  releases: string[];
-  handles: CacheHandle[];
-  closed: boolean;
-} {
-  const prepares: CachePrepareParams[] = [];
-  const releases: string[] = [];
-  const handles: CacheHandle[] = [];
-  let closed = false;
-  let counter = 0;
-
-  const controller: PromptCacheController = {
-    prepare: vi.fn(async (params) => {
-      prepares.push(params);
-      counter += 1;
-      const handle: CacheHandle = {
-        ref: `cache-${counter}`,
-        includes: {
-          instructions: (params.instructions?.length ?? 0) > 0,
-          dataElementCount: params.data?.length ?? 0,
-          tools: (params.tools?.length ?? 0) > 0,
-        },
-        supersedes: counter > 1 ? `cache-${counter - 1}` : undefined,
-      };
-      handles.push(handle);
-      return handle;
-    }),
-    release: vi.fn((ref: string) => {
-      releases.push(ref);
-    }),
-    close: vi.fn(async () => {
-      closed = true;
-    }),
-  };
-
-  return {
-    controller,
-    prepares,
-    releases,
-    handles,
-    get closed() {
-      return closed;
-    },
-  };
-}
+import { compileExtractPrompt } from './compile-extract-prompt.js';
+import { inputChunk } from './extract-elements.js';
+import { defaultExtractBaseModule } from './modules/default-base-module.js';
+import { createMockCacheController } from './test-helpers.js';
 
 describe('cache-lifecycle', () => {
-  const baseModule: PromptModule = {
+  const corpus = {
+    materials: [{ title: 'Doc', content: 'Corpus text' }],
+  };
+
+  const customBaseModule: PromptModule = {
     objective: ['Extract information'],
     instructions: ['Follow the cue'],
   };
-  const corpusModule: PromptModule = {
-    materials: [{ type: 'material', id: 'doc', title: 'Doc', content: 'Corpus text' }],
-  };
 
-  it('resolveModelName requires model when cache is enabled', () => {
-    expect(resolveModelName('test-model', true)).toBe('test-model');
-    expect(() => resolveModelName(undefined, true)).toThrow(
-      'ExtractSessionOptions.model is required when cacheController is set',
+  it('resolveModelName requires model', () => {
+    expect(resolveModelName('test-model')).toBe('test-model');
+    expect(() => resolveModelName('')).toThrow(
+      'ExtractSessionOptions.model is required',
     );
-    expect(resolveModelName(undefined, false)).toBeUndefined();
   });
 
-  it('buildCacheModule excludes cue from cacheable module', () => {
-    const cacheModule = buildCacheModule(
-      baseModule,
-      corpusModule,
-      { cue: 'Find names', inputs: { hint: 'focus on people' } },
+  it('compileExtractPrompt renders default section templates from typed context', () => {
+    const compiled = compileExtractPrompt(
+      defaultExtractBaseModule,
+      corpus,
+      {
+        cue: 'Find names',
+        inputs: inputChunk('focus on people'),
+      },
     );
-    const compiled = compile(cacheModule);
+    const { cacheable, volatile } = partitionPrompt(compiled);
     const serialized = JSON.stringify(compiled);
 
+    expect(serialized).toContain('以下の Prepared Materials');
     expect(serialized).toContain('Corpus text');
+    expect(serialized).toContain('"type":"material"');
+    expect(serialized).toContain('以下の Input Data');
     expect(serialized).toContain('focus on people');
-    expect(compiled.output).toHaveLength(0);
+    expect(serialized).toContain('"type":"chunk"');
+    expect(serialized).toContain('以下の出力指示');
+    expect(serialized).toContain('Find names');
+    expect(cacheable.data.length).toBeGreaterThan(0);
+    expect(volatile.output.length).toBeGreaterThan(0);
   });
 
   it('prepareSessionCache releases superseded handle', async () => {
-    const tracking = createTrackingCacheController();
+    const tracking = createMockCacheController();
     const state: CacheLifecycleState = { handle: null, controllerReady: true };
-    const cacheModule = merge(baseModule, corpusModule);
 
     await prepareSessionCache(
       tracking.controller,
       'test-model',
-      cacheModule,
+      defaultExtractBaseModule,
+      corpus,
       { cue: 'first' },
+      undefined,
       state,
     );
     expect(state.handle?.ref).toBe('cache-1');
 
-    const cacheModuleWithInputs = merge(baseModule, corpusModule, {
-      inputs: ['input-line'],
-    });
     await prepareSessionCache(
       tracking.controller,
       'test-model',
-      cacheModuleWithInputs,
-      { cue: 'second', inputs: ['input-line'] },
+      defaultExtractBaseModule,
+      corpus,
+      { cue: 'second', inputs: inputChunk('input-line') },
+      undefined,
       state,
     );
 
@@ -121,7 +85,7 @@ describe('cache-lifecycle', () => {
   });
 
   it('releaseSessionCache clears held handle', () => {
-    const tracking = createTrackingCacheController();
+    const tracking = createMockCacheController();
     const state: CacheLifecycleState = {
       handle: { ref: 'cache-held', includes: { instructions: true, dataElementCount: 1, tools: false } },
       controllerReady: true,
@@ -131,6 +95,20 @@ describe('cache-lifecycle', () => {
 
     expect(tracking.releases).toEqual(['cache-held']);
     expect(state.handle).toBeNull();
+  });
+
+  it('custom baseModule merges typed corpus/request sections', () => {
+    const compiled = compileExtractPrompt(
+      customBaseModule,
+      corpus,
+      { cue: 'Find names' },
+      customBaseModule,
+    );
+    const serialized = JSON.stringify(compiled);
+
+    expect(serialized).toContain('Corpus text');
+    expect(serialized).toContain('Find names');
+    expect(serialized).not.toContain('以下の Prepared Materials');
   });
 });
 
@@ -142,8 +120,6 @@ describe('createExtractSession cache integration', () => {
 
   const corpus = {
     materials: [{
-      type: 'material' as const,
-      id: 'doc-1',
       title: 'Meeting Notes',
       content: 'Alice met Bob in Paris to discuss the project.',
     }],
@@ -160,7 +136,7 @@ describe('createExtractSession cache integration', () => {
         return 'ok';
       },
     });
-    const tracking = createTrackingCacheController();
+    const tracking = createMockCacheController();
 
     const session = createExtractSession({
       driver,
@@ -171,7 +147,10 @@ describe('createExtractSession cache integration', () => {
     });
 
     await session.extract({ cue: 'List characters' });
-    await session.extract({ cue: 'List locations', inputs: { hint: 'geo' } });
+    await session.extract({
+      cue: 'List locations',
+      inputs: inputChunk(JSON.stringify({ hint: 'geo' }, null, 2)),
+    });
     await session.close();
 
     expect(tracking.prepares).toHaveLength(2);
@@ -185,12 +164,12 @@ describe('createExtractSession cache integration', () => {
     expect(receivedOptions[1]?.cacheHandle?.ref).toBe('cache-2');
     expect(tracking.releases).toContain('cache-1');
     expect(tracking.releases).toContain('cache-2');
-    expect(tracking.closed).toBe(false);
+    expect(tracking.controller.close).not.toHaveBeenCalled();
   });
 
-  it('does not close externally provided cacheController', async () => {
+  it('does not close cacheController on session close', async () => {
     const driver = new TestDriver({ responses: ['done'] });
-    const tracking = createTrackingCacheController();
+    const tracking = createMockCacheController();
     const session = createExtractSession({
       driver,
       baseModule,
@@ -202,16 +181,7 @@ describe('createExtractSession cache integration', () => {
     await session.extract({ cue: 'test' });
     await session.close();
 
-    expect(tracking.closed).toBe(false);
     expect(tracking.releases.length).toBeGreaterThan(0);
-  });
-
-  it('remains compatible without cacheController', async () => {
-    const driver = new TestDriver({ responses: ['plain'] });
-    const session = createExtractSession({ driver, baseModule, corpus });
-
-    const result = await session.extract({ cue: 'test' });
-    expect(result.text).toBe('plain');
-    await session.close();
+    expect(tracking.controller.close).not.toHaveBeenCalled();
   });
 });
