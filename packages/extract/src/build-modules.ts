@@ -1,34 +1,55 @@
-import type { PromptModule, SectionContent } from '@modular-prompt/core';
+import type { PromptModule, SectionContent, TextElement } from '@modular-prompt/core';
 import type { ExtractCorpus, ExtractRequest } from './types.js';
+import {
+  normalizeInputs,
+  normalizeMaterials,
+  normalizeMessages,
+} from './extract-elements.js';
 
-function isSectionContent(value: unknown): value is SectionContent {
-  return Array.isArray(value);
+function withContextualCacheHint(content: SectionContent): SectionContent {
+  return content.map((item) => {
+    if (typeof item === 'string') {
+      return {
+        type: 'text',
+        content: item,
+        cacheHint: 'contextual',
+      } satisfies TextElement;
+    }
+    if (item && typeof item === 'object' && 'type' in item) {
+      return {
+        ...item,
+        cacheHint: item.cacheHint ?? 'contextual',
+      };
+    }
+    return item;
+  });
 }
 
 export function buildCorpusModule(corpus: ExtractCorpus): PromptModule {
   const module: PromptModule = {};
+  const materials = normalizeMaterials(corpus.materials);
+  const messages = normalizeMessages(corpus.messages);
 
-  if (corpus.materials) {
-    module.materials = corpus.materials;
+  if (materials) {
+    module.materials = [...materials];
   }
-  if (corpus.messages) {
-    module.messages = corpus.messages;
+  if (messages) {
+    module.messages = [...messages];
   }
 
   return module;
 }
 
 export function buildRequestModule(request: ExtractRequest): PromptModule {
-  const cue: SectionContent = typeof request.cue === 'string'
-    ? [request.cue]
-    : request.cue;
+  const cue = withContextualCacheHint(
+    typeof request.cue === 'string' ? [request.cue] : request.cue,
+  );
 
   const module: PromptModule = { cue };
+  const inputs = normalizeInputs(request.inputs);
 
-  if (request.inputs !== undefined) {
-    module.inputs = isSectionContent(request.inputs)
-      ? request.inputs
-      : [JSON.stringify(request.inputs, null, 2)];
+  if (inputs) {
+    module.inputs = [...inputs];
   }
 
   return module;

@@ -1,15 +1,16 @@
-import { merge, compile } from '@modular-prompt/core';
+import { merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
-import { buildCorpusModule, buildRequestModule } from './build-modules.js';
+import type { ExtractContext } from './extract-context.js';
+import type { ExtractRequest, ExtractResult, ExtractSession, ExtractSessionOptions } from './types.js';
+import { resolveSessionModules } from './resolve-session-modules.js';
+import { compileExtractPrompt } from './compile-extract-prompt.js';
 import {
-  buildCacheModule,
   ensureCacheControllerReady,
   prepareSessionCache,
   releaseSessionCache,
   resolveModelName,
   type CacheLifecycleState,
 } from './cache-lifecycle.js';
-import type { ExtractRequest, ExtractResult, ExtractSession, ExtractSessionOptions } from './types.js';
 
 function buildSessionBaseModule<TContext>(
   baseModule: PromptModule<TContext>,
@@ -26,16 +27,16 @@ function buildSessionBaseModule<TContext>(
   return merge(baseModule, schemaModule);
 }
 
-export function createExtractSession<TContext = unknown>(
+export function createExtractSession<TContext = ExtractContext>(
   options: ExtractSessionOptions<TContext>
 ): ExtractSession {
-  const { driver, baseModule, corpus, schema, cacheController } = options;
-  const cacheEnabled = cacheController != null;
-  const model = resolveModelName(options.model, cacheEnabled);
-  const ownsCacheController = false;
+  const { driver, corpus, schema, cacheController, baseModule } = options;
+  const model = resolveModelName(options.model);
 
-  const sessionBaseModule = buildSessionBaseModule(baseModule, schema);
-  const corpusModule = buildCorpusModule(corpus);
+  const sessionBaseModule = buildSessionBaseModule(
+    resolveSessionModules(options),
+    schema,
+  );
   const history: ExtractResult[] = [];
   const cacheState: CacheLifecycleState = {
     handle: null,
@@ -49,22 +50,24 @@ export function createExtractSession<TContext = unknown>(
         throw new Error('ExtractSession is closed');
       }
 
-      if (cacheEnabled && cacheController && model) {
-        await ensureCacheControllerReady(driver, cacheState);
-        const cacheModule = buildCacheModule(sessionBaseModule, corpusModule, request);
-        await prepareSessionCache(
-          cacheController,
-          model,
-          cacheModule,
-          request,
-          cacheState,
-        );
-      }
+      await ensureCacheControllerReady(driver, cacheState);
+      await prepareSessionCache(
+        cacheController,
+        model,
+        sessionBaseModule,
+        corpus,
+        request,
+        baseModule,
+        cacheState,
+      );
 
-      const requestModule = buildRequestModule(request);
-      const merged = merge(sessionBaseModule, corpusModule, requestModule);
-      const compiled = compile(merged);
-      const queryOptions = cacheEnabled && cacheState.handle
+      const compiled = compileExtractPrompt(
+        sessionBaseModule,
+        corpus,
+        request,
+        baseModule,
+      );
+      const queryOptions = cacheState.handle
         ? {
             ...request.options,
             cache: false as const,
@@ -95,14 +98,7 @@ export function createExtractSession<TContext = unknown>(
       }
       closed = true;
 
-      if (cacheEnabled && cacheController) {
-        releaseSessionCache(cacheController, cacheState);
-        if (ownsCacheController) {
-          await cacheController.close();
-        }
-      }
-
-      await driver.close();
+      releaseSessionCache(cacheController, cacheState);
     },
   };
 }
