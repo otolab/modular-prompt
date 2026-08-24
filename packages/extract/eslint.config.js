@@ -11,6 +11,17 @@ export default [
       parserOptions: {
         ecmaVersion: 2020,
         sourceType: 'module'
+      },
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        exports: 'readonly',
+        module: 'readonly',
+        require: 'readonly',
+        global: 'readonly'
       }
     },
     plugins: {
@@ -29,6 +40,12 @@ export default [
     }
   },
   {
+    files: ['src/cli.ts', 'src/cli/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', '*.config.js', '*.config.ts']
-  }
+  },
 ];

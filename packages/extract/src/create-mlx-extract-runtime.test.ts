@@ -3,9 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const mlxDriverCtor = vi.fn();
 
 vi.mock('@modular-prompt/driver', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@modular-prompt/driver')>();
+  const actual = await importOriginal();
   return {
-    ...actual,
+    ...(actual as Record<string, unknown>),
     MlxDriver: class MockMlxDriver {
       constructor(config: unknown) {
         mlxDriverCtor(config);
