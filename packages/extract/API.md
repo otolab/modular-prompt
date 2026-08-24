@@ -1,7 +1,7 @@
 # @modular-prompt/extract API 仕様
 
-> **対象バージョン**: `0.1.0`（レビュー用ドラフト）  
-> **目的**: 実装済みの公開 API のみを記載する。
+> **対象バージョン**: `0.1.0`  
+> **利用者向けガイド**: [README.md](./README.md)（サンプル・キャッシュ制約含む）
 
 ## 概要
 
@@ -36,34 +36,47 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 | **data** | `corpus` + `request.inputs` | 抽出対象・補強情報 |
 | **cue** | `request.cue` | 今回の抽出切り口 |
 
-### `defaultExtractBaseModule`
+### 入力型（最小入力 → Element 正規化）
 
-パッケージ同梱のデフォルト base。ざっくり次を含む（詳細は `src/modules/default-base-module.ts`）:
+API 境界では Element を直接渡さない。`buildExtractContext` が正規化する。
 
-- **objective**: 資料から指示の観点の情報を抽出
-- **instructions**: materials / messages / inputs を読み取り正確に抽出、存在しない情報を含めない
-- **methodology**: Prepared Materials / Messages / Input Data 各セクションの読み方テンプレート
-- **guidelines / preparationNote**: 引用・構造化・出力形式の基本ルール
+| スロット | 入力型 | 正規化結果 |
+|---------|--------|-----------|
+| `corpus.materials` | `MaterialInput \| MaterialInput[]` | `MaterialElement`（`cacheHint: immutable`） |
+| `corpus.messages` | `MessageInput \| MessageInput[]` | `MessageElement`（role 別 cacheHint） |
+| `request.inputs` | `string \| ChunkInput \| ...[]` | `ChunkElement`（`cacheHint: contextual`） |
+| `request.cue` | `string \| SectionContent` | `TextElement`（`cacheHint: contextual`） |
 
-`baseModule` で丸ごと置き換え可能。`domainModule` で用語・追加指示のみ差し込む使い方を想定。
+#### `MaterialInput`
+
+```typescript
+{ title: string; content: string | Attachment[]; id?: string; usage?: number }
+```
+
+`id` 省略時は `title` を使用。
+
+#### `MessageInput`
+
+標準: `{ role: 'system' | 'assistant' | 'user'; content: ... }`  
+ツール結果: `{ role: 'tool'; toolCallId; name; kind; value }`
+
+#### `ChunkInput` / `ChunkInputValue`
+
+`string` は `content` の省略記法。`partOf` 省略時は `'inputs'`。
 
 ---
 
-### エントリポイント
+## エントリポイント
 
 ```typescript
 import {
   createExtractSession,
   createMlxExtractRuntime,
-} from '@modular-prompt/extract';
-import type {
-  ExtractCorpus,
-  ExtractRequest,
-  ExtractResult,
-  ExtractSession,
-  ExtractSessionOptions,
-  MlxExtractRuntime,
-  MlxExtractRuntimeOptions,
+  buildPreviousExtractionsInputs,
+  inputChunk,
+  inputChunksFromJson,
+  mergeExtractBaseModule,
+  defaultExtractBaseModule,
 } from '@modular-prompt/extract';
 ```
 
@@ -72,24 +85,20 @@ import type {
 | シンボル | 種別 | 説明 |
 |---------|------|------|
 | `createExtractSession` | 関数 | 抽出セッションを生成 |
-| `createMlxExtractRuntime` | 関数 | MLX 用 driver + cacheController バンドルを生成 |
+| `createMlxExtractRuntime` | 関数 | MLX 用 driver + cacheController バンドル |
 | `resolveSessionModules` | 関数 | base (+ domain) モジュールを解決 |
+| `compileExtractPrompt` | 関数 | context 付き compile（高度な用途） |
+| `buildExtractContext` | 関数 | corpus + request から `ExtractContext` を構築 |
 | `defaultExtractBaseModule` | 定数 | デフォルト base `PromptModule` |
-| `ExtractSessionOptions` | 型 | セッション生成オプション |
-| `ExtractCorpus` | 型 | 固定 corpus 定義 |
-| `ExtractRequest` | 型 | 1 回分の抽出リクエスト |
-| `ExtractResult` | 型 | 1 回分の抽出結果 |
-| `ExtractSession` | 型 | セッションインターフェース |
-| `MlxExtractRuntime` | 型 | MLX runtime バンドル |
-| `MlxExtractRuntimeOptions` | 型 | MLX runtime 生成オプション |
-
-**非公開**（内部実装）: `build-modules.ts`, `cache-lifecycle.ts`, `test-helpers.ts`
+| `mergeExtractBaseModule` | 関数 | デフォルト base に overlay を merge |
+| `buildPreviousExtractionsInputs` | 関数 | 過去抽出結果を `inputs` に変換 |
+| `formatPreviousExtractions` | 関数 | 過去抽出結果をテキストブロック列に整形 |
+| `inputChunk` / `inputChunksFromJson` | 関数 | chunk 入力ヘルパ |
+| `normalizeMaterials` 等 | 関数 | 正規化ヘルパ（テスト・高度な用途） |
 
 ---
 
 ## `createMlxExtractRuntime(options)`
-
-MLX 環境向けの便利ファクトリ。**セッションとは独立**しており、複数セッションで同一 runtime を共有できる。
 
 ```typescript
 function createMlxExtractRuntime(
@@ -97,51 +106,19 @@ function createMlxExtractRuntime(
 ): Promise<MlxExtractRuntime>
 ```
 
-### `MlxExtractRuntimeOptions`
-
 | プロパティ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
 | `model` | `string` | ✅ | MLX モデル識別子 |
 | `cacheDir` | `string` | — | 固定キャッシュディレクトリ。省略時は managed temp dir |
 
-### `MlxExtractRuntime`
-
-| プロパティ / メソッド | 型 | 説明 |
-|---------------------|-----|------|
-| `driver` | `AIDriver` | `MlxDriver` インスタンス |
-| `cacheController` | `PromptCacheController` | driver と共有する `MlxCacheController` |
-| `model` | `string` | `options.model` と同一 |
-| `close()` | `() => Promise<void>` | `driver.close()` + `cacheController.close()` |
-
-### 使用例
-
-```typescript
-const runtime = await createMlxExtractRuntime({
-  model: 'prism-ml/Ternary-Bonsai-1.7B-mlx-2bit',
-});
-
-const session = createExtractSession({
-  driver: runtime.driver,
-  cacheController: runtime.cacheController,
-  model: runtime.model,
-  baseModule,
-  corpus,
-});
-
-try {
-  await session.extract({ cue: '...' });
-  await session.close();
-} finally {
-  await runtime.close();
-}
-```
+`MlxExtractRuntime.close()` は `driver.close()` + `cacheController.close()` を行う。
 
 ---
 
 ## `createExtractSession(options)`
 
 ```typescript
-function createExtractSession<TContext = unknown>(
+function createExtractSession<TContext = ExtractContext>(
   options: ExtractSessionOptions<TContext>
 ): ExtractSession
 ```
@@ -150,88 +127,44 @@ function createExtractSession<TContext = unknown>(
 
 | プロパティ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| `driver` | `AIDriver` | ✅ | 推論実行ドライバー（cacheController と共有すること） |
+| `driver` | `AIDriver` | ✅ | 推論実行ドライバー |
 | `cacheController` | `PromptCacheController` | ✅ | KV キャッシュコントローラ |
-| `model` | `string` | ✅ | `cacheController.prepare()` に渡すモデル識別子（driver と一致） |
-| `baseModule` | `PromptModule<TContext>` | — | 抽出タスクの基盤プロンプト。省略時は `defaultExtractBaseModule` |
-| `domainModule` | `PromptModule<TContext>` | — | ドメイン調整（用語・追加指示）。`baseModule` の上に merge |
-| `corpus` | `ExtractCorpus` | ✅ | セッション固定の抽出対象 |
-| `schema` | `object` | — | JSON Schema（`baseModule` に merge） |
-
-`cacheController` / `model` はオプションではない。キャッシュ非対応モードは提供しない。
+| `model` | `string` | ✅ | `prepare()` 用モデル識別子 |
+| `baseModule` | `PromptModule<TContext>` | — | 省略時 `defaultExtractBaseModule` |
+| `domainModule` | `PromptModule<TContext>` | — | base の上に merge |
+| `corpus` | `ExtractCorpus` | ✅ | セッション固定 corpus |
+| `schema` | `object` | — | JSON Schema（structured output） |
 
 #### `ExtractCorpus`
 
 | プロパティ | 型 | 説明 |
 |-----------|-----|------|
-| `materials` | `SectionContent` | 文書 corpus |
-| `messages` | `SectionContent` | 対話ログ |
+| `materials` | `MaterialsInput` | 文書 corpus |
+| `messages` | `MessagesInput` | 対話ログ |
 
-- セッション生成後の corpus 変更 API はない
-
----
-
-## `ExtractSession`
-
-### `extract(request): Promise<ExtractResult>`
+### `ExtractSession.extract(request)`
 
 #### `ExtractRequest`
 
 | プロパティ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| `cue` | `string \| SectionContent` | ✅ | 抽出切り口（output / cue セクション） |
-| `inputs` | `Record<string, unknown> \| SectionContent` | — | 補強情報（inputs セクション） |
-| `options` | `QueryOptions` | — | ドライバーへのクエリオプション |
-
-##### 正規化
-
-| フィールド | `string` | `Record` | `SectionContent` |
-|-----------|----------|----------|------------------|
-| `cue` | `[string]` | — | そのまま |
-| `inputs` | — | `JSON.stringify` 1 行 | そのまま |
-
-#### プロンプト組み立て
-
-```
-merge(sessionBaseModule, corpusModule, requestModule) → compile → driver.query()
-```
+| `cue` | `string \| SectionContent` | ✅ | 抽出切り口 |
+| `inputs` | `InputsInput` | — | 補強情報 |
+| `options` | `QueryOptions` | — | ドライバークエリオプション |
 
 #### `ExtractResult`
 
 | プロパティ | 型 | 説明 |
 |-----------|-----|------|
-| `text` | `string` | `QueryResult.content` |
-| `structured` | `unknown` | `QueryResult.structuredOutput` |
-| `usage` | `QueryResult['usage']` | トークン使用量 |
-| `index` | `number` | セッション内 0 始まり連番 |
+| `text` | `string` | 抽出テキスト |
+| `structured` | `unknown` | schema 指定時の構造化出力 |
+| `usage` | `QueryResult['usage']` | トークン使用量（`cacheReadTokens` 含む） |
+| `index` | `number` | セッション内連番（0 始まり） |
 
-#### エラー
+### `getHistory()` / `close()`
 
-| 条件 | エラー |
-|------|--------|
-| `close()` 後の `extract()` | `Error: ExtractSession is closed` |
-| `model` が空文字 | `Error: ExtractSessionOptions.model is required` |
-
----
-
-### `getHistory(): ReadonlyArray<ExtractResult>`
-
-セッション内の全抽出結果のコピーを返す。
-
----
-
-### `close(): Promise<void>`
-
-セッションを終了する。**セッションが保持する cache handle の `release()` のみ**行う。
-
-| 処理 | 行うか |
-|------|--------|
-| `cacheController.release(heldHandle)` | ✅ |
-| `cacheController.close()` | ❌ |
-| `driver.close()` | ❌ |
-
-- 冪等（複数回呼び出し可）
-- `close()` 後の `extract()` は拒否
+- `getHistory()` — セッション内全結果のコピー
+- `close()` — 保持 handle の `release()` のみ（冪等）。`close()` 後の `extract()` は拒否
 
 ---
 
@@ -239,8 +172,8 @@ merge(sessionBaseModule, corpusModule, requestModule) → compile → driver.que
 
 毎回の `extract()` で:
 
-1. `buildCacheModule()` — base + corpus + request（`cue` 含む）を merge
-2. `cacheController.prepare()` — `partitionPrompt` で cacheable 部分のみ prefill（`cue` は `cacheHint: 'contextual'` かつ output セクションのため対象外）
+1. `compileExtractPrompt` — `ExtractContext` を解決して compile
+2. `cacheController.prepare()` — cacheable 部分を prefill
 3. `supersedes` 返却時 — 旧 handle を `release()`
 4. `driver.query()` — `{ cache: false, cacheHandle }` で二重 prepare を回避
 
@@ -249,7 +182,13 @@ merge(sessionBaseModule, corpusModule, requestModule) → compile → driver.que
 | baseModule（instructions） | ✅ |
 | corpus（materials, messages） | ✅ |
 | inputs | ✅（incremental） |
-| cue | ❌ | `cacheHint: 'contextual'`。output セクションのため prepare 対象外 |
+| cue | ❌ |
+
+### 制約（再掲）
+
+- **corpus / baseModule 変更** → 新セッション
+- **inputs 累積** → 自動ではない。`buildPreviousExtractionsInputs` 等で明示的に渡す
+- **driver / cacheController の close** → 呼び出し側（`runtime.close()`）
 
 ---
 
@@ -259,29 +198,7 @@ merge(sessionBaseModule, corpusModule, requestModule) → compile → driver.que
 |------|------|
 | Phase 1 コア API | ✅ |
 | Phase 2 キャッシュ統合 | ✅ |
-| `createMlxExtractRuntime` | ✅ |
-| cacheController / model 必須化 | ✅ |
-| session.close() は handle release のみ | ✅ |
-| Phase 3 便利機能 | ⬜ |
-| README / サンプル | ⬜（本ドキュメントが API 仕様の暫定版） |
+| Phase 3 便利機能 | ✅ |
+| Phase 4 ドキュメント・サンプル | ✅ |
 
 **テスト**: `pnpm --filter @modular-prompt/extract test:run`
-
----
-
-## 設計上の注意
-
-1. **driver / cacheController の close は呼び出し側の責務**  
-   通常は `createMlxExtractRuntime().close()` でまとめて片付ける。
-
-2. **同一 driver を複数セッションで共有可能**  
-   各セッションの `close()` は handle release のみなので、driver は生存したまま。
-
-3. **corpus / baseModule はセッション固定**  
-   変更時は新セッションを作る。
-
-4. **inputs 累積は自動ではない**  
-   段階的深掘りは呼び出し側が `inputs` に明示的に渡す。
-
-5. **デフォルト cacheController 生成は extract 内にない**  
-   `createExtractSession` は受け取った依存を使うだけ。生成は `createMlxExtractRuntime` または呼び出し側。

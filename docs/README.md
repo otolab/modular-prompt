@@ -36,6 +36,15 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 - **[MLX - Qwen系モデル](./models/MLX_QWEN.md)** - Qwen系モデルのtool call時のcontent挙動
 - **[MLX - Tool Call Parserアーキテクチャ](./models/MLX_TOOL_CALL_PARSER.md)** - MLXドライバーのツール呼び出しパーサーの設計と実装
 
+## 抽出パッケージ
+
+### 文書・対話ログからの情報抽出
+
+- **[Extract パッケージ](../packages/extract/README.md)** - `@modular-prompt/extract` セッション API
+  - KV キャッシュを活用した同一 corpus への繰り返し抽出
+  - [API 仕様](../packages/extract/API.md)
+  - [サンプル](../packages/extract/examples/)
+
 ## プロセスモジュール
 
 ### ワークフロー処理のための再利用可能モジュール

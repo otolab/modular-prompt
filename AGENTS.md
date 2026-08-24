@@ -37,6 +37,7 @@ npm run clean && npm run build
 npm run build -w @modular-prompt/core
 npm run build -w @modular-prompt/driver
 npm run build -w @modular-prompt/utils
+npm run build -w @modular-prompt/extract
 npm run build -w @modular-prompt/process
 
 # テスト
@@ -127,6 +128,12 @@ npm run lint
   - ワークフロー関数群（defaultProcess、streamProcess、concatProcess、agenticProcess等）
   - プロセスモジュール（streamProcessing、concatProcessing等）
   - DriverInput/DriverSet型: 役割別ドライバー指定のサポート
+
+### 抽出パッケージ
+- `@modular-prompt/extract` - 文書・対話ログからの情報抽出セッション API
+  - KV キャッシュを活用した同一 corpus への繰り返し抽出（`cue` / `inputs` の差し替え）
+  - 最小入力型（`MaterialInput` 等）から Element への正規化
+  - 詳細は [packages/extract/README.md](./packages/extract/README.md) を参照
 
 ### 実験パッケージ
 - `@modular-prompt/experiment` - プロンプト比較・評価フレームワーク
