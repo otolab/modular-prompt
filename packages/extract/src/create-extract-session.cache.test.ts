@@ -184,4 +184,21 @@ describe('createExtractSession cache integration', () => {
     expect(tracking.releases.length).toBeGreaterThan(0);
     expect(tracking.controller.close).not.toHaveBeenCalled();
   });
+
+  it('skips release when close is called with releaseCache: false', async () => {
+    const driver = new TestDriver({ responses: ['done'] });
+    const tracking = createMockCacheController();
+    const session = createExtractSession({
+      driver,
+      baseModule,
+      corpus,
+      cacheController: tracking.controller,
+      model: 'test-model',
+    });
+
+    await session.extract({ cue: 'test' });
+    await session.close({ releaseCache: false });
+
+    expect(tracking.releases).toHaveLength(0);
+  });
 });

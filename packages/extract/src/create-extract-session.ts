@@ -1,7 +1,7 @@
 import { merge } from '@modular-prompt/core';
 import type { PromptModule } from '@modular-prompt/core';
 import type { ExtractContext } from './extract-context.js';
-import type { ExtractRequest, ExtractResult, ExtractSession, ExtractSessionOptions } from './types.js';
+import type { ExtractRequest, ExtractResult, ExtractSession, ExtractSessionCloseOptions, ExtractSessionOptions } from './types.js';
 import { resolveSessionModules } from './resolve-session-modules.js';
 import { compileExtractPrompt } from './compile-extract-prompt.js';
 import {
@@ -92,13 +92,15 @@ export function createExtractSession<TContext = ExtractContext>(
       return [...history];
     },
 
-    async close(): Promise<void> {
+    async close(options?: ExtractSessionCloseOptions): Promise<void> {
       if (closed) {
         return;
       }
       closed = true;
 
-      releaseSessionCache(cacheController, cacheState);
+      if (options?.releaseCache !== false) {
+        releaseSessionCache(cacheController, cacheState);
+      }
     },
   };
 }

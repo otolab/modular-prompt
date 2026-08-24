@@ -54,8 +54,16 @@ export interface ExtractResult {
   index: number;
 }
 
+export interface ExtractSessionCloseOptions {
+  /**
+   * セッション終了時に cache handle を release するか。
+   * 固定 cacheDir でプロセスをまたいで再利用する場合は `false` にする（デフォルト: `true`）。
+   */
+  releaseCache?: boolean;
+}
+
 export interface ExtractSession {
   extract(request: ExtractRequest): Promise<ExtractResult>;
   getHistory(): ReadonlyArray<ExtractResult>;
-  close(): Promise<void>;
+  close(options?: ExtractSessionCloseOptions): Promise<void>;
 }

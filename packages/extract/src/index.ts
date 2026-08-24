@@ -35,6 +35,7 @@ export type {
   ExtractRequest,
   ExtractResult,
   ExtractSession,
+  ExtractSessionCloseOptions,
   ExtractSessionOptions,
 } from './types.js';
 export type {

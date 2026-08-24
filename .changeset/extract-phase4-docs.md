@@ -1,12 +1,12 @@
 ---
-"@modular-prompt/extract": patch
+"@modular-prompt/extract": minor
 ---
 
-docs: ExtractSession Phase 4 — README・サンプル・プロジェクトドキュメント参照
+feat(extract): Phase 4 — ドキュメント・CLI・キャッシュ永続化
 
-- `packages/extract/README.md` を追加（API・キャッシュ制約・利用例）
-- `examples/` に文書抽出・対話ログ・段階的深掘りサンプルを追加
-- `API.md` を現行 API に合わせて更新
-- `docs/README.md` / `AGENTS.md` から `@modular-prompt/extract` に辿れるよう参照を追加
+- README・examples・API.md・プロジェクトドキュメント参照（#334）
+- `modular-extract` CLI（`create` / `extract` / `--dry-run`）
+- mlx-lm バックエンド固定、maxTokens デフォルト 8000
+- 固定 cacheDir で KV ファイルを残す `session.close({ releaseCache: false })`
 
 Closes #334

@@ -41,6 +41,44 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 
 ## クイックスタート（MLX）
 
+### CLI
+
+ビルド後、ワークスペース内では次のように実行できる。
+
+```bash
+pnpm --filter @modular-prompt/extract build
+
+# 1. 入力ファイルからキャッシュ作成（デフォルト: ./.extract-cache）
+node packages/extract/bin/modular-extract.js create -m 'your-mlx-model' docs/*.txt
+
+# 2. 抽出クエリ（cue）を実行 — 結果は stdout
+node packages/extract/bin/modular-extract.js extract -d .extract-cache '登場人物を列挙'
+
+# キャッシュ削除
+rm -rf .extract-cache
+```
+
+| コマンド | 説明 |
+|---------|------|
+| `create [-d <dir>] [-m model] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を dir に保存 |
+| `extract -d <dir> [query...]` | キャッシュ済み corpus に対して抽出。query が cue になる |
+| `extract --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
+| `--dry-run` | MLX を起動せず、compile 済みプロンプト全文を stdout に出力 |
+
+```bash
+# プロンプト確認（create）
+modular-extract create --dry-run docs/notes.txt
+
+# プロンプト確認（extract — manifest が必要）
+modular-extract extract --dry-run -d .extract-cache '登場人物を列挙'
+```
+
+`-d` 省略時のデフォルトは `./.extract-cache`。`-m` 省略時は `MLX_MODEL` 環境変数、未設定ならパッケージ既定モデル。
+
+**MLX バックエンドは mlx-lm（`backend: 'lm'`）に固定**している。`auto` で VLM が選ばれるとプロンプトキャッシュが無効になるため。
+
+### ライブラリ API
+
 ```typescript
 import {
   createExtractSession,
@@ -79,6 +117,18 @@ try {
 
 ## キャッシュの意図と制約
 
+### 削除タイミング
+
+| タイミング | 何が起きるか |
+|-----------|-------------|
+| `session.close()`（デフォルト） | handle を `release` マーク → 次の `runtime.close()` で **KV ファイル削除** |
+| `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
+| `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors` を削除 |
+| `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
+| `rm -rf <cache-dir>` | manifest + KV キャッシュを手動削除（CLI のクリーン方法） |
+
+`create` 直後に `manifest.json` だけ残って `.safetensors` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
+
 ### 意図
 
 - **corpus（materials / messages）** はセッション内で不変 → 1 回 prefill すれば再利用
@@ -93,7 +143,7 @@ try {
 | `baseModule` を変えたい | **新しいセッション**を作る |
 | 前回の抽出結果を参照したい | 次の `extract()` の `inputs` に明示的に渡す（自動累積しない） |
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
-| セッション終了 | `session.close()` — 保持 handle の `release()` のみ |
+| セッション終了 | `session.close()` — デフォルトで handle `release()`。固定 cacheDir を残す場合は `{ releaseCache: false }` |
 
 `cacheController` と `model` は **必須**。キャッシュ非対応モードは提供しない。
 
@@ -216,6 +266,22 @@ console.log(result.structured); // schema に沿った JSON
 型: `ExtractCorpus`, `ExtractRequest`, `ExtractResult`, `ExtractSession`, `MaterialInput`, `MessageInput`, `ChunkInput` など。
 
 完全な API リファレンスは [API.md](./API.md) を参照。
+
+## CLI（`modular-extract`）
+
+`bin/modular-extract.js` 経由で利用できる簡易 CLI。
+
+```bash
+pnpm --filter @modular-prompt/extract build
+
+modular-extract create [-d .extract-cache] [-m model] file1.txt file2.txt
+modular-extract extract -d .extract-cache '抽出したい内容の指示'
+
+# キャッシュ削除
+rm -rf .extract-cache
+```
+
+`create` は入力ファイルを corpus として KV cache を準備し、`manifest.json` を cache ディレクトリに保存する。`extract` は manifest から corpus を復元して cue を実行する。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
 
 ## テスト
 

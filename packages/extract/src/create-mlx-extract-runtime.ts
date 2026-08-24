@@ -13,6 +13,7 @@ export interface MlxExtractRuntimeOptions {
 
 /**
  * MLX driver + cache controller bundle for extract sessions.
+ * Always uses mlx-lm backend (`backend: 'lm'`) — VLM auto-selection disables prompt cache.
  * Lifecycle (close) is owned by the caller — not by ExtractSession.
  */
 export interface MlxExtractRuntime {
@@ -31,6 +32,7 @@ export async function createMlxExtractRuntime(
   );
   const driver = new MlxDriver({
     model: options.model,
+    backend: 'lm',
     cacheController,
   });
 

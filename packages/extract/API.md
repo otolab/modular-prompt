@@ -113,6 +113,8 @@ function createMlxExtractRuntime(
 
 `MlxExtractRuntime.close()` は `driver.close()` + `cacheController.close()` を行う。
 
+`createMlxExtractRuntime` は **mlx-lm バックエンド（`backend: 'lm'`）に固定**する。`auto` で VLM が選ばれるとプロンプトキャッシュが無効になるため。
+
 ---
 
 ## `createExtractSession(options)`
@@ -164,7 +166,11 @@ function createExtractSession<TContext = ExtractContext>(
 ### `getHistory()` / `close()`
 
 - `getHistory()` — セッション内全結果のコピー
-- `close()` — 保持 handle の `release()` のみ（冪等）。`close()` 後の `extract()` は拒否
+- `close(options?)` — セッション終了（冪等）。`close()` 後の `extract()` は拒否
+  - `releaseCache`（デフォルト `true`）— `false` のとき handle を release しない。固定 cacheDir をプロセス間で再利用する場合に使う
+  - `releaseCache: true` のとき `cacheController.release()` が呼ばれ、続く `runtime.close()` で KV ファイルが削除される（固定 cacheDir モード）
+
+手動クリーン: cache ディレクトリを `rm -rf` で削除（CLI の想定運用）。
 
 ---
 
