@@ -10,7 +10,8 @@ export {
 } from './config-based-factory.js';
 export {
   AIService,
-  type SelectionOptions
+  type SelectionOptions,
+  type AIServiceModelsOptions,
 } from './ai-service.js';
 export type {
   DriverProvider,

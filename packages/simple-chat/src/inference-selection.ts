@@ -16,6 +16,22 @@ const MLX_BACKEND_ALIASES: Record<string, MlxBackendMode> = {
   mlx_optiq: 'optiq',
 };
 
+let warnedDeprecatedTextOnly = false;
+
+function warnDeprecatedTextOnly(): void {
+  if (warnedDeprecatedTextOnly) {
+    return;
+  }
+  warnedDeprecatedTextOnly = true;
+  const message =
+    'profile.textOnly / --text-only は非推奨です。代わりに backend: lm を指定してください。';
+  if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+    process.emitWarning(message, { code: 'SIMPLE_CHAT_DEPRECATED_TEXT_ONLY' });
+  } else {
+    console.warn(message);
+  }
+}
+
 /** MLX backend 文字列を正規化して検証する */
 export function parseMlxBackend(value: string): MlxBackendMode {
   const normalized = value.trim().toLowerCase().replace(/-/g, '_');
@@ -58,6 +74,7 @@ function resolveMlxBackend(profile: DialogProfile): MlxBackendMode | undefined {
     return parseMlxBackend(modelBackend);
   }
   if (profile.textOnly) {
+    warnDeprecatedTextOnly();
     return 'lm';
   }
   return undefined;
@@ -78,19 +95,10 @@ export function resolveInferenceSelection(profile: DialogProfile): {
   const mlxBackend = resolveMlxBackend(profile);
   const provider = resolveExplicitProvider(profile);
 
-  if (provider || mlxBackend) {
-    return {
-      provider,
-      mlxBackend: mlxBackend ?? 'auto',
-    };
-  }
-
-  const workflowProvider = profile.workflow?.models?.default?.provider;
-  if (workflowProvider === 'pytorch') {
-    return { provider: 'pytorch' };
-  }
-
-  return { mlxBackend: 'auto' };
+  return {
+    provider,
+    mlxBackend,
+  };
 }
 
 /** createDriver 用の MLX driverOptions を組み立てる */
@@ -103,6 +111,7 @@ export function buildMlxDriverOptions(
   if (mlxBackend && mlxBackend !== 'auto') {
     opts.backend = mlxBackend;
   } else if (profile.textOnly) {
+    warnDeprecatedTextOnly();
     opts.backend = 'lm';
   }
 

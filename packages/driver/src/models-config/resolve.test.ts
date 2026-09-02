@@ -2,7 +2,7 @@
  * models.yaml loader / resolve tests
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -12,7 +12,8 @@ import {
   mergeModelsConfig,
   resolveModelsConfig,
   resolveModelReference,
-  resolveDefaultModel,
+  resolveModelName,
+  resolveDefaultModelFromConfig,
   registerModelsFromConfig,
   entryToModelSpec,
 } from './index.js';
@@ -36,6 +37,7 @@ describe('models-config', () => {
       process.env.MODULAR_PROMPT_HOME = previousHome;
     }
     rmSync(tempHome, { recursive: true, force: true });
+    vi.restoreAllMocks();
   });
 
   describe('normalizeModelsSection', () => {
@@ -72,8 +74,6 @@ describe('models-config', () => {
 
     it('loads user models.yaml from MODULAR_PROMPT_HOME', () => {
       const yaml = `
-defaults:
-  mlx-lm: user-default-model
 models:
   local-chat:
     provider: mlx
@@ -83,8 +83,32 @@ models:
       writeFileSync(getUserModelsConfigPath(), yaml);
 
       const config = loadModelsConfigFile(getUserModelsConfigPath());
-      expect(config?.defaults?.['mlx-lm']).toBe('user-default-model');
       expect(config?.models?.['local-chat']?.model).toBe('user/model');
+    });
+
+    it('warns and ignores deprecated defaults section', () => {
+      const warn = vi.spyOn(process, 'emitWarning').mockImplementation(() => process);
+
+      const config = loadModelsConfigFile(
+        (() => {
+          const path = join(tempHome, 'deprecated-defaults.yaml');
+          writeFileSync(
+            path,
+            `defaults:
+  mlx-lm: ignored-model
+models:
+  default:
+    provider: mlx
+    model: kept/model
+`
+          );
+          return path;
+        })()
+      );
+
+      expect(warn).toHaveBeenCalled();
+      expect(config?.models?.default?.model).toBe('kept/model');
+      expect((config as { defaults?: unknown }).defaults).toBeUndefined();
     });
   });
 
@@ -96,14 +120,12 @@ models:
             a: { provider: 'mlx', model: 'user/a' },
             b: { provider: 'mlx', model: 'user/b' },
           },
-          defaults: { 'mlx-lm': 'user-default' },
         },
         {
           models: {
             b: { provider: 'mlx', model: 'project/b' },
             c: { provider: 'openai', model: 'project/c' },
           },
-          defaults: { 'mlx-lm': 'project-default' },
         },
         'merge'
       );
@@ -111,7 +133,6 @@ models:
       expect(merged.models?.a?.model).toBe('user/a');
       expect(merged.models?.b?.model).toBe('project/b');
       expect(merged.models?.c?.model).toBe('project/c');
-      expect(merged.defaults?.['mlx-lm']).toBe('project-default');
     });
 
     it('overrides user models in override mode when overlay has models', () => {
@@ -137,7 +158,7 @@ models:
   });
 
   describe('resolveModelsConfig', () => {
-    it('merges user config with overlay (overlay priority)', () => {
+    it('merges base, user config, and overlay (overlay priority)', () => {
       writeFileSync(
         getUserModelsConfigPath(),
         `models:
@@ -148,7 +169,11 @@ models:
       );
 
       const resolved = resolveModelsConfig({
-        mode: 'merge',
+        base: {
+          models: {
+            default: { provider: 'mlx', model: 'bundled/default' },
+          },
+        },
         overlay: {
           models: {
             shared: { provider: 'mlx', model: 'overlay/shared' },
@@ -157,8 +182,31 @@ models:
         },
       });
 
+      expect(resolved.models?.default?.model).toBe('bundled/default');
       expect(resolved.models?.shared?.model).toBe('overlay/shared');
       expect(resolved.models?.['overlay-only']?.model).toBe('overlay/only');
+    });
+
+    it('ignores user config when source is overlay', () => {
+      writeFileSync(
+        getUserModelsConfigPath(),
+        `models:
+  local:
+    provider: mlx
+    model: user/local
+`
+      );
+
+      const resolved = resolveModelsConfig({
+        source: 'overlay',
+        overlay: {
+          models: {
+            local: { provider: 'mlx', model: 'overlay/local' },
+          },
+        },
+      });
+
+      expect(resolved.models?.local?.model).toBe('overlay/local');
     });
 
     it('returns user config only when overlay is omitted', () => {
@@ -178,7 +226,6 @@ models:
 
   describe('resolveModelReference', () => {
     const config = {
-      defaults: { 'mlx-lm': 'default/model' },
       models: {
         local: { provider: 'mlx', model: 'alias/model', capabilities: ['chat'] },
       },
@@ -198,21 +245,46 @@ models:
       expect(spec?.model).toBe('gpt-4o');
       expect(spec?.provider).toBe('openai');
     });
+  });
 
-    it('resolves runtime via defaults', () => {
-      const spec = resolveModelReference({ runtime: 'mlx-lm' }, config);
-      expect(spec?.model).toBe('default/model');
-      expect(spec?.metadata?.runtime).toBe('mlx-lm');
+  describe('resolveModelName', () => {
+    const config = {
+      models: {
+        local: { provider: 'mlx', model: 'alias/model' },
+      },
+    };
+
+    it('resolves known alias', () => {
+      const spec = resolveModelName('local', config, () => 'mlx');
+      expect(spec.model).toBe('alias/model');
+    });
+
+    it('falls back to raw model name', () => {
+      const spec = resolveModelName('raw/model', config, () => 'mlx');
+      expect(spec.model).toBe('raw/model');
+      expect(spec.provider).toBe('mlx');
     });
   });
 
-  describe('resolveDefaultModel', () => {
-    it('returns model from defaults', () => {
-      const spec = resolveDefaultModel('mlx-lm', {
-        defaults: { 'mlx-lm': 'my/default' },
+  describe('resolveDefaultModelFromConfig', () => {
+    it('prefers default alias', () => {
+      const spec = resolveDefaultModelFromConfig({
+        models: {
+          default: { provider: 'mlx', model: 'my/default' },
+          other: { provider: 'mlx', model: 'other/model' },
+        },
       });
       expect(spec?.model).toBe('my/default');
-      expect(spec?.provider).toBe('mlx');
+    });
+
+    it('falls back to first model entry', () => {
+      const spec = resolveDefaultModelFromConfig({
+        models: {
+          first: { provider: 'mlx', model: 'first/model' },
+          second: { provider: 'mlx', model: 'second/model' },
+        },
+      });
+      expect(spec?.model).toBe('first/model');
     });
   });
 

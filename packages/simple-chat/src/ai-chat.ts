@@ -11,13 +11,11 @@ import {
   type DriverProvider,
   type ModelSpec,
   type ModelsConfig,
-  DriverRegistry,
-  registerFactories,
-  type ApplicationConfig,
+  AIService,
   resolveModelsConfig,
-  mergeModelsConfig,
   resolveModelReference,
-  resolveDefaultModel,
+  resolveModelName,
+  resolveDefaultModelFromConfig,
   RuntimeNotReadyError,
 } from '@modular-prompt/driver';
 import { formatRuntimeNotReadyMessage } from './runtime-status.js';
@@ -25,14 +23,13 @@ import {
   buildMlxDriverOptions,
   resolveInferenceSelection,
 } from './inference-selection.js';
+import { BUNDLED_MODELS_CONFIG } from './default-models.js';
 import type { DialogProfile, ChatLog, WorkflowMode } from './types.js';
 import chalk from 'chalk';
 import { Spinner } from './spinner.js';
 import { logger as baseLogger } from './logger.js';
 
 const logger = baseLogger.context('ai');
-
-const DEFAULT_MODEL = 'LiquidAI/LFM2.5-1.2B-JP-MLX-4bit';
 
 /**
  * Chat context interface
@@ -44,25 +41,19 @@ export interface ChatContext {
 
 /**
  * Base chat prompt module - chat infrastructure
- * Provides default instructions and conversation history handling.
- * User-defined module (from profile) is merged on top of this.
  */
 const baseChatModule: PromptModule<ChatContext> = {
-  // Context factory - returns empty typed context
   createContext: (): ChatContext => ({
     messages: [],
     userMessage: ''
   }),
 
-  // Instructions - 具体的な指示
   instructions: [
     '- 日本語で応答してください',
   ],
 
-  // Guidelines - 制約や注意事項
   guidelines: [],
 
-  // Messages - 会話履歴
   messages: [
     (ctx) => {
       if (ctx.messages.length === 0) {
@@ -72,8 +63,6 @@ const baseChatModule: PromptModule<ChatContext> = {
         type: 'message' as const,
         role: m.role as 'user' | 'assistant',
         content: m.content,
-        // 最後のメッセージ（現在のユーザー入力）はimmutableにしない
-        // そうしないと毎回hashが変わってキャッシュが効かなくなる
         cacheHint: i < ctx.messages.length - 1 ? ('immutable' as const) : undefined,
       }));
     }
@@ -82,7 +71,6 @@ const baseChatModule: PromptModule<ChatContext> = {
 
 /**
  * Build chat prompt module from profile
- * Merges baseChatModule + withMaterials + profile.module
  */
 export function buildChatModule(profile: DialogProfile): PromptModule<ChatContext & MaterialContext> {
   if (!profile.module) return baseChatModule;
@@ -106,7 +94,6 @@ function buildModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
   const mc = profile.modelsConfig;
 
   if (mc?.models) overlay.models = mc.models;
-  if (mc?.defaults) overlay.defaults = mc.defaults;
   if (mc?.drivers) overlay.drivers = mc.drivers;
   if (profile.drivers) {
     overlay.drivers = { ...(overlay.drivers ?? {}), ...profile.drivers };
@@ -118,15 +105,22 @@ function buildModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
   return overlay;
 }
 
-function resolveProfileModelsConfig(profile: DialogProfile): ModelsConfig {
+/**
+ * bundled + user + profile から ModelsConfig を解決する
+ */
+export function resolveProfileModelsConfig(profile: DialogProfile): ModelsConfig {
+  const mode = profile.modelsConfig?.mode ?? 'merge';
+
   return resolveModelsConfig({
+    base: BUNDLED_MODELS_CONFIG,
     overlay: buildModelsOverlay(profile),
-    mode: profile.modelsConfig?.mode,
+    source: 'merge',
+    mode,
   });
 }
 
 /**
- * Profile と models.yaml から使用する ModelSpec を解決する（テスト・デバッグ用）
+ * Profile と models 設定から使用する ModelSpec を解決する（テスト・デバッグ用）
  */
 export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
   const resolvedModels = resolveProfileModelsConfig(profile);
@@ -156,11 +150,6 @@ export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
         `Unknown model ref '${modelRef.ref}' in models configuration`,
       );
     }
-    if (modelRef.runtime) {
-      throw new Error(
-        `No default model for runtime '${modelRef.runtime}' in models configuration`,
-      );
-    }
     if (modelRef.provider && modelRef.model) {
       return attachDriverOptions({
         model: modelRef.model,
@@ -169,30 +158,39 @@ export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
       });
     }
     throw new Error(
-      'workflow.models.default is incomplete: specify ref, runtime, or provider+model',
+      'workflow.models.default is incomplete: specify ref or provider+model',
     );
   }
 
   if (profile.model) {
+    const spec = resolveModelName(profile.model, resolvedModels, inferProvider);
     return attachDriverOptions({
-      model: profile.model,
-      provider: resolveProvider(inferProvider(profile.model)),
-      capabilities: [],
+      ...spec,
+      provider: resolveProvider(spec.provider),
     });
   }
 
-  const defaultFromConfig = resolveDefaultModel('mlx-lm', resolvedModels);
-  if (defaultFromConfig) {
-    return attachDriverOptions({
-      ...defaultFromConfig,
-      provider: resolveProvider(defaultFromConfig.provider),
-    });
+  const defaultFromConfig = resolveDefaultModelFromConfig(resolvedModels);
+  if (!defaultFromConfig) {
+    throw new Error('No model configured: specify -m, profile.model, workflow.models.default, or models.default');
   }
 
   return attachDriverOptions({
-    model: DEFAULT_MODEL,
-    provider: resolveProvider('mlx'),
-    capabilities: [],
+    ...defaultFromConfig,
+    provider: resolveProvider(defaultFromConfig.provider),
+  });
+}
+
+/**
+ * Create AIService from profile configuration
+ */
+export function createAIService(profile: DialogProfile): AIService {
+  const resolvedModels = resolveProfileModelsConfig(profile);
+
+  return AIService.fromModelsConfig({
+    source: 'overlay',
+    overlay: resolvedModels,
+    defaultOptions: profile.options,
   });
 }
 
@@ -200,21 +198,9 @@ export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
  * Create driver from profile configuration
  */
 export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
-  const resolvedModels = resolveProfileModelsConfig(profile);
-
-  const mergedConfig = mergeModelsConfig(resolvedModels, {
-    defaultOptions: profile.options,
-  });
-
-  const registry = new DriverRegistry();
-  const appConfig: ApplicationConfig = {
-    drivers: mergedConfig.drivers,
-    defaultOptions: mergedConfig.defaultOptions,
-  };
-  registerFactories(registry, appConfig);
-
+  const ai = createAIService(profile);
   const spec = resolveProfileModelSpec(profile);
-  return registry.createDriver(spec);
+  return ai.createDriver(spec);
 }
 
 /**
@@ -272,7 +258,6 @@ async function executeDirect(
     return response;
   }
 
-  // Fallback to non-streaming
   const result = await driver.query(compiledPrompt, options);
   logger.info(chalk.cyan('Assistant:'));
   process.stdout.write(result.content + '\n\n');

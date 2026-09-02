@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parseMlxBackend,
   parseProvider,
@@ -53,18 +53,17 @@ describe('resolveInferenceSelection', () => {
     });
   });
 
-  it('maps textOnly to lm backend', () => {
+  it('maps textOnly to lm backend with deprecation warning', () => {
+    const warn = vi.spyOn(process, 'emitWarning').mockImplementation(() => process);
     expect(resolveInferenceSelection({ textOnly: true })).toEqual({
       mlxBackend: 'lm',
     });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
-  it('infers pytorch from workflow provider', () => {
-    expect(
-      resolveInferenceSelection({
-        workflow: { models: { default: { provider: 'pytorch', model: 'gpt2' } } },
-      }),
-    ).toEqual({ provider: 'pytorch' });
+  it('returns empty selection when nothing specified', () => {
+    expect(resolveInferenceSelection({})).toEqual({});
   });
 });
 
@@ -86,5 +85,9 @@ describe('buildMlxDriverOptions', () => {
       drafterModel: 'draft',
       cacheDir: '/tmp/cache',
     });
+  });
+
+  it('omits backend when mlxBackend is auto', () => {
+    expect(buildMlxDriverOptions({}, 'auto')).toBeUndefined();
   });
 });

@@ -8,6 +8,13 @@ import type { AIDriver } from '../types.js';
 import type { ApplicationConfig } from './config-based-factory.js';
 import { registerFactories } from './config-based-factory.js';
 import { DriverRegistry as DriverRegistryImpl } from './registry.js';
+import {
+  mergeModelsConfig,
+  resolveModelsConfig,
+  toApplicationConfig,
+  type ModelsConfig,
+  type ModelsConfigOptions,
+} from '../models-config/index.js';
 
 /**
  * モデル選択オプション
@@ -29,6 +36,11 @@ export interface SelectionOptions {
   lenient?: boolean;
 }
 
+export interface AIServiceModelsOptions extends ModelsConfigOptions {
+  /** ApplicationConfig.defaultOptions にマージする追加オプション */
+  defaultOptions?: ApplicationConfig['defaultOptions'];
+}
+
 /**
  * AIサービスクラス
  * レジストリを管理し、capabilityベースでドライバを作成
@@ -36,11 +48,69 @@ export interface SelectionOptions {
 export class AIService {
   private registry: DriverRegistry;
   private config: ApplicationConfig;
+  readonly modelsConfig: ModelsConfig;
 
-  constructor(config: ApplicationConfig) {
+  constructor(config: ApplicationConfig, modelsConfig: ModelsConfig = {}) {
     this.config = config;
+    this.modelsConfig = modelsConfig;
     this.registry = new DriverRegistryImpl();
     registerFactories(this.registry, config);
+  }
+
+  /**
+   * ApplicationConfig から直接作成（experiment 等）
+   */
+  static fromApplicationConfig(config: ApplicationConfig): AIService {
+    return new AIService(config);
+  }
+
+  /**
+   * models.yaml 解決経由で作成
+   */
+  static fromModelsConfig(options?: AIServiceModelsOptions): AIService {
+    const resolved = resolveModelsConfig(options);
+    const appConfig = toApplicationConfig(resolved);
+
+    if (options?.defaultOptions) {
+      appConfig.defaultOptions = {
+        ...appConfig.defaultOptions,
+        ...options.defaultOptions,
+      };
+    }
+
+    return new AIService(appConfig, resolved);
+  }
+
+  /**
+   * user models.yaml を無視し、渡した config のみで作成
+   */
+  static fromOverlay(
+    overlay: ModelsConfig,
+    options?: Omit<AIServiceModelsOptions, 'overlay' | 'source'>
+  ): AIService {
+    return AIService.fromModelsConfig({
+      ...options,
+      source: 'overlay',
+      overlay,
+    });
+  }
+
+  /**
+   * base + overlay をマージし、必要なら user yaml も取り込む
+   */
+  static fromMergedConfig(
+    base: ModelsConfig,
+    overlay?: ModelsConfig,
+    options?: Omit<AIServiceModelsOptions, 'base' | 'overlay'>
+  ): AIService {
+    const mergedOverlay = overlay
+      ? mergeModelsConfig(base, overlay, options?.mode ?? 'merge')
+      : base;
+
+    return AIService.fromModelsConfig({
+      ...options,
+      overlay: mergedOverlay,
+    });
   }
 
   /**
@@ -53,7 +123,6 @@ export class AIService {
     const models = this.selectModels(capabilities, options);
     if (!models.length) return null;
 
-    // 最適なモデルを選択してドライバを作成
     return this.registry.createDriver(models[0]);
   }
 
@@ -71,46 +140,38 @@ export class AIService {
     capabilities: DriverCapability[],
     options?: SelectionOptions
   ): ModelSpec[] {
-    // disabled + capability フィルタ
     let models = this.config.models?.filter(m =>
       !m.disabled && capabilities.every(cap => m.capabilities.includes(cap))
     ) || [];
 
-    // プロバイダー除外
     if (options?.excludeProviders) {
       models = models.filter(m =>
         !options.excludeProviders!.includes(m.provider)
       );
     }
 
-    // lenient モード：条件を満たすモデルがない場合は条件を緩和
     if (options?.lenient && models.length === 0 && capabilities.length > 0) {
       return this.selectModels(capabilities.slice(0, -1), options);
     }
 
-    // ソート
     models.sort((a, b) => {
-      // 特定プロバイダー優先
       if (options?.preferProvider) {
         if (a.provider === options.preferProvider) return -1;
         if (b.provider === options.preferProvider) return 1;
       }
 
-      // ローカル優先
       if (options?.preferLocal) {
         const aLocal = a.capabilities.includes('local');
         const bLocal = b.capabilities.includes('local');
         if (aLocal !== bLocal) return aLocal ? -1 : 1;
       }
 
-      // 高速優先
       if (options?.preferFast) {
         const aFast = a.capabilities.includes('fast');
         const bFast = b.capabilities.includes('fast');
         if (aFast !== bFast) return aFast ? -1 : 1;
       }
 
-      // 優先度
       return (b.priority || 0) - (a.priority || 0);
     });
 

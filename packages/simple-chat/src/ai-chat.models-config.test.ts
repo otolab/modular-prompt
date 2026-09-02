@@ -8,6 +8,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { getUserModelsConfigPath } from '@modular-prompt/driver';
 import { resolveProfileModelSpec } from './ai-chat.js';
+import { BUNDLED_MODELS_CONFIG } from './default-models.js';
 import type { DialogProfile } from './types.js';
 
 describe('resolveProfileModelSpec with models.yaml', () => {
@@ -83,29 +84,48 @@ describe('resolveProfileModelSpec with models.yaml', () => {
     expect(spec.model).toBe('overlay/model');
   });
 
-  it('uses defaults.mlx-lm when no workflow model specified', () => {
+  it('uses bundled default model when no workflow model specified', () => {
+    const profile: DialogProfile = {};
+
+    const spec = resolveProfileModelSpec(profile);
+    expect(spec.model).toBe(BUNDLED_MODELS_CONFIG.models!.default!.model);
+    expect(spec.provider).toBe('mlx');
+  });
+
+  it('user default alias overrides bundled default', () => {
     writeFileSync(
       getUserModelsConfigPath(),
-      `defaults:
-  mlx-lm: config/default-model
+      `models:
+  default:
+    provider: mlx
+    model: user/default-model
 `
     );
 
     const profile: DialogProfile = {};
-
     const spec = resolveProfileModelSpec(profile);
-    expect(spec.model).toBe('config/default-model');
-    expect(spec.provider).toBe('mlx');
+    expect(spec.model).toBe('user/default-model');
   });
 
-  it('profile.model CLI override wins over models config', () => {
+  it('profile.model resolves alias when defined in models config', () => {
     writeFileSync(
       getUserModelsConfigPath(),
-      `defaults:
-  mlx-lm: config/default-model
+      `models:
+  local-chat:
+    provider: mlx
+    model: user/model
 `
     );
 
+    const profile: DialogProfile = {
+      model: 'local-chat',
+    };
+
+    const spec = resolveProfileModelSpec(profile);
+    expect(spec.model).toBe('user/model');
+  });
+
+  it('profile.model uses raw model name when alias is unknown', () => {
     const profile: DialogProfile = {
       model: 'cli-model',
     };

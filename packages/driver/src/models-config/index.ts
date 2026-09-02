@@ -15,8 +15,9 @@ export {
   toApplicationConfig,
   entryToModelSpec,
   resolveModelAlias,
+  resolveModelName,
+  resolveDefaultModelFromConfig,
   resolveModelReference,
-  resolveDefaultModel,
   buildApplicationConfig,
   registerModelsFromConfig,
 } from './resolve.js';
@@ -28,6 +29,7 @@ export {
 
 export type {
   ModelsMergeMode,
+  ModelsConfigSource,
   ModelsConfigOptions,
   ModelSpecEntry,
   ModelsConfig,

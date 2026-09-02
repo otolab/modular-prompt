@@ -219,7 +219,8 @@ export {
   DriverRegistry,
   registerFactories,
   type SelectionOptions,
-  type ApplicationConfig
+  type ApplicationConfig,
+  type AIServiceModelsOptions,
 } from './driver-registry/index.js';
 
 export type {
@@ -240,13 +241,15 @@ export {
   toApplicationConfig,
   entryToModelSpec,
   resolveModelAlias,
+  resolveModelName,
+  resolveDefaultModelFromConfig,
   resolveModelReference,
-  resolveDefaultModel,
   buildApplicationConfig,
   registerModelsFromConfig,
   getUserModelsConfigPath,
   MODELS_CONFIG_FILENAME,
   type ModelsMergeMode,
+  type ModelsConfigSource,
   type ModelsConfigOptions,
   type ModelSpecEntry,
   type ModelsConfig,

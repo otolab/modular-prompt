@@ -32,8 +32,6 @@ module:
 #     local-chat:
 #       provider: mlx
 #       model: mlx-community/gemma-4-31b-4bit
-#   defaults:
-#     mlx-lm: mlx-community/gemma-3-270m-it-4bit
 
 # ワークフロー設定（オプション）
 # workflow:

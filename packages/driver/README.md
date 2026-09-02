@@ -82,16 +82,15 @@ if (result.logEntries) {
 
 ## ユーザーモデル設定（`~/.modular-prompt/models.yaml`）
 
-マシン共通のモデル定義を `~/.modular-prompt/models.yaml` に置けます（`MODULAR_PROMPT_HOME` で上書き可）。**プロジェクト配下の暗黙探索は行いません。** 利用側アプリが overlay を明示投入し、**overlay > ユーザー** の優先順位で解決します。
+マシン共通のモデル定義を `~/.modular-prompt/models.yaml` に置けます（`MODULAR_PROMPT_HOME` で上書き可）。**プロジェクト配下の暗黙探索は行いません。** 利用側アプリが base / overlay を明示投入し、**overlay > user > base** の優先順位で解決します。
 
 ```yaml
-defaults:
-  mlx-lm: mlx-community/gemma-3-270m-it-4bit
-
 models:
+  default:
+    provider: mlx
+    model: mlx-community/gemma-3-270m-it-4bit
   local-chat:
     provider: mlx
-    runtime: mlx-lm
     model: mlx-community/gemma-3-270m-it-4bit
     capabilities: [local, chat, tools]
 ```
@@ -99,31 +98,33 @@ models:
 ```typescript
 import {
   resolveModelsConfig,
-  registerModelsFromConfig,
-  DriverRegistry,
+  resolveModelName,
+  resolveDefaultModelFromConfig,
+  AIService,
 } from '@modular-prompt/driver';
 
-const overlay = {
-  models: {
-    local-chat: {
-      provider: 'mlx',
-      model: 'my-app/default-model',
+const config = resolveModelsConfig({
+  base: { models: { default: { provider: 'mlx', model: 'app/default' } } },
+  overlay: {
+    models: {
+      'local-chat': { provider: 'mlx', model: 'my-app/local' },
     },
   },
-};
-
-const config = resolveModelsConfig({
-  overlay,
-  mode: 'merge', // 'merge' | 'override'
+  source: 'merge', // user yaml も取り込む（デフォルト）
 });
 
-const registry = new DriverRegistry();
-registerModelsFromConfig(registry, config);
+const ai = AIService.fromModelsConfig({ overlay: config, source: 'overlay' });
+const spec = resolveModelName('local-chat', config, () => 'mlx');
+const fallback = resolveDefaultModelFromConfig(config);
 ```
 
-`mode: 'merge'` は user + overlay の models を浅いマージ、`mode: 'override'` は overlay の models で user models を置き換えます（drivers / defaults は浅いマージ）。
+- `source: 'merge'`（デフォルト）— user yaml を読み込み base / overlay とマージ
+- `source: 'overlay'` — user yaml を無視し、渡した config のみ使用
+- `mode: 'merge' | 'override'` — models セクションの浅いマージ / 置換
+- デフォルト model は `models.default` alias、なければ models の先頭エントリから導出
+- `defaults` / `runtime` による暗黙解決は廃止（YAML に残っていても警告のみ）
 
-simple-chat では profile の `modelsConfig` に inline の `models` / `defaults` / `drivers` を載せ、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合、または `runtime` に対応する `defaults` が無い場合は **エラーで停止**します（黙ってハードコードデフォルトへフォールバックしません）。
+simple-chat では profile の `modelsConfig` に inline の `models` / `drivers` を載せ、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合は **エラーで停止**します。
 
 不正な YAML は `loadModelsConfigFile()` が **例外を throw** します（js-yaml のパースエラーをそのまま伝播）。
 

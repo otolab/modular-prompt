@@ -11,8 +11,6 @@ export type WorkflowMode = 'direct' | 'default' | 'agentic';
 export interface ModelReference {
   /** models.yaml の alias（`provider`+`model` の代わりに使用可） */
   ref?: string;
-  /** runtime profile 名（defaults から解決） */
-  runtime?: string;
   provider?: string;
   model?: string;
   /** MLX 内の実行モード（auto / lm / vlm / optiq） */
@@ -59,8 +57,7 @@ export interface DialogProfile {
   modelsConfig?: {
     /** models セクションのマージモード（デフォルト: merge） */
     mode?: ModelsMergeMode;
-    /** overlay: defaults / models / drivers */
-    defaults?: ModelsConfig['defaults'];
+    /** overlay: models / drivers */
     models?: ModelsConfig['models'];
     drivers?: ModelsConfig['drivers'];
   };
