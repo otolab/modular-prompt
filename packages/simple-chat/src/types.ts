@@ -51,13 +51,11 @@ export interface DialogProfile {
     /** Cache strategy: true=read/write, false=disabled, 'read-only'=use existing only */
     cache?: boolean | 'read-only';
   };
-  /** Driver provider configurations */
+  /** Driver provider configurations（modelsConfig.drivers と同義・後方互換） */
   drivers?: ApplicationConfig['drivers'];
-  /** ~/.modular-prompt/models.yaml との統合（overlay は profile 内で明示定義） */
+  /** profile 内の models / drivers overlay（user models.yaml と merge） */
   modelsConfig?: {
-    /** models セクションのマージモード（デフォルト: merge） */
     mode?: ModelsMergeMode;
-    /** overlay: models / drivers */
     models?: ModelsConfig['models'];
     drivers?: ModelsConfig['drivers'];
   };

@@ -9,7 +9,6 @@ import type { ApplicationConfig } from './config-based-factory.js';
 import { registerFactories } from './config-based-factory.js';
 import { DriverRegistry as DriverRegistryImpl } from './registry.js';
 import {
-  mergeModelsConfig,
   resolveModelsConfig,
   toApplicationConfig,
   type ModelsConfig,
@@ -103,13 +102,10 @@ export class AIService {
     overlay?: ModelsConfig,
     options?: Omit<AIServiceModelsOptions, 'base' | 'overlay'>
   ): AIService {
-    const mergedOverlay = overlay
-      ? mergeModelsConfig(base, overlay, options?.mode ?? 'merge')
-      : base;
-
     return AIService.fromModelsConfig({
       ...options,
-      overlay: mergedOverlay,
+      base,
+      overlay,
     });
   }
 

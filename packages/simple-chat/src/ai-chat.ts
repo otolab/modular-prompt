@@ -12,7 +12,6 @@ import {
   type ModelSpec,
   type ModelsConfig,
   AIService,
-  resolveModelsConfig,
   resolveModelReference,
   resolveModelName,
   resolveDefaultModelFromConfig,
@@ -31,29 +30,18 @@ import { logger as baseLogger } from './logger.js';
 
 const logger = baseLogger.context('ai');
 
-/**
- * Chat context interface
- */
 export interface ChatContext {
   messages: Array<{ role: string; content: string | Attachment[] }>;
   userMessage: string;
 }
 
-/**
- * Base chat prompt module - chat infrastructure
- */
 const baseChatModule: PromptModule<ChatContext> = {
   createContext: (): ChatContext => ({
     messages: [],
-    userMessage: ''
+    userMessage: '',
   }),
-
-  instructions: [
-    '- 日本語で応答してください',
-  ],
-
+  instructions: ['- 日本語で応答してください'],
   guidelines: [],
-
   messages: [
     (ctx) => {
       if (ctx.messages.length === 0) {
@@ -65,147 +53,83 @@ const baseChatModule: PromptModule<ChatContext> = {
         content: m.content,
         cacheHint: i < ctx.messages.length - 1 ? ('immutable' as const) : undefined,
       }));
-    }
+    },
   ],
 };
 
-/**
- * Build chat prompt module from profile
- */
 export function buildChatModule(profile: DialogProfile): PromptModule<ChatContext & MaterialContext> {
   if (!profile.module) return baseChatModule;
   return merge(baseChatModule, withMaterials, profile.module as PromptModule<any>);
 }
 
-/**
- * Infer provider from model name
- */
 function inferProvider(model: string): DriverProvider {
   if (model.startsWith('test-')) return 'test' as DriverProvider;
   if (model.startsWith('echo-')) return 'echo';
   return 'mlx';
 }
 
-/**
- * profile から overlay ModelsConfig を組み立てる
- */
-function buildModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
-  const overlay: ModelsConfig = {};
+function createAIService(profile: DialogProfile): AIService {
   const mc = profile.modelsConfig;
+  const overlay: ModelsConfig = {};
 
   if (mc?.models) overlay.models = mc.models;
-  if (mc?.drivers) overlay.drivers = mc.drivers;
-  if (profile.drivers) {
-    overlay.drivers = { ...(overlay.drivers ?? {}), ...profile.drivers };
-  }
+  const drivers = { ...mc?.drivers, ...profile.drivers };
+  if (Object.keys(drivers).length > 0) overlay.drivers = drivers;
 
-  if (Object.keys(overlay).length === 0) {
-    return undefined;
-  }
-  return overlay;
+  return AIService.fromMergedConfig(
+    BUNDLED_MODELS_CONFIG,
+    Object.keys(overlay).length > 0 ? overlay : undefined,
+    {
+      mode: mc?.mode ?? 'merge',
+      defaultOptions: profile.options,
+    },
+  );
 }
 
-/**
- * bundled + user + profile から ModelsConfig を解決する
- */
-export function resolveProfileModelsConfig(profile: DialogProfile): ModelsConfig {
-  const mode = profile.modelsConfig?.mode ?? 'merge';
-
-  return resolveModelsConfig({
-    base: BUNDLED_MODELS_CONFIG,
-    overlay: buildModelsOverlay(profile),
-    source: 'merge',
-    mode,
-  });
-}
-
-/**
- * Profile と models 設定から使用する ModelSpec を解決する（テスト・デバッグ用）
- */
-export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
-  const resolvedModels = resolveProfileModelsConfig(profile);
-
+function resolveModelSpec(profile: DialogProfile, models: ModelsConfig): ModelSpec {
   const selection = resolveInferenceSelection(profile);
-  const driverOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
+  const mlxOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
 
-  const resolveProvider = (fallback: DriverProvider): DriverProvider =>
-    selection.provider ?? fallback;
-
-  const attachDriverOptions = (spec: ModelSpec): ModelSpec => ({
+  const finalize = (spec: ModelSpec): ModelSpec => ({
     ...spec,
-    driverOptions: driverOptions ?? spec.driverOptions,
+    provider: selection.provider ?? spec.provider,
+    driverOptions: mlxOptions ?? spec.driverOptions,
   });
 
-  const modelRef = profile.workflow?.models?.default;
-  if (modelRef) {
-    const spec = resolveModelReference(modelRef, resolvedModels);
-    if (spec) {
-      return attachDriverOptions({
-        ...spec,
-        provider: resolveProvider(spec.provider),
-      });
+  const workflowDefault = profile.workflow?.models?.default;
+  if (workflowDefault) {
+    const spec = resolveModelReference(workflowDefault, models);
+    if (spec) return finalize(spec);
+    if (workflowDefault.ref) {
+      throw new Error(`Unknown model ref '${workflowDefault.ref}' in models configuration`);
     }
-    if (modelRef.ref) {
-      throw new Error(
-        `Unknown model ref '${modelRef.ref}' in models configuration`,
-      );
-    }
-    if (modelRef.provider && modelRef.model) {
-      return attachDriverOptions({
-        model: modelRef.model,
-        provider: resolveProvider(modelRef.provider as DriverProvider),
-        capabilities: [],
-      });
-    }
-    throw new Error(
-      'workflow.models.default is incomplete: specify ref or provider+model',
-    );
+    throw new Error('workflow.models.default is incomplete: specify ref or provider+model');
   }
 
   if (profile.model) {
-    const spec = resolveModelName(profile.model, resolvedModels, inferProvider);
-    return attachDriverOptions({
-      ...spec,
-      provider: resolveProvider(spec.provider),
-    });
+    return finalize(resolveModelName(profile.model, models, inferProvider));
   }
 
-  const defaultFromConfig = resolveDefaultModelFromConfig(resolvedModels);
-  if (!defaultFromConfig) {
-    throw new Error('No model configured: specify -m, profile.model, workflow.models.default, or models.default');
+  const fallback = resolveDefaultModelFromConfig(models);
+  if (!fallback) {
+    throw new Error(
+      'No model configured: specify -m, profile.model, workflow.models.default, or models.default',
+    );
   }
-
-  return attachDriverOptions({
-    ...defaultFromConfig,
-    provider: resolveProvider(defaultFromConfig.provider),
-  });
+  return finalize(fallback);
 }
 
-/**
- * Create AIService from profile configuration
- */
-export function createAIService(profile: DialogProfile): AIService {
-  const resolvedModels = resolveProfileModelsConfig(profile);
-
-  return AIService.fromModelsConfig({
-    source: 'overlay',
-    overlay: resolvedModels,
-    defaultOptions: profile.options,
-  });
+/** テスト・デバッグ用 */
+export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
+  const ai = createAIService(profile);
+  return resolveModelSpec(profile, ai.modelsConfig);
 }
 
-/**
- * Create driver from profile configuration
- */
 export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
   const ai = createAIService(profile);
-  const spec = resolveProfileModelSpec(profile);
-  return ai.createDriver(spec);
+  return ai.createDriver(resolveModelSpec(profile, ai.modelsConfig));
 }
 
-/**
- * Build chat context from profile and chat log
- */
 function buildChatContext(
   chatModule: PromptModule<ChatContext & MaterialContext>,
   chatLog: ChatLog,
@@ -220,7 +144,7 @@ function buildChatContext(
       if (m.images && m.images.length > 0) {
         const attachments: Attachment[] = [
           { type: 'text', text: m.content },
-          ...m.images.map(p => ({ type: 'image_url' as const, image_url: { url: p } }))
+          ...m.images.map(p => ({ type: 'image_url' as const, image_url: { url: p } })),
         ];
         return { role: m.role, content: attachments };
       }
@@ -232,9 +156,6 @@ function buildChatContext(
   return context;
 }
 
-/**
- * Execute direct mode (streamQuery)
- */
 async function executeDirect(
   driver: AIDriver,
   chatModule: PromptModule<ChatContext & MaterialContext>,
@@ -264,9 +185,6 @@ async function executeDirect(
   return result.content;
 }
 
-/**
- * Execute default mode (defaultProcess)
- */
 async function executeDefault(
   driver: AIDriver,
   chatModule: PromptModule<ChatContext & MaterialContext>,
@@ -284,9 +202,6 @@ async function executeDefault(
   return result.output;
 }
 
-/**
- * Execute agentic mode (agenticProcess)
- */
 async function executeAgentic(
   driver: AIDriver,
   chatModule: PromptModule<ChatContext & MaterialContext>,
@@ -306,9 +221,6 @@ async function executeAgentic(
   return result.output;
 }
 
-/**
- * Perform AI chat
- */
 export async function performAIChat(
   profile: DialogProfile,
   chatLog: ChatLog,
@@ -356,9 +268,6 @@ export async function performAIChat(
   }
 }
 
-/**
- * Close driver connection
- */
 export async function closeDriver(driver: AIDriver): Promise<void> {
   if (driver.close) {
     await driver.close();
