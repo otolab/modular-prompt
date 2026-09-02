@@ -154,12 +154,21 @@ logPath: "./chat.log.json"
 
 モデルはデフォルトプロファイルに固定せず、次の順序で解決されます。
 
-1. `workflow.models.default` の `ref` / `runtime` / `provider` + `model`
-2. プロファイルまたは CLI の `model`（`--model`）
-3. `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）の `defaults.mlx-lm`
-4. コード側のフォールバック `LiquidAI/LFM2.5-1.2B-JP-MLX-4bit`
+1. CLI `--model`（`-m`）— 最優先の実行時 override
+2. プロファイルの `model`（alias または生の model 名）
+3. `workflow.models.default`（`ref` または `provider` + `model`）
+4. マージ済み `models.yaml` の `models.default` alias（同梱設定 → ユーザー設定 → プロファイル overlay の順でマージ）
 
-プロファイルの `modelsConfig` はユーザーの `models.yaml` への明示的な overlay です。`mode: merge`（既定）では overlay が優先され、`workflow.models.default.ref` で alias を解決できます。`module` はチャット基盤の PromptModule と合成されるため、基盤側の日本語応答指示も含まれます。
+### models.yaml との統合
+
+simple-chat は **デフォルトで `merge` モード**です。`~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）の alias 定義をマージして利用します。同梱の `BUNDLED_MODELS_CONFIG` がベースとなり、ユーザー yaml で alias を追加・上書きできます。
+
+- **`modelsConfig.mode: merge`**（既定）— ユーザー yaml をマージ。マシン共通の alias を共有しつつ、プロファイル overlay で上書き可能
+- **`modelsConfig.mode: override`** — ユーザー yaml を無視し、同梱設定 + プロファイル overlay のみ使用
+
+プロファイルの `modelsConfig` は上記マージへの明示的な overlay です。`workflow.models.default.ref` で alias を参照できます。
+
+`module` はチャット基盤の PromptModule と合成されるため、基盤側の日本語応答指示も含まれます。
 
 ### プロファイルの活用例
 

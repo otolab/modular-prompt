@@ -12,7 +12,6 @@ import {
   type ModelSpec,
   type ModelsConfig,
   AIService,
-  resolveModelsConfig,
   resolveModelReference,
   resolveModelName,
   resolveDefaultModelFromConfig,
@@ -87,26 +86,19 @@ function profileModelsOverlay(profile: DialogProfile): ModelsConfig | undefined 
   return Object.keys(overlay).length > 0 ? overlay : undefined;
 }
 
-/** bundled + user + profile から ModelsConfig を解決する */
-export function resolveMergedModels(profile: DialogProfile): ModelsConfig {
+function createAIService(profile: DialogProfile): AIService {
   const mc = profile.modelsConfig;
 
-  return resolveModelsConfig({
-    base: BUNDLED_MODELS_CONFIG,
-    overlay: profileModelsOverlay(profile),
-    mode: mc?.mode ?? 'merge',
-  });
+  return AIService.fromMergedConfig(
+    BUNDLED_MODELS_CONFIG,
+    profileModelsOverlay(profile),
+    { defaultOptions: profile.options, mode: mc?.mode ?? 'merge' },
+  );
 }
 
-function createAIService(
-  models: ModelsConfig,
-  defaultOptions?: DialogProfile['options'],
-): AIService {
-  return AIService.fromModelsConfig({
-    source: 'overlay',
-    overlay: models,
-    defaultOptions,
-  });
+/** bundled + user + profile から ModelsConfig を解決する */
+export function resolveMergedModels(profile: DialogProfile): ModelsConfig {
+  return createAIService(profile).modelsConfig;
 }
 
 /**
@@ -165,9 +157,8 @@ export async function createDriver(
   profile: DialogProfile,
   overrides?: ModelOverrides,
 ): Promise<AIDriver> {
-  const models = resolveMergedModels(profile);
-  const spec = resolveModelSpec(profile, models, overrides);
-  const ai = createAIService(models, profile.options);
+  const ai = createAIService(profile);
+  const spec = resolveModelSpec(profile, ai.modelsConfig, overrides);
   return ai.createDriver(spec);
 }
 
