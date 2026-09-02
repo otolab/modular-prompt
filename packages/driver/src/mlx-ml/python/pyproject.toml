@@ -7,14 +7,20 @@ dependencies = [
     "flex==6.14.1",
     "hf-xet==1.2.0",
     "jinja2==3.1.6",
-    "mlx>=0.31.2; sys_platform == 'darwin'",
+    "mlx>=0.32.2; sys_platform == 'darwin'",
     "mlx-lm==0.31.3; sys_platform == 'darwin'",
     "mlx-optiq>=0.4.4; sys_platform == 'darwin'",
-    "mlx-vlm==0.6.4; sys_platform == 'darwin'",
+    "mlx-vlm==0.6.17; sys_platform == 'darwin'",
     "tokenizers==0.22.2",
     "torch==2.9.1",
     "torchvision==0.24.1",
-    "transformers>=5.5.0",
+    "transformers>=5.14.0",
+]
+
+[tool.uv]
+# mlx-optiq は transformers<5.13 を要求するが、mlx-vlm>=0.6.5 は 5.14+ が必要
+override-dependencies = [
+    "transformers>=5.14.0",
 ]
 
 [dependency-groups]
