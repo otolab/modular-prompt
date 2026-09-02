@@ -51,7 +51,6 @@ export function mergeModelsConfig(
 ): ModelsConfig {
   const merged: ModelsConfig = {};
 
-  merged.defaults = shallowMergeRecords(base?.defaults, overlay?.defaults);
   merged.drivers = shallowMergeRecords(base?.drivers, overlay?.drivers);
   merged.defaultOptions = shallowMergeRecords(
     base?.defaultOptions,
@@ -61,11 +60,7 @@ export function mergeModelsConfig(
   const baseModels = base?.models;
   const overlayModels = overlay?.models;
 
-  if (mode === 'override' && overlayModels) {
-    merged.models = { ...overlayModels };
-  } else {
-    merged.models = mergeModelsSection(baseModels, overlayModels, 'merge');
-  }
+  merged.models = mergeModelsSection(baseModels, overlayModels, mode);
 
   return merged;
 }
@@ -78,16 +73,29 @@ export function loadUserModelsConfig(): ModelsConfig {
 }
 
 /**
- * ユーザーデフォルトと利用側 overlay を解決する
+ * base / user / overlay を解決する
+ *
+ * マージ優先（下ほど高）: base → user（source=merge のとき）→ overlay
  */
 export function resolveModelsConfig(options?: ModelsConfigOptions): ModelsConfig {
-  const userConfig = loadUserModelsConfig();
-
-  if (!options?.overlay) {
-    return userConfig;
+  if (!options) {
+    return loadUserModelsConfig();
   }
 
-  return mergeModelsConfig(userConfig, options.overlay, options.mode ?? 'merge');
+  const source = options.source ?? 'merge';
+  const mode = options.mode ?? 'merge';
+
+  let config: ModelsConfig = options.base ? { ...options.base } : {};
+
+  if (source === 'merge') {
+    config = mergeModelsConfig(config, loadUserModelsConfig(), mode);
+  }
+
+  if (options.overlay) {
+    config = mergeModelsConfig(config, options.overlay, mode);
+  }
+
+  return config;
 }
 
 /**
@@ -147,6 +155,48 @@ export function resolveModelAlias(
 }
 
 /**
+ * モデル名を alias または生の model 名として解決する
+ */
+export function resolveModelName(
+  name: string,
+  config: ModelsConfig,
+  inferProvider: (model: string) => DriverProvider
+): ModelSpec {
+  const byAlias = resolveModelAlias(name, config);
+  if (byAlias) {
+    return byAlias;
+  }
+
+  return {
+    model: name,
+    provider: inferProvider(name),
+    capabilities: [],
+  };
+}
+
+/**
+ * merged models からデフォルト ModelSpec を導出する
+ *
+ * 1. alias `default` があればそれを使用
+ * 2. なければ models の先頭エントリ（best-effort）
+ */
+export function resolveDefaultModelFromConfig(
+  config: ModelsConfig
+): ModelSpec | null {
+  if (config.models?.default) {
+    return entryToModelSpec(config.models.default);
+  }
+
+  const entries = Object.entries(config.models ?? {});
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const [, first] = entries[0];
+  return entryToModelSpec(first);
+}
+
+/**
  * ModelReferenceInput を ModelSpec に解決する
  */
 export function resolveModelReference(
@@ -158,7 +208,6 @@ export function resolveModelReference(
     if (!spec) {
       return null;
     }
-    // inline provider/model で上書き可能
     if (ref.provider) {
       spec.provider = ref.provider as DriverProvider;
     }
@@ -173,50 +222,10 @@ export function resolveModelReference(
       model: ref.model,
       provider: ref.provider as DriverProvider,
       capabilities: [],
-      metadata: ref.runtime ? { runtime: ref.runtime } : undefined,
-    };
-  }
-
-  if (ref.runtime && config.defaults?.[ref.runtime]) {
-    return {
-      model: config.defaults[ref.runtime],
-      provider: inferProviderFromRuntime(ref.runtime),
-      capabilities: [],
-      metadata: { runtime: ref.runtime },
     };
   }
 
   return null;
-}
-
-/**
- * defaults から runtime のデフォルトモデルを解決する
- */
-export function resolveDefaultModel(
-  runtime: string,
-  config: ModelsConfig
-): ModelSpec | null {
-  const model = config.defaults?.[runtime];
-  if (!model) {
-    return null;
-  }
-
-  return {
-    model,
-    provider: inferProviderFromRuntime(runtime),
-    capabilities: [],
-    metadata: { runtime },
-  };
-}
-
-function inferProviderFromRuntime(runtime: string): DriverProvider {
-  if (runtime.startsWith('mlx')) {
-    return 'mlx';
-  }
-  if (runtime.startsWith('pytorch')) {
-    return 'pytorch';
-  }
-  return 'mlx';
 }
 
 /**

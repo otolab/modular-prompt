@@ -2,17 +2,24 @@
  * Simple chat application types
  */
 
-import type { ApplicationConfig, ModelsConfig, ModelsMergeMode } from '@modular-prompt/driver';
+import type { ApplicationConfig, DriverProvider, ModelsConfig, ModelsMergeMode } from '@modular-prompt/driver';
 
 /** Workflow mode */
 export type WorkflowMode = 'direct' | 'default' | 'agentic';
+
+/** CLI 等の実行時 override（profile を書き換えずに model 解決へ渡す） */
+export interface ModelOverrides {
+  /** CLI `-m`（model 解決で最優先） */
+  model?: string;
+  provider?: DriverProvider;
+  backend?: string;
+  textOnly?: boolean;
+}
 
 /** Model reference in workflow */
 export interface ModelReference {
   /** models.yaml の alias（`provider`+`model` の代わりに使用可） */
   ref?: string;
-  /** runtime profile 名（defaults から解決） */
-  runtime?: string;
   provider?: string;
   model?: string;
   /** MLX 内の実行モード（auto / lm / vlm / optiq） */
@@ -20,7 +27,7 @@ export interface ModelReference {
 }
 
 export interface DialogProfile {
-  /** Model name to use (CLI -m override) */
+  /** profile で指定する model（alias または生 model 名） */
   model?: string;
   /** 推論プロバイダー（CLI --provider / profile で指定） */
   provider?: string;
@@ -53,14 +60,11 @@ export interface DialogProfile {
     /** Cache strategy: true=read/write, false=disabled, 'read-only'=use existing only */
     cache?: boolean | 'read-only';
   };
-  /** Driver provider configurations */
+  /** Driver provider configurations（modelsConfig.drivers と同義・後方互換） */
   drivers?: ApplicationConfig['drivers'];
-  /** ~/.modular-prompt/models.yaml との統合（overlay は profile 内で明示定義） */
+  /** profile 内の models / drivers overlay（user models.yaml と merge） */
   modelsConfig?: {
-    /** models セクションのマージモード（デフォルト: merge） */
     mode?: ModelsMergeMode;
-    /** overlay: defaults / models / drivers */
-    defaults?: ModelsConfig['defaults'];
     models?: ModelsConfig['models'];
     drivers?: ModelsConfig['drivers'];
   };

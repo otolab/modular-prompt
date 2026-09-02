@@ -20,11 +20,12 @@ export {
   performAIChat,
   closeDriver,
 } from './ai-chat.js';
-export type { ChatContext } from './ai-chat.js';
+export type { ChatContext, AIChatRunOptions } from './ai-chat.js';
 export { loadResourceFiles } from './resource-files.js';
 export type {
   DialogProfile,
   ChatLog,
   ChatLogEntry,
   SimpleChatOptions,
+  ModelOverrides,
 } from './types.js';

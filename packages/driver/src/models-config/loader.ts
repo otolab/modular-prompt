@@ -6,6 +6,22 @@ import { existsSync, readFileSync } from 'fs';
 import yaml from 'js-yaml';
 import type { ModelSpecEntry, ModelsConfig } from './types.js';
 
+let warnedDeprecatedDefaults = false;
+
+function warnDeprecatedDefaults(): void {
+  if (warnedDeprecatedDefaults) {
+    return;
+  }
+  warnedDeprecatedDefaults = true;
+  const message =
+    'models.yaml の `defaults` セクションは非推奨です。`models.default` alias でデフォルトモデルを指定してください。';
+  if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+    process.emitWarning(message, { code: 'MODULAR_PROMPT_DEPRECATED_DEFAULTS' });
+  } else {
+    console.warn(message);
+  }
+}
+
 /**
  * YAML ファイルを読み込んで ModelsConfig に変換する。
  * ファイルが存在しない場合は null。
@@ -32,7 +48,7 @@ export function normalizeModelsConfig(raw: Record<string, unknown>): ModelsConfi
   const config: ModelsConfig = {};
 
   if (raw.defaults && typeof raw.defaults === 'object') {
-    config.defaults = raw.defaults as Record<string, string>;
+    warnDeprecatedDefaults();
   }
 
   if (raw.drivers && typeof raw.drivers === 'object') {

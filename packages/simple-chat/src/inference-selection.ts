@@ -3,7 +3,7 @@
  */
 
 import type { DriverProvider, MlxBackendMode, MlxModelDriverOptions } from '@modular-prompt/driver';
-import type { DialogProfile } from './types.js';
+import type { DialogProfile, ModelOverrides } from './types.js';
 
 const MLX_BACKEND_ALIASES: Record<string, MlxBackendMode> = {
   auto: 'auto',
@@ -15,6 +15,22 @@ const MLX_BACKEND_ALIASES: Record<string, MlxBackendMode> = {
   optiq: 'optiq',
   mlx_optiq: 'optiq',
 };
+
+let warnedDeprecatedTextOnly = false;
+
+function warnDeprecatedTextOnly(): void {
+  if (warnedDeprecatedTextOnly) {
+    return;
+  }
+  warnedDeprecatedTextOnly = true;
+  const message =
+    'profile.textOnly / --text-only は非推奨です。代わりに backend: lm を指定してください。';
+  if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+    process.emitWarning(message, { code: 'SIMPLE_CHAT_DEPRECATED_TEXT_ONLY' });
+  } else {
+    console.warn(message);
+  }
+}
 
 /** MLX backend 文字列を正規化して検証する */
 export function parseMlxBackend(value: string): MlxBackendMode {
@@ -49,7 +65,13 @@ export function parseProvider(value: string): DriverProvider {
   return normalized;
 }
 
-function resolveMlxBackend(profile: DialogProfile): MlxBackendMode | undefined {
+function resolveMlxBackend(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): MlxBackendMode | undefined {
+  if (overrides?.backend) {
+    return parseMlxBackend(overrides.backend);
+  }
   if (profile.backend) {
     return parseMlxBackend(profile.backend);
   }
@@ -57,52 +79,52 @@ function resolveMlxBackend(profile: DialogProfile): MlxBackendMode | undefined {
   if (modelBackend) {
     return parseMlxBackend(modelBackend);
   }
-  if (profile.textOnly) {
+  if (overrides?.textOnly || profile.textOnly) {
+    warnDeprecatedTextOnly();
     return 'lm';
   }
   return undefined;
 }
 
-function resolveExplicitProvider(profile: DialogProfile): DriverProvider | undefined {
+function resolveExplicitProvider(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): DriverProvider | undefined {
+  if (overrides?.provider) {
+    return overrides.provider;
+  }
   if (profile.provider) {
     return parseProvider(profile.provider);
   }
   return undefined;
 }
 
-/** profile から provider と MLX backend を決定する */
-export function resolveInferenceSelection(profile: DialogProfile): {
+/** profile と override から provider と MLX backend を決定する */
+export function resolveInferenceSelection(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): {
   provider?: DriverProvider;
   mlxBackend?: MlxBackendMode;
 } {
-  const mlxBackend = resolveMlxBackend(profile);
-  const provider = resolveExplicitProvider(profile);
-
-  if (provider || mlxBackend) {
-    return {
-      provider,
-      mlxBackend: mlxBackend ?? 'auto',
-    };
-  }
-
-  const workflowProvider = profile.workflow?.models?.default?.provider;
-  if (workflowProvider === 'pytorch') {
-    return { provider: 'pytorch' };
-  }
-
-  return { mlxBackend: 'auto' };
+  return {
+    provider: resolveExplicitProvider(profile, overrides),
+    mlxBackend: resolveMlxBackend(profile, overrides),
+  };
 }
 
 /** createDriver 用の MLX driverOptions を組み立てる */
 export function buildMlxDriverOptions(
   profile: DialogProfile,
   mlxBackend?: MlxBackendMode,
+  overrides?: ModelOverrides,
 ): MlxModelDriverOptions | undefined {
   const opts: MlxModelDriverOptions = {};
 
   if (mlxBackend && mlxBackend !== 'auto') {
     opts.backend = mlxBackend;
-  } else if (profile.textOnly) {
+  } else if (overrides?.textOnly || profile.textOnly) {
+    warnDeprecatedTextOnly();
     opts.backend = 'lm';
   }
 

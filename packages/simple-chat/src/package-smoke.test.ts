@@ -23,6 +23,7 @@ afterEach(() => {
 
 describe('npm pack smoke test', () => {
   it('runs the packed CLI without default-profile.yaml', () => {
+    // npm pack + tar extract は CI 環境で 5s を超えることがある
     const temporaryDirectory = mkdtempSync(
       join(tmpdir(), 'modular-prompt-simple-chat-pack-'),
     );
@@ -93,5 +94,5 @@ describe('npm pack smoke test', () => {
       { cwd: packedPackageRoot, encoding: 'utf8' },
     );
     expect(helpOutput).toContain('Usage: simple-chat');
-  });
+  }, 15_000);
 });
