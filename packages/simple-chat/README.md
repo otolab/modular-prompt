@@ -72,7 +72,12 @@ echo "長い質問文..." | simple-chat --stdin
 # オプションの組み合わせ
 simple-chat -p custom.yaml -l session.json --temperature 0.8 "創造的な回答をお願いします"
 
-# VLMモデルをtext-onlyモードで使用
+# モデル指定を上書き
+simple-chat -m local-chat "こんにちは"
+simple-chat --provider pytorch -m my-model "こんにちは"
+simple-chat --backend lm -m mlx-community/Qwen2-VL-2B-Instruct-4bit "こんにちは"
+
+# VLMモデルをtext-onlyモードで使用（--text-only は非推奨、--backend lm を推奨）
 simple-chat --model mlx-community/Qwen2-VL-2B-Instruct-4bit --text-only "こんにちは"
 
 # VLMモデルで画像入力（Image-Text-to-Text）
@@ -85,10 +90,69 @@ simple-chat --model mlx-community/Qwen2-VL-2B-Instruct-4bit -i img1.jpg -i img2.
 ### ライブラリとして使用
 
 ```typescript
-import { chatPromptModule, performAIChat } from '@modular-prompt/simple-chat';
+import {
+  loadDefaultProfile,
+  loadDialogProfile,
+  createDriver,
+  performAIChat,
+  createChatLog,
+  addMessage,
+} from '@modular-prompt/simple-chat';
+
+const profile = await loadDialogProfile('./profile.yaml');
+const chatLog = createChatLog(profile);
+
+addMessage(chatLog, 'user', 'こんにちは');
+
+const { response } = await performAIChat(profile, chatLog, 'こんにちは', {
+  modelOverrides: { model: 'local-chat' },
+});
+
+// またはドライバーを直接作成
+const driver = await createDriver(profile, { model: 'local-chat' });
 ```
 
-## 対話プロファイル
+`performAIChat` の第4引数 `AIChatRunOptions` では `materials` / `modelOverrides` / `overrideDriver` を指定できます。CLI の `-m` / `--provider` / `--backend` は profile を書き換えず `modelOverrides` として渡されます。
+
+## モデル解決
+
+simple-chat は **model 先行**でモデルを選びます。provider / MLX backend は model 決定後に上書き可能です。
+
+### 優先順位
+
+| 順位 | ソース | 例 |
+|------|--------|-----|
+| 1 | CLI override | `-m`, `--provider`, `--backend` |
+| 2 | `profile.model` | alias または生の model 名 |
+| 3 | `workflow.models.default` | `ref: local-chat` または `provider` + `model` |
+| 4 | マージ済み `models.default` | 同梱 → user yaml → profile overlay |
+
+いずれも未指定の場合はエラーです（暗黙の runtime / defaults 解決はありません）。
+
+### models.yaml との統合
+
+マージ優先（下ほど高）: **同梱 `BUNDLED_MODELS_CONFIG`** → **`~/.modular-prompt/models.yaml`**（`MODULAR_PROMPT_HOME` で変更可）→ **profile `modelsConfig` overlay**
+
+デフォルトの同梱 model は `LiquidAI/LFM2.5-1.2B-JP-MLX-4bit`（`models.default` alias）です。
+
+simple-chat は **デフォルトで `merge` モード**です。マシン共通の alias 定義（`local-chat` 等）を user yaml で共有しつつ、プロファイル overlay で上書きできます。
+
+- **`modelsConfig.mode: merge`**（既定）— user yaml をマージ
+- **`modelsConfig.mode: override`** — user yaml を無視し、同梱 + profile overlay のみ
+
+> **#341 との方針**  
+> Issue #341 では user yaml の無視（`override` 固定）も検討されましたが、simple-chat では **マシン共通 alias の再利用**を優先し `merge` をデフォルトにしています。user yaml を使わない場合は profile で `modelsConfig.mode: override` を指定してください。
+
+### 内部構成（リファレンス実装）
+
+| 層 | 関数 | 責務 |
+|----|------|------|
+| マージ | `resolveMergedModels(profile)` | `AIService.fromMergedConfig` 経由で config 解決 |
+| 選択 | `resolveModelSpec(profile, models, overrides?)` | model 優先順位の適用（テスト向けに models 注入可） |
+| 生成 | `createAIService` → `createDriver` | `AIService.createDriver(spec)` でドライバー生成 |
+
+`resolveProfileModelSpec` は上記をまとめた統合 API（テスト・デバッグ用）です。
+
 
 対話プロファイルは、チャットの動作を制御するYAML形式の設定ファイルです。
 
@@ -152,23 +216,7 @@ logPath: "./chat.log.json"
 - **`options.maxTokens`**: 4000
 - **`options.topP`**: 0.95
 
-モデルはデフォルトプロファイルに固定せず、次の順序で解決されます。
-
-1. CLI `--model`（`-m`）— 最優先の実行時 override
-2. プロファイルの `model`（alias または生の model 名）
-3. `workflow.models.default`（`ref` または `provider` + `model`）
-4. マージ済み `models.yaml` の `models.default` alias（同梱設定 → ユーザー設定 → プロファイル overlay の順でマージ）
-
-### models.yaml との統合
-
-simple-chat は **デフォルトで `merge` モード**です。`~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）の alias 定義をマージして利用します。同梱の `BUNDLED_MODELS_CONFIG` がベースとなり、ユーザー yaml で alias を追加・上書きできます。
-
-- **`modelsConfig.mode: merge`**（既定）— ユーザー yaml をマージ。マシン共通の alias を共有しつつ、プロファイル overlay で上書き可能
-- **`modelsConfig.mode: override`** — ユーザー yaml を無視し、同梱設定 + プロファイル overlay のみ使用
-
-プロファイルの `modelsConfig` は上記マージへの明示的な overlay です。`workflow.models.default.ref` で alias を参照できます。
-
-`module` はチャット基盤の PromptModule と合成されるため、基盤側の日本語応答指示も含まれます。
+モデル解決の詳細は上記 [モデル解決](#モデル解決) を参照してください。`module` はチャット基盤の PromptModule と合成されるため、基盤側の日本語応答指示も含まれます。
 
 ### プロファイルの活用例
 
@@ -260,9 +308,9 @@ options:
 
 このサンプル実装では、Moduler Promptフレームワークの主要な機能を実際のアプリケーションで活用する方法を示しています：
 
-1. **静的なモジュール定義**: `chatPromptModule`は静的に定義されたテンプレート
-2. **モジュールの合成**: `@modular-prompt/process`の`withMaterials`モジュールとの合成
-3. **型安全なコンテキスト**: `ChatContext`による型定義
-4. **段階的なデータバインディング**: createContext → データ設定 → compile
+1. **モジュール合成**: `buildChatModule` が基盤モジュールと profile `module` / `withMaterials` を `merge`
+2. **AIService 経由のドライバー生成**: `createDriver` が `AIService.fromMergedConfig` + 明示 `ModelSpec` で生成
+3. **CLI override の分離**: `ModelOverrides` で profile を書き換えず model / provider / backend を上書き
+4. **型安全なコンテキスト**: `ChatContext` による型定義と `compile` によるプロンプト生成
 
 詳細は[プロンプトモジュール仕様書](../../docs/PROMPT_MODULE_SPEC.md)の実装例セクションを参照してください。

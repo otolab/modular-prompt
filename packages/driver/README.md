@@ -97,29 +97,33 @@ models:
 
 ```typescript
 import {
-  resolveModelsConfig,
   resolveModelName,
   resolveDefaultModelFromConfig,
   AIService,
 } from '@modular-prompt/driver';
 
-const config = resolveModelsConfig({
-  base: { models: { default: { provider: 'mlx', model: 'app/default' } } },
-  overlay: {
-    models: {
-      'local-chat': { provider: 'mlx', model: 'my-app/local' },
-    },
+const bundled = {
+  models: {
+    default: { provider: 'mlx', model: 'app/default' },
   },
-  source: 'merge', // user yaml も取り込む（デフォルト）
-});
+} as const;
 
-const ai = AIService.fromModelsConfig({ overlay: config, source: 'overlay' });
-const spec = resolveModelName('local-chat', config, () => 'mlx');
-const fallback = resolveDefaultModelFromConfig(config);
+const profileOverlay = {
+  models: {
+    'local-chat': { provider: 'mlx', model: 'my-app/local' },
+  },
+};
+
+const ai = AIService.fromMergedConfig(bundled, profileOverlay);
+const models = ai.modelsConfig;
+
+const spec = resolveModelName('local-chat', models, () => 'mlx');
+const fallback = resolveDefaultModelFromConfig(models);
+const driver = await ai.createDriver(spec);
 ```
 
-- `source: 'merge'`（デフォルト）— user yaml を読み込み base / overlay とマージ
-- `source: 'overlay'` — user yaml を無視し、渡した config のみ使用
+- `AIService.fromMergedConfig(base, overlay)` — base + overlay をマージし、デフォルトで user yaml も取り込む
+- `AIService.fromModelsConfig({ source })` — `source: 'merge'`（デフォルト）で user yaml を読み込み、`source: 'overlay'` で無視
 - `mode: 'merge' | 'override'` — models セクションの浅いマージ / 置換
 - デフォルト model は `models.default` alias、なければ models の先頭エントリから導出
 - `defaults` / `runtime` による暗黙解決は廃止（YAML に残っていても警告のみ）
