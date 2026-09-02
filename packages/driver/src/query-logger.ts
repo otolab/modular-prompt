@@ -60,7 +60,7 @@ export class QueryLogger {
       since: this.startTime,
       filterByContext: true,
     });
-    const errors = logEntries.filter(e => e.level === 'error');
+    const errors = logEntries.filter((e: LogEntry) => e.level === 'error');
 
     return {
       logEntries: logEntries.length > 0 ? logEntries : undefined,
