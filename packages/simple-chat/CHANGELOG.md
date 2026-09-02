@@ -1,5 +1,71 @@
 # @modular-prompt/simple-chat
 
+## 0.5.0
+
+### Minor Changes
+
+- 30ba3fc: refactor: models.yaml の defaults/runtime 解決を廃止し model 先行のモデル選択に統一
+
+  **破壊的変更（driver）**
+
+  - `ModelsConfig.defaults` と `resolveDefaultModel()` を削除
+  - `resolveModelReference({ runtime })` 経路を削除
+  - `resolveDefaultModelFromConfig()` / `resolveModelName()` を追加（`models.default` alias または先頭エントリから導出）
+  - `ModelsConfigSource`（`merge` | `overlay`）を追加。`overlay` は user `models.yaml` を無視
+  - `AIService.fromModelsConfig()` / `fromOverlay()` / `fromMergedConfig()` ファクトリを追加
+
+  **simple-chat**
+
+  - `AIService` 経由でドライバ作成。bundled models + user + profile を merge
+  - `-m` / `profile.model` は alias 解決後に生 model 名として使用
+  - `textOnly` / `--text-only` に deprecated warning
+  - `inference-selection` の `mlxBackend: 'auto'` 暗黙付与を廃止
+
+  Closes #341
+
+- 235af29: simple-chat に `--provider` / `--backend` を追加。ModelSpec にも `backend` フィールドを追加し、MLX 実行モード（auto/lm/vlm/optiq）を provider と分離して統一。
+- be002b8: feat: ユーザーレベル `models.yaml` と overlay によるモデル解決（利用者契約の仕様変更）
+
+  `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` 可）からユーザ定義 models を読み込み、利用側が投入する overlay と **overlay > user** の優先順位で解決する。プロジェクト配下の暗黙探索は行わない。
+
+  **利用側ツール向け（仕様上の注意）**
+
+  - `resolveModelsConfig()` / `loadUserModelsConfig()` 利用時、overlay を渡さなくても **ユーザ設定が解決結果に混入しうる**
+  - 既定の `mode: 'merge'` では user models がベースに残る。ツール独自定義のみにしたい場合は `mode: 'override'` 等の設計判断が必要
+  - 利用者向けに「ホームディレクトリの `models.yaml` が影響する」ことを明記すること
+
+  **driver**
+
+  - `resolveModelsConfig` / `loadUserModelsConfig` / `mergeModelsConfig` / `resolveModelReference` / `registerModelsFromConfig` を追加
+  - `merge`（浅いマージ）と `override`（models の置換）をサポート
+
+  **simple-chat**
+
+  - profile の `modelsConfig`（inline `models` / `defaults` / `drivers`）と `workflow.models.default.ref` をサポート
+
+  Closes #304
+
+### Patch Changes
+
+- 569fc1c: fix: デフォルトプロファイルをコード定義に移し、公開 tarball から YAML 依存を除去
+- 7b1b940: MLX 初回セットアップ手順を README に追記。`RuntimeNotReadyError` 時の actionable メッセージ表示と `simple-chat --check` でランタイム状態確認を追加。
+- Updated dependencies [c3f3b67]
+- Updated dependencies [3569a1d]
+- Updated dependencies [f0bf773]
+- Updated dependencies [48292f3]
+- Updated dependencies [d5f532d]
+- Updated dependencies [2f886db]
+- Updated dependencies [f1288ab]
+- Updated dependencies [30c4143]
+- Updated dependencies [ab4f2d0]
+- Updated dependencies [30ba3fc]
+- Updated dependencies [e0e6611]
+- Updated dependencies [c20c6bc]
+- Updated dependencies [235af29]
+- Updated dependencies [be002b8]
+  - @modular-prompt/driver@0.15.0
+  - @modular-prompt/process@0.5.8
+
 ## 0.4.6
 
 ### Patch Changes

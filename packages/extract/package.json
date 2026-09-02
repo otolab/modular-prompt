@@ -1,6 +1,6 @@
 {
   "name": "@modular-prompt/extract",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Document extraction session API for modular prompt framework",
   "type": "module",
   "main": "./dist/index.js",

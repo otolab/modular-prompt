@@ -1,5 +1,105 @@
 # @modular-prompt/driver
 
+## 0.15.0
+
+### Minor Changes
+
+- f0bf773: feat: Local Inference Protocol (LIP) 型定義を追加（Phase 1）
+
+  Closes #307
+
+- 48292f3: feat: LIP 通信層を InferenceProcessClient に抽出（Phase 2）
+
+  Closes #309
+
+- d5f532d: feat: LIP `generate` メソッドを追加し completion 経路を切替（Phase 3）
+
+  Closes #311
+
+- 2f886db: LIP Phase 4: `render` 分離と chat 暗黙整形の廃止
+
+  - Python `render` ハンドラ追加（`apply_chat_template` のみ）
+  - TS chat 経路を `render` + `generate` の 2 段に変更
+  - `generate_merged_prompt` を TS `generateMergedPrompt` に移行
+  - Python `chat` ハンドラ廃止、`generate` に KV キャッシュ・primer 対応を統合
+
+- f1288ab: LIP Phase 5: LocalInferenceDriver 抽出
+
+  - `local-inference/driver.ts` に共通 AIDriver 骨格を新設
+  - `MlxDriver` を MLX 固有設定の薄いラッパにリファクタ
+  - ストリーム META 処理を `stream-utils.ts` に分離
+
+- 30c4143: LIP Phase 6: PyTorch バックエンド（cpu-minimal runtime）
+
+  - `PyTorchDriver` / `PyTorchProcess` を追加（`LocalInferenceDriver` 上に実装）
+  - `setup-pytorch` で CPU 最小 venv を `~/.modular-prompt/runtimes/pytorch/` に作成
+  - Transformers LM バックエンド（`packages/driver/src/pytorch/python`）
+  - 手動 CUDA / 外部 venv のドキュメントを `docs/LOCAL_MODEL_SETUP.md` に追加
+
+- 30ba3fc: refactor: models.yaml の defaults/runtime 解決を廃止し model 先行のモデル選択に統一
+
+  **破壊的変更（driver）**
+
+  - `ModelsConfig.defaults` と `resolveDefaultModel()` を削除
+  - `resolveModelReference({ runtime })` 経路を削除
+  - `resolveDefaultModelFromConfig()` / `resolveModelName()` を追加（`models.default` alias または先頭エントリから導出）
+  - `ModelsConfigSource`（`merge` | `overlay`）を追加。`overlay` は user `models.yaml` を無視
+  - `AIService.fromModelsConfig()` / `fromOverlay()` / `fromMergedConfig()` ファクトリを追加
+
+  **simple-chat**
+
+  - `AIService` 経由でドライバ作成。bundled models + user + profile を merge
+  - `-m` / `profile.model` は alias 解決後に生 model 名として使用
+  - `textOnly` / `--text-only` に deprecated warning
+  - `inference-selection` の `mlxBackend: 'auto'` 暗黙付与を廃止
+
+  Closes #341
+
+- e0e6611: feat: MLX Python ランタイムを `~/.modular-prompt/` に分離し、postinstall 自動セットアップを廃止
+
+  Closes #303
+
+- 235af29: simple-chat に `--provider` / `--backend` を追加。ModelSpec にも `backend` フィールドを追加し、MLX 実行モード（auto/lm/vlm/optiq）を provider と分離して統一。
+- be002b8: feat: ユーザーレベル `models.yaml` と overlay によるモデル解決（利用者契約の仕様変更）
+
+  `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` 可）からユーザ定義 models を読み込み、利用側が投入する overlay と **overlay > user** の優先順位で解決する。プロジェクト配下の暗黙探索は行わない。
+
+  **利用側ツール向け（仕様上の注意）**
+
+  - `resolveModelsConfig()` / `loadUserModelsConfig()` 利用時、overlay を渡さなくても **ユーザ設定が解決結果に混入しうる**
+  - 既定の `mode: 'merge'` では user models がベースに残る。ツール独自定義のみにしたい場合は `mode: 'override'` 等の設計判断が必要
+  - 利用者向けに「ホームディレクトリの `models.yaml` が影響する」ことを明記すること
+
+  **driver**
+
+  - `resolveModelsConfig` / `loadUserModelsConfig` / `mergeModelsConfig` / `resolveModelReference` / `registerModelsFromConfig` を追加
+  - `merge`（浅いマージ）と `override`（models の置換）をサポート
+
+  **simple-chat**
+
+  - profile の `modelsConfig`（inline `models` / `defaults` / `drivers`）と `workflow.models.default.ref` をサポート
+
+  Closes #304
+
+### Patch Changes
+
+- c3f3b67: chore: mlx-vlm を 0.6.3 → 0.6.4 に更新（mlx-lm 0.31.3 は PyPI 最新のため据え置き）
+- 3569a1d: feat: ExtractSession に PromptCacheController 連携を追加（Phase 2）
+
+  `createExtractSession` がセッション単位で KV キャッシュを prepare / release し、毎回のクエリに `cacheHandle` を渡す。driver 側は `QueryOptions.cacheHandle` で外部 prepare を利用可能。
+
+  Closes #332
+
+- ab4f2d0: fix: MLX ドライバーの QueryOptions 処理を一本化し mode の Python 漏れを修正
+
+  `defaultOptions` を `Partial<MlxQueryOptions>` に統一。マージ後に `toMlxSamplingOptions` で
+  サンプリングパラメータのみ Python 層へ渡す。Closes #298
+
+- c20c6bc: runtime:status で PyTorch runtime の variant / torch バージョンを表示
+
+  - `RuntimeManifest` 型に `variant` / `torchVersion` を追加
+  - `collectInstalledPackages` が venv の Python を明示参照するよう修正
+
 ## 0.14.0
 
 ### Minor Changes
