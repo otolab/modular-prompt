@@ -15,6 +15,7 @@ import { convertMessages, convertToolDefinitions } from './mlx-message-utils.js'
 import { Logger } from '@modular-prompt/utils';
 
 const logger = new Logger({ prefix: 'MLX', context: 'cache' });
+const CACHE_FILE_EXTENSION = '.safetensors.zip';
 
 interface CacheIndexEntry {
   key: string;
@@ -474,7 +475,7 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private generateCachePath(cacheKey: string): string {
-    return join(this.cacheDir, `${cacheKey}.safetensors`);
+    return join(this.cacheDir, `${cacheKey}${CACHE_FILE_EXTENSION}`);
   }
 
   recordQuery(): void {

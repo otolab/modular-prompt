@@ -7,11 +7,27 @@ from typing import Any, Iterator
 
 from mlx_lm import load as mlx_lm_load
 from mlx_lm import stream_generate as mlx_lm_stream_generate
-from mlx_lm.models.cache import make_prompt_cache, save_prompt_cache, load_prompt_cache, trim_prompt_cache
+from mlx_lm.models.cache import (
+    make_prompt_cache,
+    save_prompt_cache as mlx_save_prompt_cache,
+    load_prompt_cache as mlx_load_prompt_cache,
+    trim_prompt_cache,
+)
 from mlx_lm.sample_utils import make_sampler
 
 from backends.base import ModelBackend
+from backends.cache_archive import load_prompt_cache_zip, save_prompt_cache_zip
 from utils.token_utils import is_eod_token
+
+
+def save_prompt_cache(file_name: str, cache: Any) -> None:
+    """Save a prompt cache as a compressed archive without an uncompressed copy."""
+    save_prompt_cache_zip(file_name, cache, mlx_save_prompt_cache)
+
+
+def load_prompt_cache(file_name: str) -> list:
+    """Load a prompt cache from its compressed safetensors archive."""
+    return load_prompt_cache_zip(file_name, mlx_load_prompt_cache)
 
 
 class MlxLmBackend(ModelBackend):
