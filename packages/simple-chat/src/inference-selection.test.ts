@@ -40,6 +40,15 @@ describe('resolveInferenceSelection', () => {
     });
   });
 
+  it('prefers override provider over profile', () => {
+    const profile: DialogProfile = {
+      provider: 'mlx',
+    };
+    expect(resolveInferenceSelection(profile, { provider: 'pytorch' })).toEqual({
+      provider: 'pytorch',
+    });
+  });
+
   it('uses workflow backend when profile backend is unset', () => {
     const profile: DialogProfile = {
       workflow: {

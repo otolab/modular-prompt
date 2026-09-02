@@ -3,7 +3,7 @@
  */
 
 import type { DriverProvider, MlxBackendMode, MlxModelDriverOptions } from '@modular-prompt/driver';
-import type { DialogProfile } from './types.js';
+import type { DialogProfile, ModelOverrides } from './types.js';
 
 const MLX_BACKEND_ALIASES: Record<string, MlxBackendMode> = {
   auto: 'auto',
@@ -65,7 +65,13 @@ export function parseProvider(value: string): DriverProvider {
   return normalized;
 }
 
-function resolveMlxBackend(profile: DialogProfile): MlxBackendMode | undefined {
+function resolveMlxBackend(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): MlxBackendMode | undefined {
+  if (overrides?.backend) {
+    return parseMlxBackend(overrides.backend);
+  }
   if (profile.backend) {
     return parseMlxBackend(profile.backend);
   }
@@ -73,31 +79,37 @@ function resolveMlxBackend(profile: DialogProfile): MlxBackendMode | undefined {
   if (modelBackend) {
     return parseMlxBackend(modelBackend);
   }
-  if (profile.textOnly) {
+  if (overrides?.textOnly || profile.textOnly) {
     warnDeprecatedTextOnly();
     return 'lm';
   }
   return undefined;
 }
 
-function resolveExplicitProvider(profile: DialogProfile): DriverProvider | undefined {
+function resolveExplicitProvider(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): DriverProvider | undefined {
+  if (overrides?.provider) {
+    return overrides.provider;
+  }
   if (profile.provider) {
     return parseProvider(profile.provider);
   }
   return undefined;
 }
 
-/** profile から provider と MLX backend を決定する */
-export function resolveInferenceSelection(profile: DialogProfile): {
+/** profile と override から provider と MLX backend を決定する */
+export function resolveInferenceSelection(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): {
   provider?: DriverProvider;
   mlxBackend?: MlxBackendMode;
 } {
-  const mlxBackend = resolveMlxBackend(profile);
-  const provider = resolveExplicitProvider(profile);
-
   return {
-    provider,
-    mlxBackend,
+    provider: resolveExplicitProvider(profile, overrides),
+    mlxBackend: resolveMlxBackend(profile, overrides),
   };
 }
 
@@ -105,12 +117,13 @@ export function resolveInferenceSelection(profile: DialogProfile): {
 export function buildMlxDriverOptions(
   profile: DialogProfile,
   mlxBackend?: MlxBackendMode,
+  overrides?: ModelOverrides,
 ): MlxModelDriverOptions | undefined {
   const opts: MlxModelDriverOptions = {};
 
   if (mlxBackend && mlxBackend !== 'auto') {
     opts.backend = mlxBackend;
-  } else if (profile.textOnly) {
+  } else if (overrides?.textOnly || profile.textOnly) {
     warnDeprecatedTextOnly();
     opts.backend = 'lm';
   }

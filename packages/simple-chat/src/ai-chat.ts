@@ -12,6 +12,7 @@ import {
   type ModelSpec,
   type ModelsConfig,
   AIService,
+  resolveModelsConfig,
   resolveModelReference,
   resolveModelName,
   resolveDefaultModelFromConfig,
@@ -23,7 +24,7 @@ import {
   resolveInferenceSelection,
 } from './inference-selection.js';
 import { BUNDLED_MODELS_CONFIG } from './default-models.js';
-import type { DialogProfile, ChatLog, WorkflowMode } from './types.js';
+import type { DialogProfile, ChatLog, WorkflowMode, ModelOverrides } from './types.js';
 import chalk from 'chalk';
 import { Spinner } from './spinner.js';
 import { logger as baseLogger } from './logger.js';
@@ -33,6 +34,13 @@ const logger = baseLogger.context('ai');
 export interface ChatContext {
   messages: Array<{ role: string; content: string | Attachment[] }>;
   userMessage: string;
+}
+
+/** performAIChat のオプション */
+export interface AIChatRunOptions {
+  materials?: MaterialContext['materials'];
+  modelOverrides?: ModelOverrides;
+  overrideDriver?: AIDriver;
 }
 
 const baseChatModule: PromptModule<ChatContext> = {
@@ -68,7 +76,7 @@ function inferProvider(model: string): DriverProvider {
   return 'mlx';
 }
 
-function createAIService(profile: DialogProfile): AIService {
+function profileModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
   const mc = profile.modelsConfig;
   const overlay: ModelsConfig = {};
 
@@ -76,25 +84,54 @@ function createAIService(profile: DialogProfile): AIService {
   const drivers = { ...mc?.drivers, ...profile.drivers };
   if (Object.keys(drivers).length > 0) overlay.drivers = drivers;
 
-  return AIService.fromMergedConfig(
-    BUNDLED_MODELS_CONFIG,
-    Object.keys(overlay).length > 0 ? overlay : undefined,
-    {
-      mode: mc?.mode ?? 'merge',
-      defaultOptions: profile.options,
-    },
-  );
+  return Object.keys(overlay).length > 0 ? overlay : undefined;
 }
 
-function resolveModelSpec(profile: DialogProfile, models: ModelsConfig): ModelSpec {
-  const selection = resolveInferenceSelection(profile);
-  const mlxOptions = buildMlxDriverOptions(profile, selection.mlxBackend);
+/** bundled + user + profile から ModelsConfig を解決する */
+export function resolveMergedModels(profile: DialogProfile): ModelsConfig {
+  const mc = profile.modelsConfig;
+
+  return resolveModelsConfig({
+    base: BUNDLED_MODELS_CONFIG,
+    overlay: profileModelsOverlay(profile),
+    mode: mc?.mode ?? 'merge',
+  });
+}
+
+function createAIService(
+  models: ModelsConfig,
+  defaultOptions?: DialogProfile['options'],
+): AIService {
+  return AIService.fromModelsConfig({
+    source: 'overlay',
+    overlay: models,
+    defaultOptions,
+  });
+}
+
+/**
+ * profile と merged models から使用する ModelSpec を解決する
+ *
+ * 優先順位: override.model → profile.model → workflow.models.default → models.default
+ */
+export function resolveModelSpec(
+  profile: DialogProfile,
+  models: ModelsConfig,
+  overrides?: ModelOverrides,
+): ModelSpec {
+  const selection = resolveInferenceSelection(profile, overrides);
+  const mlxOptions = buildMlxDriverOptions(profile, selection.mlxBackend, overrides);
 
   const finalize = (spec: ModelSpec): ModelSpec => ({
     ...spec,
     provider: selection.provider ?? spec.provider,
     driverOptions: mlxOptions ?? spec.driverOptions,
   });
+
+  const explicitModel = overrides?.model ?? profile.model;
+  if (explicitModel) {
+    return finalize(resolveModelName(explicitModel, models, inferProvider));
+  }
 
   const workflowDefault = profile.workflow?.models?.default;
   if (workflowDefault) {
@@ -106,10 +143,6 @@ function resolveModelSpec(profile: DialogProfile, models: ModelsConfig): ModelSp
     throw new Error('workflow.models.default is incomplete: specify ref or provider+model');
   }
 
-  if (profile.model) {
-    return finalize(resolveModelName(profile.model, models, inferProvider));
-  }
-
   const fallback = resolveDefaultModelFromConfig(models);
   if (!fallback) {
     throw new Error(
@@ -119,15 +152,23 @@ function resolveModelSpec(profile: DialogProfile, models: ModelsConfig): ModelSp
   return finalize(fallback);
 }
 
-/** テスト・デバッグ用 */
-export function resolveProfileModelSpec(profile: DialogProfile): ModelSpec {
-  const ai = createAIService(profile);
-  return resolveModelSpec(profile, ai.modelsConfig);
+/** merged models 込みで ModelSpec を解決する（統合テスト・デバッグ用） */
+export function resolveProfileModelSpec(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): ModelSpec {
+  const models = resolveMergedModels(profile);
+  return resolveModelSpec(profile, models, overrides);
 }
 
-export async function createDriver(profile: DialogProfile): Promise<AIDriver> {
-  const ai = createAIService(profile);
-  return ai.createDriver(resolveModelSpec(profile, ai.modelsConfig));
+export async function createDriver(
+  profile: DialogProfile,
+  overrides?: ModelOverrides,
+): Promise<AIDriver> {
+  const models = resolveMergedModels(profile);
+  const spec = resolveModelSpec(profile, models, overrides);
+  const ai = createAIService(models, profile.options);
+  return ai.createDriver(spec);
 }
 
 function buildChatContext(
@@ -225,13 +266,13 @@ export async function performAIChat(
   profile: DialogProfile,
   chatLog: ChatLog,
   userMessage: string,
-  materials?: MaterialContext['materials'],
-  overrideDriver?: AIDriver,
+  options?: AIChatRunOptions,
 ): Promise<{ response: string; driver: AIDriver }> {
   const spinner = new Spinner();
 
   spinner.start('Initializing AI driver...');
-  const driver = overrideDriver ?? await createDriver(profile);
+  const driver = options?.overrideDriver
+    ?? await createDriver(profile, options?.modelOverrides);
 
   try {
     spinner.update('Preparing context...');
@@ -244,13 +285,19 @@ export async function performAIChat(
 
     switch (mode) {
       case 'direct':
-        response = await executeDirect(driver, chatModule, chatLog, userMessage, profile.options, materials);
+        response = await executeDirect(
+          driver, chatModule, chatLog, userMessage, profile.options, options?.materials,
+        );
         break;
       case 'default':
-        response = await executeDefault(driver, chatModule, chatLog, userMessage, profile.options, materials);
+        response = await executeDefault(
+          driver, chatModule, chatLog, userMessage, profile.options, options?.materials,
+        );
         break;
       case 'agentic':
-        response = await executeAgentic(driver, chatModule, chatLog, userMessage, profile, materials);
+        response = await executeAgentic(
+          driver, chatModule, chatLog, userMessage, profile, options?.materials,
+        );
         break;
       default:
         throw new Error(`Unknown workflow mode: ${mode}`);

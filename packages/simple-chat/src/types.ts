@@ -2,10 +2,19 @@
  * Simple chat application types
  */
 
-import type { ApplicationConfig, ModelsConfig, ModelsMergeMode } from '@modular-prompt/driver';
+import type { ApplicationConfig, DriverProvider, ModelsConfig, ModelsMergeMode } from '@modular-prompt/driver';
 
 /** Workflow mode */
 export type WorkflowMode = 'direct' | 'default' | 'agentic';
+
+/** CLI 等の実行時 override（profile を書き換えずに model 解決へ渡す） */
+export interface ModelOverrides {
+  /** CLI `-m`（model 解決で最優先） */
+  model?: string;
+  provider?: DriverProvider;
+  backend?: string;
+  textOnly?: boolean;
+}
 
 /** Model reference in workflow */
 export interface ModelReference {
@@ -18,7 +27,7 @@ export interface ModelReference {
 }
 
 export interface DialogProfile {
-  /** Model name to use (CLI -m override) */
+  /** profile で指定する model（alias または生 model 名） */
   model?: string;
   /** 推論プロバイダー（CLI --provider / profile で指定） */
   provider?: string;

@@ -44,8 +44,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'こんにちは、今日はいい天気ですね。',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       expect(result.response).toBe('こんにちは！今日はいい天気ですね。どのようなお手伝いができますか？');
@@ -83,8 +82,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'TypeScriptとは何ですか？',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       // プロンプトの構造を確認
@@ -125,8 +123,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'テストメッセージです',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       // EchoDriverはプロンプトをそのまま返すので、プロンプト構造を確認できる
@@ -160,8 +157,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'こんにちは',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       // メッセージ形式のJSONが返される
@@ -204,8 +200,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         '散歩に行きたい',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       // デバッグ形式のJSONが返される
@@ -279,8 +274,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'ありがとう、とても参考になりました',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       expect(result.response).toBe('お役に立てて嬉しいです！');
@@ -322,8 +316,7 @@ describe('AI Chat E2E Tests', () => {
         profile,
         chatLog,
         'テスト質問',
-        undefined,
-        driver
+        { overrideDriver: driver },
       );
 
       const both = JSON.parse(result.response);

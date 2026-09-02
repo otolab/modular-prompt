@@ -8,7 +8,8 @@ import chalk from 'chalk';
 import type {
   DialogProfile,
   ChatLog,
-  SimpleChatOptions
+  SimpleChatOptions,
+  ModelOverrides,
 } from './types.js';
 import {
   loadDefaultProfile,
@@ -25,13 +26,36 @@ import {
   performAIChat,
   closeDriver,
 } from './ai-chat.js';
-import { parseMlxBackend, parseProvider } from './inference-selection.js';
+import { parseProvider } from './inference-selection.js';
 import { loadResourceFiles } from './resource-files.js';
 import type { MaterialContext } from '@modular-prompt/process';
 import { Spinner } from './spinner.js';
 import { logger as baseLogger } from './logger.js';
 
 const logger = baseLogger.context('chat');
+
+function buildModelOverrides(options: SimpleChatOptions): ModelOverrides | undefined {
+  const overrides: ModelOverrides = {};
+  let hasOverride = false;
+
+  if (options.model) {
+    overrides.model = options.model;
+    hasOverride = true;
+  }
+  if (options.provider) {
+    overrides.provider = parseProvider(options.provider);
+    hasOverride = true;
+  }
+  if (options.backend) {
+    overrides.backend = options.backend;
+    hasOverride = true;
+  } else if (options.textOnly) {
+    overrides.textOnly = true;
+    hasOverride = true;
+  }
+
+  return hasOverride ? overrides : undefined;
+}
 
 /**
  * Process user input
@@ -95,18 +119,15 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
     profile = await loadDefaultProfile();
   }
 
-  // Apply overrides
-  if (options.model) profile.model = options.model;
-  if (options.provider) {
-    profile.provider = parseProvider(options.provider);
-    logger.info(chalk.gray(`Provider: ${profile.provider}`));
+  // Apply CLI overrides (model/provider/backend は profile を書き換えない)
+  const modelOverrides = buildModelOverrides(options);
+  if (modelOverrides?.provider) {
+    logger.info(chalk.gray(`Provider: ${modelOverrides.provider}`));
   }
-  if (options.backend) {
-    profile.backend = parseMlxBackend(options.backend);
-    logger.info(chalk.gray(`Backend: ${profile.backend}`));
-  } else if (options.textOnly) {
-    profile.textOnly = true;
+  if (modelOverrides?.backend) {
+    logger.info(chalk.gray(`Backend: ${modelOverrides.backend}`));
   }
+
   if (options.temperature !== undefined) {
     profile.options = profile.options || {};
     profile.options.temperature = options.temperature;
@@ -210,12 +231,10 @@ export async function runChat(options: SimpleChatOptions): Promise<void> {
   logger.info(chalk.green('User: ') + userMessage);
 
   // Perform AI chat
-  const { response, driver } = await performAIChat(
-    profile,
-    chatLog,
-    userMessage,
+  const { response, driver } = await performAIChat(profile, chatLog, userMessage, {
     materials,
-  );
+    modelOverrides,
+  });
 
   // Add assistant response to log
   addMessage(chatLog, 'assistant', response);
