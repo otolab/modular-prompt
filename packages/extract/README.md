@@ -123,11 +123,11 @@ try {
 |-----------|-------------|
 | `session.close()`（デフォルト） | handle を `release` マーク → 次の `runtime.close()` で **KV ファイル削除** |
 | `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
-| `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors` を削除 |
+| `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors.zip` を削除 |
 | `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
 | `rm -rf <cache-dir>` | manifest + KV キャッシュを手動削除（CLI のクリーン方法） |
 
-`create` 直後に `manifest.json` だけ残って `.safetensors` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
+`create` 直後に `manifest.json` だけ残って `.safetensors.zip` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
 
 ### 意図
 

@@ -112,7 +112,7 @@ export interface CacheHandle {
 **ref**
 
 キャッシュの一意な参照。
-- MlxCacheController: ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors`）
+- MlxCacheController: ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
 
 **trimTokens**
@@ -182,7 +182,9 @@ incremental prefillで置き換えられた元キャッシュのref。
 Apple Siliconに最適化されたMLXモデル用のKVキャッシュファイル管理。
 
 **特徴**:
-- `.safetensors`形式でKVキャッシュをファイル保存
+- `.safetensors.zip`形式でKVキャッシュをファイル保存（zip内エントリは`prompt_cache.safetensors`）
+- 保存時はsafetensorsの出力ストリームをzipエントリへ直接渡し、非圧縮ファイルを作成しない
+- 既存の非圧縮`.safetensors`キャッシュは読み込まない
 - incremental prefillサポート（既存キャッシュをベースに差分のみprefill）
 - トークンレベルのプレフィックス照合（prefix_hashes）
 - 固定キャッシュディレクトリモードとmanaged一時ディレクトリモード

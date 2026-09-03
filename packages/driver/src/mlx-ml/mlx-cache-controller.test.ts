@@ -42,7 +42,7 @@ function testPrefixHash(length: number): string {
 
 function createMockProcess() {
   return {
-    cachePrefill: vi.fn().mockResolvedValue({ cache_path: '/tmp/mlx-prompt-cache-abc/test.safetensors' }),
+    cachePrefill: vi.fn().mockResolvedValue({ cache_path: '/tmp/mlx-prompt-cache-abc/test.safetensors.zip' }),
     tokenize: vi.fn().mockResolvedValue({
       token_ids: MOCK_TOKENS,
       token_count: MOCK_TOKEN_COUNT,
@@ -75,7 +75,7 @@ describe('MlxCacheController', () => {
         instructions: [{ type: 'text', content: 'Be helpful' }],
       });
 
-      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.ref).toMatch(/\.safetensors\.zip$/);
       expect(handle.includes.instructions).toBe(true);
       expect(handle.includes.dataElementCount).toBe(0);
       expect(handle.includes.tools).toBe(false);
@@ -149,7 +149,7 @@ describe('MlxCacheController', () => {
 
       // First call creates the cache
       const handle1 = await controller.prepare(params);
-      expect(handle1.ref).toMatch(/\.safetensors$/);
+      expect(handle1.ref).toMatch(/\.safetensors\.zip$/);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
 
       // Second call with readOnly returns the cached handle
@@ -166,7 +166,7 @@ describe('MlxCacheController', () => {
 
       // First call creates the cache on disk
       const handle1 = await controller.prepare(params);
-      expect(handle1.ref).toMatch(/\.safetensors$/);
+      expect(handle1.ref).toMatch(/\.safetensors\.zip$/);
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
 
       // Clear memory cache to force disk lookup
@@ -219,7 +219,7 @@ describe('MlxCacheController', () => {
       const p1 = controller.prepare(params);
       const p2 = controller.prepare(params);
 
-      resolvePrefill!({ cache_path: '/tmp/mlx-prompt-cache-abc/coalesced.safetensors' });
+      resolvePrefill!({ cache_path: '/tmp/mlx-prompt-cache-abc/coalesced.safetensors.zip' });
 
       const [h1, h2] = await Promise.all([p1, p2]);
       expect(h1.ref).toBe(h2.ref);
@@ -234,7 +234,7 @@ describe('MlxCacheController', () => {
       });
 
       const [cachePath, messages] = mockProcess.cachePrefill.mock.calls[0];
-      expect(cachePath).toMatch(/\.safetensors$/);
+      expect(cachePath).toMatch(/\.safetensors\.zip$/);
       expect(Array.isArray(messages)).toBe(true);
       expect(messages.length).toBeGreaterThan(0);
     });
@@ -298,7 +298,7 @@ describe('MlxCacheController', () => {
 
     it('should not throw for unknown ref', () => {
       // 存在しない ref を release しても問題ない
-      expect(() => controller.release('/nonexistent/path.safetensors')).not.toThrow();
+      expect(() => controller.release('/nonexistent/path.safetensors.zip')).not.toThrow();
     });
   });
 
@@ -334,7 +334,7 @@ describe('MlxCacheController', () => {
 
       const closePromise = controller.close();
 
-      resolvePrefill!({ cache_path: '/tmp/mlx-prompt-cache-abc/done.safetensors' });
+      resolvePrefill!({ cache_path: '/tmp/mlx-prompt-cache-abc/done.safetensors.zip' });
       await preparePromise;
       await closePromise;
 
@@ -393,7 +393,7 @@ describe('MlxCacheController', () => {
       });
 
       expect(handle.ref).toMatch(/^\/custom\/cache\/dir\//);
-      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.ref).toMatch(/\.safetensors\.zip$/);
     });
 
     it('should not remove directory on close', async () => {
@@ -407,9 +407,9 @@ describe('MlxCacheController', () => {
     });
 
     it('should skip prefill when cache file already exists', async () => {
-      // Both .safetensors and .meta.json need to exist with valid token_count
+      // Both .safetensors.zip and .meta.json need to exist with valid token_count
       vi.mocked(existsSync)
-        .mockReturnValueOnce(true)  // .safetensors check
+        .mockReturnValueOnce(true)  // .safetensors.zip check
         .mockReturnValueOnce(true); // .meta.json check
       vi.mocked(readFileSync).mockReturnValueOnce(JSON.stringify({ token_count: 100, prefix_offsets: [100], prefix_hashes: [testPrefixHash(100)] }));
 
@@ -418,15 +418,15 @@ describe('MlxCacheController', () => {
         instructions: [{ type: 'text', content: 'test' }],
       });
 
-      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.ref).toMatch(/\.safetensors\.zip$/);
       expect(handle.includes.instructions).toBe(true);
       expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
     });
 
     it('should regenerate cache when .meta.json is missing (legacy cache)', async () => {
-      // .safetensors exists but .meta.json does not
+      // .safetensors.zip exists but .meta.json does not
       vi.mocked(existsSync)
-        .mockReturnValueOnce(true)   // .safetensors check
+        .mockReturnValueOnce(true)   // .safetensors.zip check
         .mockReturnValueOnce(false); // .meta.json check
 
       const handle = await externalController.prepare({
@@ -434,7 +434,7 @@ describe('MlxCacheController', () => {
         instructions: [{ type: 'text', content: 'test' }],
       });
 
-      expect(handle.ref).toMatch(/\.safetensors$/);
+      expect(handle.ref).toMatch(/\.safetensors\.zip$/);
       expect(handle.includes.instructions).toBe(true);
       // Should regenerate the cache with metadata
       expect(mockProcess.cachePrefill).toHaveBeenCalled();
@@ -569,8 +569,8 @@ describe('MlxCacheController', () => {
       vi.mocked(existsSync).mockImplementation((path: any) => {
         const pathStr = String(path);
         if (pathStr.endsWith('cache-index.json')) return true;
-        if (pathStr.endsWith(`${existingKey}.safetensors`)) return true;
-        if (pathStr.endsWith(`${existingKey}.safetensors.meta.json`)) return true;
+        if (pathStr.endsWith(`${existingKey}.safetensors.zip`)) return true;
+        if (pathStr.endsWith(`${existingKey}.safetensors.zip.meta.json`)) return true;
         return false;
       });
 
@@ -586,7 +586,7 @@ describe('MlxCacheController', () => {
 
       expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(1);
       const [, , basePath] = mockProcess.cachePrefill.mock.calls[0];
-      expect(basePath).toMatch(new RegExp(`${existingKey}\\.safetensors$`));
+      expect(basePath).toMatch(new RegExp(`${existingKey}\\.safetensors\\.zip$`));
 
       await freshController.close();
     });
@@ -786,7 +786,7 @@ describe('MlxCacheController', () => {
         }],
       };
 
-      const supersetPath = `/cache/${supersetKey}.safetensors`;
+      const supersetPath = `/cache/${supersetKey}.safetensors.zip`;
       const metaData = {
         token_count: 3000,
         prefix_offsets: [120, 245, 380, 3000],
@@ -862,7 +862,7 @@ describe('MlxCacheController', () => {
         }],
       };
 
-      const oldPath = `/cache/${oldKey}.safetensors`;
+      const oldPath = `/cache/${oldKey}.safetensors.zip`;
       const metaData = {
         token_count: 500,
         prefix_offsets: [100, 300, 500],
@@ -928,7 +928,7 @@ describe('MlxCacheController', () => {
         }],
       };
 
-      const oldPath = `/cache/${oldKey}.safetensors`;
+      const oldPath = `/cache/${oldKey}.safetensors.zip`;
       // meta WITHOUT element_offsets
       const metaData = { token_count: 300 };
 
@@ -999,7 +999,7 @@ describe('MlxCacheController', () => {
         }],
       };
 
-      const toolPath = `/cache/${toolKey}.safetensors`;
+      const toolPath = `/cache/${toolKey}.safetensors.zip`;
 
       vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
@@ -1058,7 +1058,7 @@ describe('MlxCacheController', () => {
         }],
       };
 
-      const highPath = `/cache/${highKey}.safetensors`;
+      const highPath = `/cache/${highKey}.safetensors.zip`;
 
       vi.mocked(readFileSync).mockImplementation((path: any) => {
         const p = String(path);
