@@ -222,10 +222,10 @@ MLX ドライバーを使う前に Python ランタイムのセットアップ�
 pnpm run setup-mlx
 
 # @modular-prompt/driver を npm インストールした場合
-modular-runtime setup mlx
+modular-prompt-runtime setup mlx
 ```
 
-ランタイムは `~/.modular-prompt/runtimes/mlx/` に作成されます。状態確認は `pnpm --filter @modular-prompt/driver run runtime:status`（monorepo）または `modular-runtime setup --status`。
+ランタイムは `~/.modular-prompt/runtimes/mlx/` に作成されます。状態確認は `pnpm --filter @modular-prompt/driver run runtime:status`（monorepo）または `modular-prompt-runtime setup --status`。
 
 前提条件: Python 3.13、Apple Silicon Mac、uv。
 

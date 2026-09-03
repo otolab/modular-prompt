@@ -46,7 +46,7 @@ MLX ドライバーを使うには、Python ランタイムを **明示的にセ
 pnpm run setup-mlx
 
 # @modular-prompt/driver を npm インストールした場合
-modular-runtime setup mlx
+modular-prompt-runtime setup mlx
 
 # driver パッケージディレクトリから
 cd node_modules/@modular-prompt/driver

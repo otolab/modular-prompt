@@ -34,7 +34,7 @@ pnpm run setup-mlx
 公開パッケージとして利用する場合:
 
 ```bash
-modular-runtime setup mlx
+modular-prompt-runtime setup mlx
 ```
 
 ### 状態確認
@@ -44,7 +44,7 @@ modular-runtime setup mlx
 simple-chat --check
 
 # driver の runtime CLI
-modular-runtime setup --status
+modular-prompt-runtime setup --status
 ```
 
 詳細は [@modular-prompt/driver README](../driver/README.md) および [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
