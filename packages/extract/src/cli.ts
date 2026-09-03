@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CACHE_DIR, DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from './cli/constants.js';
+import { DEFAULT_CACHE_DIR, DEFAULT_MAX_TOKENS } from './cli/constants.js';
 import { runCreateCommand } from './cli/create-command.js';
 import { runExtractCommand } from './cli/extract-command.js';
 
@@ -25,7 +25,7 @@ Commands:
 
 Options:
   -d, --cache-dir <path>   Cache directory (create default: ${DEFAULT_CACHE_DIR})
-  -m, --model <model>      MLX model id (create default: ${DEFAULT_MODEL})
+  -m, --model <model>      MLX model alias from models.yaml or raw model id
   --max-tokens <n>         Max tokens for extract (default: ${DEFAULT_MAX_TOKENS})
   --dry-run                Compile and print full prompt text (no MLX / no cache write)
   -h, --help               Show help
@@ -34,6 +34,9 @@ Cache cleanup:
   rm -rf <cache-dir>
 
 Note:
+  Without -m, models.default (or the first model entry) is selected from bundled config merged with
+  ~/.modular-prompt/models.yaml (MODULAR_PROMPT_HOME can override its location).
+  If no model is configured, specify -m <model-id-or-alias> or define models.default.
   MLX backend is fixed to mlx-lm (backend: lm) for prompt cache support.
 `);
 }
@@ -127,7 +130,7 @@ async function main(): Promise<void> {
   if (parsed.command === 'create') {
     const output = await runCreateCommand({
       cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
-      model: parsed.model ?? DEFAULT_MODEL,
+      model: parsed.model,
       files: parsed.positional,
       dryRun: parsed.dryRun,
     });

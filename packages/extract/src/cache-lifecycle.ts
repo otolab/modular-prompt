@@ -9,13 +9,6 @@ export interface CacheLifecycleState {
   controllerReady: boolean;
 }
 
-export function resolveModelName(model: string): string {
-  if (!model) {
-    throw new Error('ExtractSessionOptions.model is required');
-  }
-  return model;
-}
-
 export async function ensureCacheControllerReady(
   driver: AIDriver,
   state: CacheLifecycleState,

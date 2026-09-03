@@ -109,9 +109,10 @@ export function registerFactories(
   // MLX Driver Factory
   registry.registerFactory('mlx', (spec) => {
     const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
-    const cacheController = driverOpts?.cacheDir
-      ? new MlxCacheController({ cacheDir: driverOpts.cacheDir })
-      : undefined;
+    const cacheController = driverOpts?.cacheController
+      ?? (driverOpts?.cacheDir
+        ? new MlxCacheController({ cacheDir: driverOpts.cacheDir })
+        : undefined);
     return new MlxDriver({
       model: spec.model,
       defaultOptions: mergeDefaults(spec),
@@ -212,4 +213,3 @@ export function registerFactories(
     return new TestDriver({});
   });
 }
-

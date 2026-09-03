@@ -89,6 +89,7 @@ export function registerStandardDriverFactories(
         textOnly: driverOpts?.textOnly ?? (spec.metadata?.textOnly as boolean | undefined),
         drafterModel: driverOpts?.drafterModel ?? (spec.metadata?.drafterModel as string | undefined),
         draftBlockSize: driverOpts?.draftBlockSize ?? (spec.metadata?.draftBlockSize as number | undefined),
+        cacheController: driverOpts?.cacheController,
       });
     });
   }

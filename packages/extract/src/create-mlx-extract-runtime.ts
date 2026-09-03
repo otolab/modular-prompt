@@ -1,12 +1,13 @@
 import {
   MlxCacheController,
-  MlxDriver,
   type AIDriver,
   type PromptCacheController,
 } from '@modular-prompt/driver';
+import { createDriver } from './model-resolution.js';
 
 export interface MlxExtractRuntimeOptions {
-  model: string;
+  /** MLX model ID or alias in models.yaml. Omitted uses the resolved default. */
+  model?: string;
   /** Fixed cache directory. When omitted, a managed temp directory is used. */
   cacheDir?: string;
 }
@@ -30,23 +31,27 @@ export async function createMlxExtractRuntime(
   const cacheController = new MlxCacheController(
     options.cacheDir ? { cacheDir: options.cacheDir } : undefined,
   );
-  const driver = new MlxDriver({
-    model: options.model,
-    backend: 'lm',
-    cacheController,
-  });
+  try {
+    const { driver, spec } = await createDriver(options.model, { cacheController });
 
-  if ('getCapabilities' in driver && typeof driver.getCapabilities === 'function') {
-    await driver.getCapabilities();
+    if ('getCapabilities' in driver && typeof driver.getCapabilities === 'function') {
+      await driver.getCapabilities();
+    }
+
+    return {
+      driver,
+      cacheController,
+      model: spec.model,
+      async close() {
+        try {
+          await driver.close();
+        } finally {
+          await cacheController.close();
+        }
+      },
+    };
+  } catch (error) {
+    await cacheController.close();
+    throw error;
   }
-
-  return {
-    driver,
-    cacheController,
-    model: options.model,
-    async close() {
-      await driver.close();
-      await cacheController.close();
-    },
-  };
 }

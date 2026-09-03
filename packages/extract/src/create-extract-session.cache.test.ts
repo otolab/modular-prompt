@@ -5,7 +5,6 @@ import { partitionPrompt, TestDriver } from '@modular-prompt/driver';
 import {
   prepareSessionCache,
   releaseSessionCache,
-  resolveModelName,
   type CacheLifecycleState,
 } from './cache-lifecycle.js';
 import { createExtractSession } from './create-extract-session.js';
@@ -23,13 +22,6 @@ describe('cache-lifecycle', () => {
     objective: ['Extract information'],
     instructions: ['Follow the cue'],
   };
-
-  it('resolveModelName requires model', () => {
-    expect(resolveModelName('test-model')).toBe('test-model');
-    expect(() => resolveModelName('')).toThrow(
-      'ExtractSessionOptions.model is required',
-    );
-  });
 
   it('compileExtractPrompt renders default section templates from typed context', () => {
     const compiled = compileExtractPrompt(
