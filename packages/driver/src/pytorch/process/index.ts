@@ -8,6 +8,7 @@ import {
   getPytorchPythonDir,
   getVenvPath,
   resolvePackageRootFromProcessModule,
+  SETUP_PYTORCH_MONOREPO,
 } from '../../runtime/index.js';
 import { InferenceProcessClient } from '../../local-inference/process-client.js';
 import type {
@@ -54,7 +55,7 @@ export class PyTorchProcess {
     if (!existsSync(venvPath)) {
       throw new Error(
         `PyTorch venv not found at ${venvPath}. ` +
-          'Run: pnpm run setup-pytorch -w @modular-prompt/driver',
+          `Run: ${SETUP_PYTORCH_MONOREPO}`,
       );
     }
 

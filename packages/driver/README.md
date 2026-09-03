@@ -218,10 +218,14 @@ export class CustomDriver implements AIDriver {
 MLX ドライバーを使う前に Python ランタイムのセットアップが必要です（macOS のみ）:
 
 ```bash
-npm run setup-mlx -w @modular-prompt/driver
+# monorepo ルートから
+pnpm run setup-mlx
+
+# @modular-prompt/driver を npm インストールした場合
+modular-prompt-runtime setup mlx
 ```
 
-ランタイムは `~/.modular-prompt/runtimes/mlx/` に作成されます。状態確認は `npm run runtime:status -w @modular-prompt/driver`。
+ランタイムは `~/.modular-prompt/runtimes/mlx/` に作成されます。状態確認は `pnpm --filter @modular-prompt/driver run runtime:status`（monorepo）または `modular-prompt-runtime setup --status`。
 
 前提条件: Python 3.13、Apple Silicon Mac、uv。
 

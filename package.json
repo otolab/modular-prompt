@@ -19,10 +19,10 @@
     "prepack:all": "pnpm run -r --if-present prepack",
     "simple-chat": "node packages/simple-chat/dist/cli.js",
     "experiment": "node packages/experiment/dist/run-comparison.js",
-    "mlx:setup": "pnpm run setup-mlx -w @modular-prompt/driver",
+    "mlx:setup": "pnpm --filter @modular-prompt/driver run setup-mlx",
     "mlx:test": "cd packages/driver/src/mlx-ml/python && UV_PROJECT_ENVIRONMENT=\"${MODULAR_PROMPT_HOME:-$HOME/.modular-prompt}/runtimes/mlx/.venv\" uv run python test_api_spec.py",
-    "setup-mlx": "pnpm run setup-mlx -w @modular-prompt/driver",
-    "setup-pytorch": "pnpm run setup-pytorch -w @modular-prompt/driver"
+    "setup-mlx": "pnpm --filter @modular-prompt/driver run setup-mlx",
+    "setup-pytorch": "pnpm --filter @modular-prompt/driver run setup-pytorch"
   },
   "devDependencies": {
     "@changesets/cli": "2.29.8",

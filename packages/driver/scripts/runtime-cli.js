@@ -37,6 +37,11 @@ const {
 } = await import(runtimeModuleUrl('paths-core.mjs'));
 
 const {
+  SETUP_MLX_MONOREPO,
+  SETUP_PYTORCH_MONOREPO,
+} = await import(runtimeModuleUrl('setup-commands-core.mjs'));
+
+const {
   collectInstalledPackages,
   readManifest,
   writeManifest,
@@ -90,7 +95,7 @@ function setupMlx() {
   };
 
   try {
-    execSync('uv venv --python 3.13', { cwd: pythonDir, stdio: 'inherit', env });
+    execSync('uv venv --clear --python 3.13', { cwd: pythonDir, stdio: 'inherit', env });
     execSync('uv pip install -e .', { cwd: pythonDir, stdio: 'inherit', env });
 
     writeManifest('mlx', {
@@ -139,7 +144,7 @@ function setupPytorch() {
   };
 
   try {
-    execSync(`uv venv --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
+    execSync(`uv venv --clear --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
     const venvPython =
       process.platform === 'win32'
         ? join(venvPath, 'Scripts', 'python.exe')
@@ -200,10 +205,10 @@ function printStatus() {
   }
   const setupHints = [];
   if (!isRuntimeReady('mlx') && process.platform === 'darwin') {
-    setupHints.push('pnpm run setup-mlx -w @modular-prompt/driver');
+    setupHints.push(SETUP_MLX_MONOREPO);
   }
   if (!isRuntimeReady('pytorch')) {
-    setupHints.push('pnpm run setup-pytorch -w @modular-prompt/driver');
+    setupHints.push(SETUP_PYTORCH_MONOREPO);
   }
   if (setupHints.length > 0) {
     console.log(`\nRun: ${setupHints.join('  or  ')}`);
@@ -253,13 +258,13 @@ async function cleanupAll() {
 
 function printUsage() {
   console.log(`Usage:
-  node scripts/runtime-cli.js setup mlx         Set up MLX Python runtime (macOS only)
-  node scripts/runtime-cli.js setup pytorch     Set up PyTorch runtime (cpu-minimal)
-  node scripts/runtime-cli.js setup --status    Show runtime status
-  node scripts/runtime-cli.js cleanup mlx       Remove MLX runtime
-  node scripts/runtime-cli.js cleanup pytorch   Remove PyTorch runtime
-  node scripts/runtime-cli.js cleanup --all     Remove entire ~/.modular-prompt
-  node scripts/runtime-cli.js cleanup ... --yes   Skip confirmation
+  modular-prompt-runtime setup mlx         Set up MLX Python runtime (macOS only)
+  modular-prompt-runtime setup pytorch     Set up PyTorch runtime (cpu-minimal)
+  modular-prompt-runtime setup --status    Show runtime status
+  modular-prompt-runtime cleanup mlx       Remove MLX runtime
+  modular-prompt-runtime cleanup pytorch   Remove PyTorch runtime
+  modular-prompt-runtime cleanup --all     Remove entire ~/.modular-prompt
+  modular-prompt-runtime cleanup ... --yes   Skip confirmation
 
   npm scripts: setup-mlx, setup-pytorch, runtime:status, runtime:cleanup`);
 }

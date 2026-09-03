@@ -173,6 +173,10 @@ export {
   RuntimeNotReadyError,
   isRuntimeReady,
   assertRuntimeReady,
+  SETUP_MLX_MONOREPO,
+  SETUP_PYTORCH_MONOREPO,
+  SETUP_MLX_CLI,
+  SETUP_PYTORCH_CLI,
   type RuntimeProfile,
   type RuntimeManifest,
 } from './runtime/index.js';
