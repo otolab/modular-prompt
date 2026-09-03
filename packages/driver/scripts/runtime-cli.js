@@ -258,13 +258,13 @@ async function cleanupAll() {
 
 function printUsage() {
   console.log(`Usage:
-  node scripts/runtime-cli.js setup mlx         Set up MLX Python runtime (macOS only)
-  node scripts/runtime-cli.js setup pytorch     Set up PyTorch runtime (cpu-minimal)
-  node scripts/runtime-cli.js setup --status    Show runtime status
-  node scripts/runtime-cli.js cleanup mlx       Remove MLX runtime
-  node scripts/runtime-cli.js cleanup pytorch   Remove PyTorch runtime
-  node scripts/runtime-cli.js cleanup --all     Remove entire ~/.modular-prompt
-  node scripts/runtime-cli.js cleanup ... --yes   Skip confirmation
+  modular-runtime setup mlx         Set up MLX Python runtime (macOS only)
+  modular-runtime setup pytorch     Set up PyTorch runtime (cpu-minimal)
+  modular-runtime setup --status    Show runtime status
+  modular-runtime cleanup mlx       Remove MLX runtime
+  modular-runtime cleanup pytorch   Remove PyTorch runtime
+  modular-runtime cleanup --all     Remove entire ~/.modular-prompt
+  modular-runtime cleanup ... --yes   Skip confirmation
 
   npm scripts: setup-mlx, setup-pytorch, runtime:status, runtime:cleanup`);
 }
