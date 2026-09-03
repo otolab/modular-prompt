@@ -15,19 +15,20 @@ function runtimeModuleUrl(name) {
 }
 
 const { getMlxPythonDir, getVenvPath } = await import(runtimeModuleUrl('paths-core.mjs'));
+const { SETUP_MLX_MONOREPO } = await import(runtimeModuleUrl('setup-commands-core.mjs'));
 
 const targetDir = getMlxPythonDir(packageRoot);
 const venvPath = getVenvPath('mlx');
 
 if (!existsSync(targetDir)) {
   console.error('❌ MLX Python directory not found.');
-  console.error('   Please run "pnpm run setup-mlx -w @modular-prompt/driver" first.');
+  console.error(`   Please run "${SETUP_MLX_MONOREPO}" first.`);
   process.exit(1);
 }
 
 if (!existsSync(join(venvPath, 'bin', 'python'))) {
   console.error('❌ MLX runtime is not set up.');
-  console.error('   Please run "pnpm run setup-mlx -w @modular-prompt/driver" first.');
+  console.error(`   Please run "${SETUP_MLX_MONOREPO}" first.`);
   process.exit(1);
 }
 

@@ -37,6 +37,11 @@ const {
 } = await import(runtimeModuleUrl('paths-core.mjs'));
 
 const {
+  SETUP_MLX_MONOREPO,
+  SETUP_PYTORCH_MONOREPO,
+} = await import(runtimeModuleUrl('setup-commands-core.mjs'));
+
+const {
   collectInstalledPackages,
   readManifest,
   writeManifest,
@@ -90,7 +95,7 @@ function setupMlx() {
   };
 
   try {
-    execSync('uv venv --python 3.13', { cwd: pythonDir, stdio: 'inherit', env });
+    execSync('uv venv --clear --python 3.13', { cwd: pythonDir, stdio: 'inherit', env });
     execSync('uv pip install -e .', { cwd: pythonDir, stdio: 'inherit', env });
 
     writeManifest('mlx', {
@@ -139,7 +144,7 @@ function setupPytorch() {
   };
 
   try {
-    execSync(`uv venv --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
+    execSync(`uv venv --clear --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
     const venvPython =
       process.platform === 'win32'
         ? join(venvPath, 'Scripts', 'python.exe')
@@ -200,10 +205,10 @@ function printStatus() {
   }
   const setupHints = [];
   if (!isRuntimeReady('mlx') && process.platform === 'darwin') {
-    setupHints.push('pnpm run setup-mlx -w @modular-prompt/driver');
+    setupHints.push(SETUP_MLX_MONOREPO);
   }
   if (!isRuntimeReady('pytorch')) {
-    setupHints.push('pnpm run setup-pytorch -w @modular-prompt/driver');
+    setupHints.push(SETUP_PYTORCH_MONOREPO);
   }
   if (setupHints.length > 0) {
     console.log(`\nRun: ${setupHints.join('  or  ')}`);

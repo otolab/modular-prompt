@@ -18,7 +18,7 @@
     "src/pytorch/python"
   ],
   "scripts": {
-    "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs dist/runtime/",
+    "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs src/runtime/setup-commands-core.mjs dist/runtime/",
     "test": "vitest",
     "test:run": "vitest run",
     "test:system": "vitest run --config vitest.config.system.ts",

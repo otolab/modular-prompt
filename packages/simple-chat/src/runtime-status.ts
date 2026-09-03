@@ -8,15 +8,16 @@ import {
   getRuntimeDir,
   getVenvPath,
   isRuntimeReady,
+  SETUP_MLX_MONOREPO,
+  SETUP_MLX_CLI,
   type RuntimeProfile,
 } from '@modular-prompt/driver';
 
 /** Published-package setup command (also works from monorepo) */
-export const MLX_RUNTIME_CLI_SETUP =
-  'node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup mlx';
+export const MLX_RUNTIME_CLI_SETUP = SETUP_MLX_CLI;
 
 /** Monorepo workspace setup command */
-export const MLX_MONOREPO_SETUP = 'pnpm run setup-mlx -w @modular-prompt/driver';
+export const MLX_MONOREPO_SETUP = SETUP_MLX_MONOREPO;
 
 export function formatRuntimeNotReadyMessage(
   profile: RuntimeProfile,

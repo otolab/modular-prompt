@@ -29,12 +29,9 @@ Python 環境はマシン共有の `~/.modular-prompt/runtimes/mlx/` に作成�
 ```bash
 # リポジトリルートから
 pnpm run setup-mlx
-
-# または workspace 指定
-pnpm run setup-mlx -w @modular-prompt/driver
 ```
 
-### 公開パッケージとして利用する場合
+公開パッケージとして利用する場合:
 
 ```bash
 node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup mlx

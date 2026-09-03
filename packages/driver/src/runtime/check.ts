@@ -1,5 +1,10 @@
 import type { RuntimeProfile } from './paths.js';
 import { getVenvPath, isRuntimeReady } from './paths.js';
+import {
+  SETUP_MLX_MONOREPO,
+  SETUP_PYTORCH_MONOREPO,
+  SETUP_MLX_CLI,
+} from './setup-commands.js';
 
 export class RuntimeNotReadyError extends Error {
   readonly profile: RuntimeProfile;
@@ -8,10 +13,10 @@ export class RuntimeNotReadyError extends Error {
   constructor(profile: RuntimeProfile) {
     const setupCommand =
       profile === 'mlx'
-        ? 'pnpm run setup-mlx -w @modular-prompt/driver'
+        ? SETUP_MLX_MONOREPO
         : profile === 'pytorch'
-          ? 'pnpm run setup-pytorch -w @modular-prompt/driver'
-          : `node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup ${profile}`;
+          ? SETUP_PYTORCH_MONOREPO
+          : SETUP_MLX_CLI.replace(' setup mlx', ` setup ${profile}`);
     super(
       `${profile} runtime is not set up at ${getVenvPath(profile)}. ` +
       `Run: ${setupCommand}`

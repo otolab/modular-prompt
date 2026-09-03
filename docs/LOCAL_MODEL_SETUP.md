@@ -42,21 +42,26 @@ Apple Silicon Mac専用の高速ローカルLLM実行環境。
 MLX ドライバーを使うには、Python ランタイムを **明示的にセットアップ** します（`npm install` では自動セットアップされません）。
 
 ```bash
-# プロジェクトルートから
-npm run setup-mlx -w @modular-prompt/driver
+# monorepo ルートから
+pnpm run setup-mlx
 
-# またはパッケージディレクトリから
+# @modular-prompt/driver を npm インストールした場合
+node node_modules/@modular-prompt/driver/scripts/runtime-cli.js setup mlx
+
+# driver パッケージディレクトリから
 cd node_modules/@modular-prompt/driver
-npm run setup-mlx
+pnpm run setup-mlx
 ```
+
+`@modular-prompt/driver` を更新したあと（MLX Python 依存の変更を含む）は、同じコマンドで `~/.modular-prompt/runtimes/mlx/.venv` を再同期してください。
 
 Python 環境は `~/.modular-prompt/runtimes/mlx/` に作成されます（プロジェクトや `node_modules` 内には作られません）。
 
 **状態確認・掃除:**
 
 ```bash
-npm run runtime:status -w @modular-prompt/driver
-npm run runtime:cleanup -w @modular-prompt/driver mlx -- --yes
+pnpm --filter @modular-prompt/driver run runtime:status
+pnpm --filter @modular-prompt/driver run runtime:cleanup mlx -- --yes
 ```
 
 **セットアップ内容：**
@@ -88,7 +93,7 @@ Hugging Face上の任意のMLXモデルをダウンロードできます。
 **推奨（テスト用モデル）:**
 
 ```bash
-pnpm run download-model -w @modular-prompt/driver
+pnpm --filter @modular-prompt/driver run download-model
 ```
 
 **手動で任意モデルを取得する場合**（`UV_PROJECT_ENVIRONMENT` でホーム venv を指定）:
@@ -129,9 +134,8 @@ UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/mlx/.venv \
 # uvの再インストール
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# MLX環境の再セットアップ
-cd node_modules/@modular-prompt/driver
-npm run setup-mlx
+# MLX環境の再セットアップ（monorepo ルートから）
+pnpm run setup-mlx
 ```
 
 #### モデルのダウンロードが失敗する
@@ -165,11 +169,11 @@ Windows / Linux など **MLX が使えない環境**向けの Thin Python 推論
 ### 初回セットアップ (PyTorch)
 
 ```bash
-# プロジェクトルートから
-pnpm run setup-pytorch -w @modular-prompt/driver
+# monorepo ルートから
+pnpm run setup-pytorch
 
 # 状態確認
-pnpm run runtime:status -w @modular-prompt/driver
+pnpm --filter @modular-prompt/driver run runtime:status
 ```
 
 Python 環境は `~/.modular-prompt/runtimes/pytorch/.venv` に作成されます。
@@ -226,7 +230,7 @@ UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/pytorch/.venv \
 #### venv が見つからない
 
 ```bash
-pnpm run setup-pytorch -w @modular-prompt/driver
+pnpm run setup-pytorch
 ```
 
 #### CUDA が有効にならない
@@ -234,8 +238,8 @@ pnpm run setup-pytorch -w @modular-prompt/driver
 手動カスタマイズの CUDA 差し替え手順を実施し、ドライバと CUDA バージョンの整合を確認してください。CPU に戻す場合:
 
 ```bash
-pnpm run runtime:cleanup -w @modular-prompt/driver pytorch -- --yes
-pnpm run setup-pytorch -w @modular-prompt/driver
+pnpm --filter @modular-prompt/driver run runtime:cleanup pytorch -- --yes
+pnpm run setup-pytorch
 ```
 
 ## Ollama
@@ -536,7 +540,7 @@ console.log(result.content);
 await driver.close();
 ```
 
-事前に `pnpm run setup-pytorch -w @modular-prompt/driver` が必要です。
+事前に `pnpm run setup-pytorch` が必要です。
 
 ### Ollama
 
