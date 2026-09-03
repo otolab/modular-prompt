@@ -75,6 +75,7 @@ modular-extract extract --dry-run -d .extract-cache '登場人物を列挙'
 
 `-d` 省略時のデフォルトは `./.extract-cache`。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。
 `-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
+`MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
 
 たとえば `~/.modular-prompt/models.yaml` に次を置くと、`create -m default` と `-m` 省略時の両方でこのモデルが選ばれます。
 

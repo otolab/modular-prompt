@@ -1,17 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const aiServiceFromMergedConfig = vi.fn();
-const aiServiceCreateDriver = vi.fn();
-const cacheControllerCtor = vi.fn();
-const cacheControllerClose = vi.fn();
-const mockDriver = {
-  getCapabilities: vi.fn(async () => ({
-    supportsTools: false,
-    supportsStructuredOutput: false,
-    modelMaxLength: 4096,
-  })),
-  close: vi.fn(async () => {}),
-};
+const {
+  aiServiceFromMergedConfig,
+  aiServiceCreateDriver,
+  cacheControllerCtor,
+  cacheControllerClose,
+  mockDriver,
+} = vi.hoisted(() => ({
+  aiServiceFromMergedConfig: vi.fn(),
+  aiServiceCreateDriver: vi.fn(),
+  cacheControllerCtor: vi.fn(),
+  cacheControllerClose: vi.fn(),
+  mockDriver: {
+    getCapabilities: vi.fn(),
+    close: vi.fn(),
+  },
+}));
 
 vi.mock('@modular-prompt/driver', async (importOriginal) => {
   const actual = await importOriginal();
@@ -25,7 +29,7 @@ vi.mock('@modular-prompt/driver', async (importOriginal) => {
         cacheControllerCtor(config);
       }
       async close() {
-        cacheControllerClose();
+        return cacheControllerClose();
       }
     },
   };
@@ -37,8 +41,12 @@ describe('createMlxExtractRuntime', () => {
     aiServiceCreateDriver.mockReset();
     cacheControllerCtor.mockClear();
     cacheControllerClose.mockClear();
-    mockDriver.getCapabilities.mockClear();
-    mockDriver.close.mockClear();
+    mockDriver.getCapabilities.mockReset().mockResolvedValue({
+      supportsTools: false,
+      supportsStructuredOutput: false,
+      modelMaxLength: 4096,
+    });
+    mockDriver.close.mockReset().mockResolvedValue(undefined);
 
     aiServiceFromMergedConfig.mockReturnValue({
       modelsConfig: {
@@ -77,6 +85,28 @@ describe('createMlxExtractRuntime', () => {
     expect(mockDriver.getCapabilities).toHaveBeenCalledOnce();
 
     await runtime.close();
+    expect(cacheControllerClose).toHaveBeenCalledOnce();
+  });
+
+  it('closes the driver and cache when capabilities fail, preserving the original error', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    const capabilitiesError = new Error('capabilities unavailable');
+    mockDriver.getCapabilities.mockRejectedValueOnce(capabilitiesError);
+    cacheControllerClose.mockRejectedValueOnce(new Error('cache close failed'));
+
+    await expect(createMlxExtractRuntime({ model: 'default' })).rejects.toBe(capabilitiesError);
+    expect(mockDriver.close).toHaveBeenCalledOnce();
+    expect(cacheControllerClose).toHaveBeenCalledOnce();
+  });
+
+  it('closes the cache when driver creation fails, preserving the original error', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    const creationError = new Error('driver creation failed');
+    aiServiceCreateDriver.mockRejectedValueOnce(creationError);
+    cacheControllerClose.mockRejectedValueOnce(new Error('cache close failed'));
+
+    await expect(createMlxExtractRuntime({ model: 'default' })).rejects.toBe(creationError);
+    expect(mockDriver.close).not.toHaveBeenCalled();
     expect(cacheControllerClose).toHaveBeenCalledOnce();
   });
 });

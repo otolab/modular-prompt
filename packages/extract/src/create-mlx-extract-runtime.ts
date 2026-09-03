@@ -25,14 +25,40 @@ export interface MlxExtractRuntime {
   close(): Promise<void>;
 }
 
+/**
+ * Runtime construction failed after resources started being created.
+ * Cleanup must not replace the error that explains why construction failed.
+ */
+async function closeFailedRuntime(
+  driver: AIDriver | undefined,
+  cacheController: PromptCacheController,
+): Promise<void> {
+  try {
+    if (driver) {
+      await driver.close();
+    }
+  } catch {
+    // Preserve the original runtime construction/capabilities error.
+  }
+
+  try {
+    await cacheController.close();
+  } catch {
+    // Preserve the original runtime construction/capabilities error.
+  }
+}
+
 export async function createMlxExtractRuntime(
   options: MlxExtractRuntimeOptions,
 ): Promise<MlxExtractRuntime> {
   const cacheController = new MlxCacheController(
     options.cacheDir ? { cacheDir: options.cacheDir } : undefined,
   );
+  let driverForCleanup: AIDriver | undefined;
   try {
-    const { driver, spec } = await createDriver(options.model, { cacheController });
+    const resolved = await createDriver(options.model, { cacheController });
+    const driver = resolved.driver;
+    driverForCleanup = driver;
 
     if ('getCapabilities' in driver && typeof driver.getCapabilities === 'function') {
       await driver.getCapabilities();
@@ -41,7 +67,7 @@ export async function createMlxExtractRuntime(
     return {
       driver,
       cacheController,
-      model: spec.model,
+      model: resolved.spec.model,
       async close() {
         try {
           await driver.close();
@@ -51,7 +77,7 @@ export async function createMlxExtractRuntime(
       },
     };
   } catch (error) {
-    await cacheController.close();
+    await closeFailedRuntime(driverForCleanup, cacheController);
     throw error;
   }
 }

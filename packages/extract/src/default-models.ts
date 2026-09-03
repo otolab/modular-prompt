@@ -6,7 +6,10 @@
 
 import type { ModelsConfig } from '@modular-prompt/driver';
 
-/** extract が -m なしで使用する同梱デフォルトモデル */
+/**
+ * extract が -m なしで使用する同梱デフォルトモデル。
+ * MLX_MODEL は既存利用者向けに後方互換でサポートし、user yaml が優先される。
+ */
 export const BUNDLED_DEFAULT_MODEL =
   process.env.MLX_MODEL ?? 'prism-ml/Ternary-Bonsai-1.7B-mlx-2bit';
 

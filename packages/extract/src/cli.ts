@@ -36,6 +36,7 @@ Cache cleanup:
 Note:
   Without -m, models.default (or the first model entry) is selected from bundled config merged with
   ~/.modular-prompt/models.yaml (MODULAR_PROMPT_HOME can override its location).
+  MLX_MODEL is also supported for backward compatibility as the bundled default; user yaml overrides it.
   If no model is configured, specify -m <model-id-or-alias> or define models.default.
   MLX backend is fixed to mlx-lm (backend: lm) for prompt cache support.
 `);
