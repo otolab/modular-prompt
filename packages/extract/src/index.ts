@@ -1,5 +1,10 @@
 export { createExtractSession } from './create-extract-session.js';
 export { createMlxExtractRuntime } from './create-mlx-extract-runtime.js';
+export {
+  createDriver,
+  resolveMergedModels,
+  resolveModelSpec,
+} from './model-resolution.js';
 export { resolveSessionModules } from './resolve-session-modules.js';
 export { compileExtractPrompt } from './compile-extract-prompt.js';
 export { buildExtractContext } from './extract-context.js';
@@ -42,3 +47,7 @@ export type {
   MlxExtractRuntime,
   MlxExtractRuntimeOptions,
 } from './create-mlx-extract-runtime.js';
+export type {
+  ExtractDriverOptions,
+  ExtractDriverResult,
+} from './model-resolution.js';

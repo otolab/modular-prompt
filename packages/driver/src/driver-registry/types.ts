@@ -4,6 +4,7 @@
  */
 
 import type { AIDriver } from '../types.js';
+import type { PromptCacheController } from '../cache-controller.js';
 
 /**
  * ドライバプロバイダータイプ
@@ -60,6 +61,8 @@ export interface MlxModelDriverOptions {
   draftBlockSize?: number;
   /** KVキャッシュディレクトリ。指定するとプロンプトキャッシュが有効になる */
   cacheDir?: string;
+  /** 外部で生成した KV cache controller（runtime から driver と共有する場合。runtime-only） */
+  cacheController?: PromptCacheController;
 }
 
 /** ドライバー固有オプションのunion（将来拡張） */

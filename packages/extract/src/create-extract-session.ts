@@ -8,7 +8,6 @@ import {
   ensureCacheControllerReady,
   prepareSessionCache,
   releaseSessionCache,
-  resolveModelName,
   type CacheLifecycleState,
 } from './cache-lifecycle.js';
 
@@ -31,7 +30,7 @@ export function createExtractSession<TContext = ExtractContext>(
   options: ExtractSessionOptions<TContext>
 ): ExtractSession {
   const { driver, corpus, schema, cacheController, baseModule } = options;
-  const model = resolveModelName(options.model);
+  const model = options.model;
 
   const sessionBaseModule = buildSessionBaseModule(
     resolveSessionModules(options),

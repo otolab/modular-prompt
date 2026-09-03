@@ -60,7 +60,7 @@ rm -rf .extract-cache
 
 | コマンド | 説明 |
 |---------|------|
-| `create [-d <dir>] [-m model] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を dir に保存 |
+| `create [-d <dir>] [-m <alias-or-model-id>] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を dir に保存 |
 | `extract -d <dir> [query...]` | キャッシュ済み corpus に対して抽出。query が cue になる |
 | `extract --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
 | `--dry-run` | MLX を起動せず、compile 済みプロンプト全文を stdout に出力 |
@@ -73,7 +73,20 @@ modular-extract create --dry-run docs/notes.txt
 modular-extract extract --dry-run -d .extract-cache '登場人物を列挙'
 ```
 
-`-d` 省略時のデフォルトは `./.extract-cache`。`-m` 省略時は `MLX_MODEL` 環境変数、未設定ならパッケージ既定モデル。
+`-d` 省略時のデフォルトは `./.extract-cache`。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。
+`-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
+`MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
+
+たとえば `~/.modular-prompt/models.yaml` に次を置くと、`create -m default` と `-m` 省略時の両方でこのモデルが選ばれます。
+
+```yaml
+models:
+  default:
+    provider: mlx
+    model: mlx-community/YourModel-4bit
+```
+
+モデルが設定されていない構成では、`-m <model-id-or-alias>` を指定するか、user yaml に `models.default` を定義してください。
 
 **MLX バックエンドは mlx-lm（`backend: 'lm'`）に固定**している。`auto` で VLM が選ばれるとプロンプトキャッシュが無効になるため。
 
@@ -145,7 +158,7 @@ try {
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
 | セッション終了 | `session.close()` — デフォルトで handle `release()`。固定 cacheDir を残す場合は `{ releaseCache: false }` |
 
-`cacheController` と `model` は **必須**。キャッシュ非対応モードは提供しない。
+`cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ models.yaml 解決を行います。指定する場合は alias または生の HF model ID を使えます。キャッシュ非対応モードは提供しない。
 
 詳細は [プロンプトキャッシュ設計](../../docs/CACHE_DESIGN.md) および [API 仕様](./API.md) を参照。
 
@@ -258,6 +271,8 @@ console.log(result.structured); // schema に沿った JSON
 |---------|------|
 | `createExtractSession` | 抽出セッションを生成 |
 | `createMlxExtractRuntime` | MLX 用 driver + cacheController バンドル |
+| `resolveModelSpec` | alias または生 model ID から extract 用 ModelSpec を解決 |
+| `createDriver` | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
 | `defaultExtractBaseModule` | デフォルト base モジュール |
 | `mergeExtractBaseModule` | デフォルト base に overlay を merge |
 | `buildPreviousExtractionsInputs` | 過去抽出結果を inputs に変換 |
@@ -274,14 +289,14 @@ console.log(result.structured); // schema に沿った JSON
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-modular-extract create [-d .extract-cache] [-m model] file1.txt file2.txt
+modular-extract create [-d .extract-cache] [-m <alias-or-model-id>] file1.txt file2.txt
 modular-extract extract -d .extract-cache '抽出したい内容の指示'
 
 # キャッシュ削除
 rm -rf .extract-cache
 ```
 
-`create` は入力ファイルを corpus として KV cache を準備し、`manifest.json` を cache ディレクトリに保存する。`extract` は manifest から corpus を復元して cue を実行する。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
 
 ## テスト
 
