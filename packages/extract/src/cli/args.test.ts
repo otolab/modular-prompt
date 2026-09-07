@@ -48,6 +48,24 @@ describe('cli argument parser', () => {
     });
   });
 
+  it('parses clean for one store', () => {
+    expect(parseArgs(['clean', 'meeting', '-d', '.extract-cache'])).toEqual({
+      command: 'clean',
+      cacheDir: '.extract-cache',
+      storename: 'meeting',
+      positional: [],
+    });
+  });
+
+  it('parses clean --all for the whole container', () => {
+    expect(parseArgs(['clean', '--all', '-d', '.extract-cache'])).toEqual({
+      command: 'clean',
+      cacheDir: '.extract-cache',
+      all: true,
+      positional: [],
+    });
+  });
+
   it.each(['', 'bad/name', '_bad', 'bad name', 'create', 'extract', 'list', 'clean'])(
     'rejects invalid storename %j',
     (storename) => {
@@ -57,6 +75,12 @@ describe('cli argument parser', () => {
 
   it.each(['create', 'extract'])('requires a storename for %s', (command) => {
     expect(() => parseArgs([command])).toThrow(/storename as its first argument/);
+  });
+
+  it('requires a storename or --all for clean', () => {
+    expect(() => parseArgs(['clean'])).toThrow(/storename or --all/);
+    expect(() => parseArgs(['clean', 'meeting', '--all'])).toThrow(/--all does not accept/);
+    expect(() => parseArgs(['clean', '--all', 'meeting'])).toThrow(/--all does not accept/);
   });
 
   it('rejects options belonging to another subcommand', () => {
