@@ -4,21 +4,26 @@ import { createMlxExtractRuntime } from '../create-mlx-extract-runtime.js';
 import { DEFAULT_MAX_TOKENS } from './constants.js';
 import { readManifest } from './manifest.js';
 import { renderExtractPrompt } from './render-prompt.js';
+import { resolveStoreDir } from './store.js';
 
 export interface ExtractCommandOptions {
+  /** Container directory containing one subdirectory per store. */
   cacheDir: string;
+  storename: string;
   query: string;
   maxTokens?: number;
   dryRun?: boolean;
 }
 
 export async function runExtractCommand(options: ExtractCommandOptions): Promise<string> {
-  const cacheDir = resolve(options.cacheDir);
-  const manifest = await readManifest(cacheDir);
+  const containerDir = resolve(options.cacheDir);
+  const storeDir = resolveStoreDir(containerDir, options.storename);
 
   if (!options.query.trim()) {
     throw new Error('Query text is required');
   }
+
+  const manifest = await readManifest(storeDir);
 
   const request = {
     cue: options.query,
@@ -34,7 +39,7 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
 
   const runtime = await createMlxExtractRuntime({
     model: manifest.model,
-    cacheDir,
+    cacheDir: storeDir,
   });
 
   try {

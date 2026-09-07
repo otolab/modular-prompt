@@ -48,36 +48,50 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-# 1. 入力ファイルからキャッシュ作成（デフォルト: ./.extract-cache）
-node packages/extract/bin/modular-extract.js create -m 'your-mlx-model' docs/*.txt
+# 1. 入力ファイルから meeting store を作成（デフォルト: ./.extract-cache）
+node packages/extract/bin/modular-extract.js create meeting -m 'your-mlx-model' docs/*.txt
 
 # 2. 抽出クエリ（cue）を実行 — 結果は stdout
-node packages/extract/bin/modular-extract.js extract -d .extract-cache '登場人物を列挙'
+node packages/extract/bin/modular-extract.js extract meeting '登場人物を列挙'
 
-# キャッシュ削除
-rm -rf .extract-cache
+# 3. コンテナ内の store を一覧表示
+node packages/extract/bin/modular-extract.js list
+
+# store 単位のキャッシュ削除（clean コマンドは後続 Issue）
+rm -rf .extract-cache/meeting
 ```
 
 | コマンド | 説明 |
 |---------|------|
-| `create [-d <dir>] [-m <alias-or-model-id>] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を dir に保存 |
-| `extract -d <dir> [query...]` | キャッシュ済み corpus に対して抽出。query が cue になる |
-| `extract --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
+| `create <storename> [-d <container>] [-m <alias-or-model-id>] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を `<container>/<storename>/` に保存 |
+| `extract <storename> [-d <container>] [query...]` | 指定 store のキャッシュ済み corpus に対して抽出。query が cue になる |
+| `list [-d <container>]` | コンテナ内の全 store と manifest/KV のサマリを表示 |
+| `extract <storename> --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
 | `--dry-run` | MLX を起動せず、compile 済みプロンプト全文を stdout に出力 |
+
+`list` は各 store の model、materials 数・タイトル、作成日時、KV cache の有無を表示します。
+
+```text
+Store: meeting
+  Model: mlx-community/SomeModel-4bit
+  Materials: 2 (notes.txt, meeting.md)
+  Created: 2026-09-07T03:00:00.000Z
+  KV cache: present
+```
 
 ```bash
 # プロンプト確認（create）
-modular-extract create --dry-run docs/notes.txt
+modular-extract create meeting --dry-run docs/notes.txt
 
-# プロンプト確認（extract — manifest が必要）
-modular-extract extract --dry-run -d .extract-cache '登場人物を列挙'
+# プロンプト確認（extract — store の manifest が必要）
+modular-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
-`-d` 省略時のデフォルトは `./.extract-cache`。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。
+`-d` 省略時のデフォルトは `./.extract-cache` で、create/extract/list 共通の **store コンテナ**を指定します。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/extract では `<storename>` が必須で、コンテナ配下の `<storename>/` が利用されます。
 `-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
 `MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
 
-たとえば `~/.modular-prompt/models.yaml` に次を置くと、`create -m default` と `-m` 省略時の両方でこのモデルが選ばれます。
+たとえば `~/.modular-prompt/models.yaml` に次を置くと、`create meeting -m default` と `create meeting` の両方でこのモデルが選ばれます。
 
 ```yaml
 models:
@@ -138,9 +152,10 @@ try {
 | `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
 | `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors.zip` を削除 |
 | `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
-| `rm -rf <cache-dir>` | manifest + KV キャッシュを手動削除（CLI のクリーン方法） |
+| `rm -rf <cache-dir>/<storename>` | 1 store の manifest + KV キャッシュを手動削除（`clean` は後続 Issue） |
+| `rm -rf <cache-dir>` | コンテナ内の全 store を手動削除 |
 
-`create` 直後に `manifest.json` だけ残って `.safetensors.zip` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
+`create` 直後に store 内へ `manifest.json` だけ残って `.safetensors.zip` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
 
 ### 意図
 
@@ -273,6 +288,8 @@ console.log(result.structured); // schema に沿った JSON
 | `createMlxExtractRuntime` | MLX 用 driver + cacheController バンドル |
 | `resolveModelSpec` | alias または生 model ID から extract 用 ModelSpec を解決 |
 | `createDriver` | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
+| `resolveStoreDir` | cache コンテナと storename から store ディレクトリを解決 |
+| `validateStorename` | storename の形式と予約語を検証 |
 | `defaultExtractBaseModule` | デフォルト base モジュール |
 | `mergeExtractBaseModule` | デフォルト base に overlay を merge |
 | `buildPreviousExtractionsInputs` | 過去抽出結果を inputs に変換 |
@@ -289,14 +306,34 @@ console.log(result.structured); // schema に沿った JSON
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-modular-extract create [-d .extract-cache] [-m <alias-or-model-id>] file1.txt file2.txt
-modular-extract extract -d .extract-cache '抽出したい内容の指示'
+modular-extract create meeting [-d .extract-cache] [-m <alias-or-model-id>] file1.txt file2.txt
+modular-extract create contract [-d .extract-cache] [-m <alias-or-model-id>] contract.pdf
+modular-extract extract meeting [-d .extract-cache] '抽出したい内容の指示'
+modular-extract extract contract [-d .extract-cache] '契約期間を抽出'
+modular-extract list [-d .extract-cache]
 
-# キャッシュ削除
-rm -rf .extract-cache
+# store 単位のキャッシュ削除（clean コマンドは後続 Issue）
+rm -rf .extract-cache/meeting
 ```
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
+`<storename>` は create/extract の positional 第1引数で必須です。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗し、後続 Issue の `clean <storename>` と手動削除を案内します。
+
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
+
+### 旧 CLI / キャッシュレイアウトからの移行
+
+この変更は破壊的変更です。旧 CLI の `create ...` / `extract -d ...` 形式と、コンテナ直下に `manifest.json` を置くレイアウトは自動移行・互換読み取りしません。必要な store 名を決めて、旧キャッシュを手動で store ディレクトリへ移動してください。
+
+```bash
+# 例: 旧 .extract-cache を meeting store として移行
+mkdir -p .extract-cache/meeting
+mv .extract-cache/manifest.json \
+  .extract-cache/cache-index.json \
+  .extract-cache/*.safetensors* \
+  .extract-cache/meeting/
+```
+
+移行後は新形式で `modular-extract extract meeting '...'` を実行します。複数 corpus を保持する場合は、それぞれ別の storename と store ディレクトリに分けてください。
 
 ## テスト
 

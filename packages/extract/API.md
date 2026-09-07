@@ -91,6 +91,8 @@ import {
 | `resolveModelSpec` | 関数 | models.yaml の alias または生 model ID を extract 用 ModelSpec に解決 |
 | `createDriver` | 関数 | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
 | `resolveSessionModules` | 関数 | base (+ domain) モジュールを解決 |
+| `resolveStoreDir` | 関数 | cache コンテナと storename から store ディレクトリを解決 |
+| `validateStorename` | 関数 | storename の形式と予約語を検証 |
 | `compileExtractPrompt` | 関数 | context 付き compile（高度な用途） |
 | `buildExtractContext` | 関数 | corpus + request から `ExtractContext` を構築 |
 | `defaultExtractBaseModule` | 定数 | デフォルト base `PromptModule` |

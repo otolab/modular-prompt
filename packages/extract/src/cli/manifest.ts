@@ -5,6 +5,8 @@ import { MANIFEST_FILENAME } from './constants.js';
 
 export interface ExtractCacheManifest {
   version: 1;
+  /** Store name for self-describing cache directories. */
+  storename?: string;
   model: string;
   materials: MaterialInput[];
   createdAt: string;

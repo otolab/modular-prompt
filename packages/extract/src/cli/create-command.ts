@@ -4,18 +4,22 @@ import { createExtractSession } from '../create-extract-session.js';
 import { createMlxExtractRuntime } from '../create-mlx-extract-runtime.js';
 import { CACHE_PREPARE_CUE } from './constants.js';
 import { loadMaterialsFromFiles } from './load-materials.js';
-import { manifestExists, writeManifest } from './manifest.js';
+import { writeManifest } from './manifest.js';
 import { renderExtractPrompt } from './render-prompt.js';
+import { resolveStoreDir, storeExists } from './store.js';
 
 export interface CreateCommandOptions {
+  /** Container directory containing one subdirectory per store. */
   cacheDir: string;
+  storename: string;
   model?: string;
   files: string[];
   dryRun?: boolean;
 }
 
 export async function runCreateCommand(options: CreateCommandOptions): Promise<string | void> {
-  const cacheDir = resolve(options.cacheDir);
+  const containerDir = resolve(options.cacheDir);
+  const storeDir = resolveStoreDir(containerDir, options.storename);
   const materials = await loadMaterialsFromFiles(options.files);
   const request = { cue: CACHE_PREPARE_CUE };
 
@@ -23,16 +27,17 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
     return renderExtractPrompt({ materials }, request);
   }
 
-  if (await manifestExists(cacheDir)) {
+  if (await storeExists(storeDir)) {
     throw new Error(
-      `Cache directory already exists: ${cacheDir}\n`
-      + 'Remove the directory to clean the cache, then run create again.',
+      `Store already exists: ${storeDir}\n`
+      + `Run \`clean ${options.storename}\` before creating it again `
+      + '(clean is not implemented yet; remove the store directory manually).',
     );
   }
 
-  await mkdir(cacheDir, { recursive: true });
+  await mkdir(storeDir, { recursive: true });
 
-  const runtime = await createMlxExtractRuntime({ model: options.model, cacheDir });
+  const runtime = await createMlxExtractRuntime({ model: options.model, cacheDir: storeDir });
   try {
     const session = createExtractSession({
       driver: runtime.driver,
@@ -47,8 +52,9 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
     });
     await session.close({ releaseCache: false });
 
-    await writeManifest(cacheDir, {
+    await writeManifest(storeDir, {
       version: 1,
+      storename: options.storename,
       model: runtime.model,
       materials,
       createdAt: new Date().toISOString(),
@@ -57,6 +63,6 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
     await runtime.close();
   }
 
-  console.error(`Cache prepared: ${cacheDir}`);
+  console.error(`Cache prepared: ${storeDir}`);
   console.error(`Materials: ${materials.length} file(s), model: ${runtime.model}`);
 }
