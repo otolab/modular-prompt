@@ -119,6 +119,18 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 | `inputChunk` / `inputChunksFromJson` | 関数 | chunk 入力ヘルパ |
 | `normalizeMaterials` 等 | 関数 | 正規化ヘルパ（テスト・高度な用途） |
 
+### 内部 API（named store 拡張の共有実装）
+
+`src/extract-store.ts` は package root からは export しない内部 API ですが、CLI と将来の store 管理入口が共有する disk 上の store 操作を担当します。`add-command.ts` はファイル読み込み、引数由来のエラー、`--dry-run` の出力だけを担当し、prefill と manifest の更新はこの層を呼び出します。
+
+| API | 入力 / 出力 | 責務と保証 |
+|-----|-------------|------------|
+| `mergeMaterials(existing, incoming)` | `MaterialInput[]` → merged `MaterialInput[]` | `id`（省略時は `title`）で順序を保ってマージ。同一 id・同一内容はスキップし、内容差分はエラー |
+| `prepareExtractCache({ cacheDir, model, materials })` | `Promise<string>`（解決済み model） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
+| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
+
+`appendToExtractStore` は `manifest.model` を使い、成功時だけ `updatedAt` と materials を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
+
 ---
 
 ## `createMlxExtractRuntime(options)`
