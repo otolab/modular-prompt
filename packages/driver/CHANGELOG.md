@@ -4,6 +4,8 @@
 
 ### Minor Changes
 
+- feat: `~/.modular-prompt/models.testing.yaml` を testing profile として解決し、ローカル統合テスト・手元試行で利用可能にする（Closes #356）
+
 - f0bf773: feat: Local Inference Protocol (LIP) 型定義を追加（Phase 1）
 
   Closes #307

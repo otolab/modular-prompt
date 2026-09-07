@@ -24,7 +24,10 @@ export {
 
 export {
   MODELS_CONFIG_FILENAME,
+  TESTING_MODELS_CONFIG_PROFILE,
+  getModelsConfigPath,
   getUserModelsConfigPath,
+  getTestingModelsConfigPath,
 } from './paths.js';
 
 export type {

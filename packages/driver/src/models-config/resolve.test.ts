@@ -17,16 +17,26 @@ import {
   registerModelsFromConfig,
   entryToModelSpec,
 } from './index.js';
-import { getUserModelsConfigPath } from './paths.js';
+import {
+  getModelsConfigPath,
+  getTestingModelsConfigPath,
+  getUserModelsConfigPath,
+} from './paths.js';
 import { DriverRegistry } from '../driver-registry/registry.js';
 
 describe('models-config', () => {
   let tempHome: string;
   let previousHome: string | undefined;
+  let previousProfile: string | undefined;
+  let previousNodeEnv: string | undefined;
+  let previousVitest: string | undefined;
 
   beforeEach(() => {
     tempHome = mkdtempSync(join(tmpdir(), 'modular-prompt-models-'));
     previousHome = process.env.MODULAR_PROMPT_HOME;
+    previousProfile = process.env.MODULAR_PROMPT_MODELS_PROFILE;
+    previousNodeEnv = process.env.NODE_ENV;
+    previousVitest = process.env.VITEST;
     process.env.MODULAR_PROMPT_HOME = tempHome;
   });
 
@@ -35,6 +45,21 @@ describe('models-config', () => {
       delete process.env.MODULAR_PROMPT_HOME;
     } else {
       process.env.MODULAR_PROMPT_HOME = previousHome;
+    }
+    if (previousProfile === undefined) {
+      delete process.env.MODULAR_PROMPT_MODELS_PROFILE;
+    } else {
+      process.env.MODULAR_PROMPT_MODELS_PROFILE = previousProfile;
+    }
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+    if (previousVitest === undefined) {
+      delete process.env.VITEST;
+    } else {
+      process.env.VITEST = previousVitest;
     }
     rmSync(tempHome, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -62,6 +87,17 @@ describe('models-config', () => {
   });
 
   describe('loadModelsConfigFile', () => {
+    it('resolves the default and profile-specific config paths', () => {
+      expect(getModelsConfigPath()).toBe(join(tempHome, 'models.yaml'));
+      expect(getModelsConfigPath('default')).toBe(join(tempHome, 'models.yaml'));
+      expect(getTestingModelsConfigPath()).toBe(
+        join(tempHome, 'models.testing.yaml')
+      );
+      expect(getModelsConfigPath('local')).toBe(
+        join(tempHome, 'models.local.yaml')
+      );
+    });
+
     it('returns null when file does not exist', () => {
       expect(loadModelsConfigFile('/nonexistent/models.yaml')).toBeNull();
     });
@@ -158,6 +194,91 @@ models:
   });
 
   describe('resolveModelsConfig', () => {
+    it('automatically merges testing config in NODE_ENV=test', () => {
+      process.env.NODE_ENV = 'test';
+      delete process.env.MODULAR_PROMPT_MODELS_PROFILE;
+      delete process.env.VITEST;
+      writeFileSync(
+        getUserModelsConfigPath(),
+        `models:
+  shared:
+    provider: mlx
+    model: user/shared
+`
+      );
+      writeFileSync(
+        getTestingModelsConfigPath(),
+        `models:
+  shared:
+    provider: mlx
+    model: testing/shared
+  testing-only:
+    provider: mlx
+    model: testing/only
+`
+      );
+
+      const resolved = resolveModelsConfig({
+        base: {
+          models: {
+            default: { provider: 'mlx', model: 'bundled/default' },
+          },
+        },
+        overlay: {
+          models: {
+            shared: { provider: 'mlx', model: 'overlay/shared' },
+          },
+        },
+      });
+
+      expect(resolved.models?.default?.model).toBe('bundled/default');
+      expect(resolved.models?.shared?.model).toBe('overlay/shared');
+      expect(resolved.models?.['testing-only']?.model).toBe('testing/only');
+    });
+
+    it('merges an explicitly selected testing profile outside test context', () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.VITEST;
+      writeFileSync(
+        getUserModelsConfigPath(),
+        `models:
+  shared:
+    provider: mlx
+    model: user/shared
+`
+      );
+      writeFileSync(
+        getTestingModelsConfigPath(),
+        `models:
+  shared:
+    provider: mlx
+    model: testing/shared
+`
+      );
+
+      const resolved = resolveModelsConfig({ profile: 'testing' });
+
+      expect(resolved.models?.shared?.model).toBe('testing/shared');
+    });
+
+    it('uses MODULAR_PROMPT_MODELS_PROFILE for local commands', () => {
+      process.env.NODE_ENV = 'production';
+      delete process.env.VITEST;
+      process.env.MODULAR_PROMPT_MODELS_PROFILE = 'testing';
+      writeFileSync(
+        getTestingModelsConfigPath(),
+        `models:
+  local:
+    provider: mlx
+    model: testing/local
+`
+      );
+
+      const resolved = resolveModelsConfig();
+
+      expect(resolved.models?.local?.model).toBe('testing/local');
+    });
+
     it('merges base, user config, and overlay (overlay priority)', () => {
       writeFileSync(
         getUserModelsConfigPath(),
