@@ -288,7 +288,6 @@ export async function waitForModelLoad(
 | テストファイル | モデル指定元 | モデル名（例） | 備考 |
 |---|---|---|---|
 | `test/integration/mlx-abort-cache.integration.test.ts` | `DEFAULT_MLX_TEST_MODEL` | `Josiefied-LFM2.5-1.2B-Instruct-abliterated-4bit` | abort / cache usage |
-| `test/integration/mlx-cache.integration.test.ts` | `DEFAULT_MLX_TEST_MODEL` | 同上 | KV キャッシュ統合 |
 | `test/integration/mlx-tool-call.integration.test.ts` | `test-drivers.yaml` | `nativeModel` / `fallbackModel` | native のみ実行中。fallback は #294 待ちでスキップ |
 | `test/integration/test-drivers.yaml.example` | 例示 | Josiefied-LFM2.5-1.2B / Gemma-3-270m-GroomAttention | native は LFM、fallback は tool なし |
 | `src/mlx-ml/mlx-driver-params.test.ts` | `DEFAULT_MLX_TEST_MODEL` | Josiefied-LFM2.5-1.2B | macOS ローカルのみ（CI スキップ） |
