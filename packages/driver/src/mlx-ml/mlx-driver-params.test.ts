@@ -9,7 +9,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MlxDriver } from './mlx-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { platform } from 'os';
-import { DEFAULT_MLX_TEST_MODEL } from '../../test/integration/test-config.js';
+import {
+  DEFAULT_MLX_TEST_MODEL,
+  DEFAULT_MLX_TEST_BACKEND,
+} from '../../test/integration/test-config.js';
 
 // MLXはApple Silicon専用なので、CI環境や非対応環境ではスキップ
 const shouldSkipMLX =
@@ -24,6 +27,7 @@ describe.skipIf(shouldSkipMLX)('MLX Driver Parameters Integration', () => {
     // ダウンロード済みのモデルを使用
     driver = new MlxDriver({
       model: DEFAULT_MLX_TEST_MODEL,
+      backend: DEFAULT_MLX_TEST_BACKEND,
     });
   });
 

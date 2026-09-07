@@ -14,7 +14,11 @@ import type { PromptModule } from '@modular-prompt/core';
 import { compile, createContext } from '@modular-prompt/core';
 import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
 import { MlxCacheController } from '../../src/mlx-ml/mlx-cache-controller.js';
-import { hasDriverConfig, DEFAULT_MLX_TEST_MODEL } from './test-config.js';
+import {
+  hasDriverConfig,
+  DEFAULT_MLX_TEST_MODEL,
+  DEFAULT_MLX_TEST_BACKEND,
+} from './test-config.js';
 
 const isMacOS = platform() === 'darwin';
 
@@ -60,7 +64,7 @@ describe.skipIf(!isMacOS || !hasDriverConfig('mlx'))('MLX Abort & Cache Usage In
       model = DEFAULT_MLX_TEST_MODEL;
 
       cacheController = new MlxCacheController();
-      driver = new MlxDriver({ model, cacheController });
+      driver = new MlxDriver({ model, backend: DEFAULT_MLX_TEST_BACKEND, cacheController });
 
       const warmup: PromptModule = {
         messages: [{ type: 'message', role: 'user', content: 'ping' }],

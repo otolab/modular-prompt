@@ -8,6 +8,7 @@ describe('integration test config', () => {
         default: {
           provider: 'mlx',
           model: 'test/default',
+          driverOptions: { backend: 'lm' },
         },
         'mlx-native-tool': {
           provider: 'mlx',
@@ -24,6 +25,7 @@ describe('integration test config', () => {
       defaultModel: 'test/default',
       nativeModel: 'test/native',
       fallbackModel: 'test/fallback',
+      backend: 'lm',
     });
   });
 

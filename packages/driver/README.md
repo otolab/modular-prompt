@@ -137,11 +137,15 @@ simple-chat では profile の `modelsConfig` に inline の `models` / `drivers
 ローカル統合テストや手元試行で使うモデルは、通常設定と分けて
 `~/.modular-prompt/models.testing.yaml` に置けます。`MODULAR_PROMPT_HOME` を設定している場合は、そのディレクトリ配下を使用します。プロジェクト配下の設定ファイルは暗黙探索しません。
 
+`models.default` には cache 対応の text-only LM を指定してください。MLX VLM は prompt caching が無効になるため、cache 統合テストには使用できません。
+
 ```yaml
 models:
   default:
     provider: mlx
     model: prism-ml/Ternary-Bonsai-1.7B-mlx-2bit
+    driverOptions:
+      backend: lm  # qwen3 is otherwise detected through mlx_vlm; keep cache on
   mlx-native-tool:
     provider: mlx
     model: mlx-community/Josiefied-LFM2.5-1.2B-Instruct-abliterated-4bit

@@ -66,7 +66,7 @@ cp packages/driver/test/integration/models.testing.yaml.example \
 
 `MODULAR_PROMPT_HOME` を設定している場合は、そのディレクトリ配下の `models.testing.yaml` を使用します。通常の `models.yaml` と併用した場合の優先順位は **base → `models.yaml` → `models.testing.yaml` → overlay** です。Vitest 実行中または `NODE_ENV=test` では自動的に testing 設定がマージされ、CLI で同じ設定を使う場合は `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定します。
 
-`models.testing.yaml` の `models.default` または `mlx-native-tool` / `mlx-fallback-tool` などの convention alias は、driver 統合テストの設定へ変換されます。testing ファイルが無い場合は `packages/driver/test/integration/test-drivers.yaml` を後方互換のために使用します。どちらも無い CI 環境では従来どおり skip されます。
+`models.testing.yaml` の `models.default` または `mlx-native-tool` / `mlx-fallback-tool` などの convention alias は、driver 統合テストの設定へ変換されます。cache 統合テストを実行する `models.default` には cache 対応の text-only LM を指定し、`qwen3` や `lfm2` のように自動判定が VLM 扱いするモデルでは `driverOptions.backend: lm` を明示してください。MLX VLM は prompt caching が無効になるため、tool-call など通常の推論には使えても cache 統合テストには使えません。testing ファイルが無い場合は `packages/driver/test/integration/test-drivers.yaml` を後方互換のために使用します。どちらも無い CI 環境では従来どおり skip されます。
 
 ### 3. E2Eテスト (End-to-End Tests)
 
@@ -300,12 +300,12 @@ export async function waitForModelLoad(
 
 | テストファイル | モデル指定元 | モデル名（例） | 備考 |
 |---|---|---|---|
-| `test/integration/mlx-abort-cache.integration.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | `prism-ml/Ternary-Bonsai-1.7B-mlx-2bit` | abort / cache usage |
+| `test/integration/mlx-abort-cache.integration.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | `prism-ml/Ternary-Bonsai-1.7B-mlx-2bit`（`backend: lm`） | abort / cache usage |
 | `test/integration/mlx-cache.integration.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | 同上 | KV キャッシュ統合 |
 | `test/integration/mlx-tool-call.integration.test.ts` | `models.testing.yaml` の convention alias | `mlx-native-tool` / `mlx-fallback-tool` | native のみ実行中。fallback は #294 待ちでスキップ |
-| `test/integration/models.testing.yaml.example` | 例示 | Ternary-Bonsai / Josiefied-LFM / Gemma-3 | `~/.modular-prompt/` へコピーして使用 |
+| `test/integration/models.testing.yaml.example` | 例示 | Ternary-Bonsai / Josiefied-LFM / Gemma-3 | `~/.modular-prompt/` へコピーして使用。default は `backend: lm` の cache 対応 LM |
 | `test/integration/test-drivers.yaml.example` | 後方互換の例示 | Josiefied-LFM2.5-1.2B / Gemma-3-270m-GroomAttention | 新規設定には models.testing.yaml を推奨 |
-| `src/mlx-ml/mlx-driver-params.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | Ternary-Bonsai-1.7B-mlx-2bit | macOS ローカルのみ（CI スキップ） |
+| `src/mlx-ml/mlx-driver-params.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | Ternary-Bonsai-1.7B-mlx-2bit（`backend: lm`） | macOS ローカルのみ（CI スキップ） |
 | `src/mlx-ml/mlx-driver-structured-outputs.integration.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | 同上 | macOS ローカルのみ（CI スキップ） |
 | `test/system/mlx-parameters.system.test.ts` | `models.testing.yaml` の `models.default`（未設定時は fallback） | 同上 | システムテスト専用 config |
 | `src/mlx-ml/mlx-driver*.test.ts`（abort 等） | モック | `test-model`（実ロードなし） | `MlxProcess` を vi.mock |

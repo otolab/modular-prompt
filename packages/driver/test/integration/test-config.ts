@@ -14,6 +14,7 @@ import {
   type ModelSpecEntry,
   type ModelsConfig,
 } from '../../src/models-config/index.js';
+import type { MlxBackendMode } from '../../src/driver-registry/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, 'test-drivers.yaml');
@@ -55,6 +56,7 @@ export interface TestDriversConfig {
     defaultModel?: string;
     nativeModel?: string;
     fallbackModel?: string;
+    backend?: MlxBackendMode;
   };
 }
 
@@ -119,6 +121,14 @@ function findDriverConfig(
   return undefined;
 }
 
+function getMlxBackend(entry: ModelSpecEntry | undefined): MlxBackendMode | undefined {
+  const driverOptions = asRecord(entry?.driverOptions);
+  const backend = driverOptions?.backend;
+  return backend === 'auto' || backend === 'lm' || backend === 'vlm' || backend === 'optiq'
+    ? backend
+    : undefined;
+}
+
 function deriveProviderConfig(
   config: ModelsConfig,
   providers: readonly string[],
@@ -159,10 +169,12 @@ export function deriveTestDriversConfig(
     findModelEntry(config, ['mlx']);
 
   if (mlxDefault || mlxNative || mlxFallback) {
+    const backend = getMlxBackend(mlxDefault);
     derived.mlx = {
       defaultModel: (mlxDefault ?? mlxNative ?? mlxFallback)?.model,
       nativeModel: mlxNative?.model,
       fallbackModel: mlxFallback?.model,
+      ...(backend ? { backend } : {}),
     };
   }
 
@@ -231,7 +243,13 @@ export function getDefaultMlxTestModel(): string {
   return loadTestDriversConfig()?.mlx?.defaultModel ?? FALLBACK_MLX_TEST_MODEL;
 }
 
+/** models.testing.yaml の default MLX backend を返す。 */
+export function getDefaultMlxTestBackend(): MlxBackendMode | undefined {
+  return loadTestDriversConfig()?.mlx?.backend;
+}
+
 export const DEFAULT_MLX_TEST_MODEL = getDefaultMlxTestModel();
+export const DEFAULT_MLX_TEST_BACKEND = getDefaultMlxTestBackend();
 
 /**
  * 指定ドライバーの設定が存在するか

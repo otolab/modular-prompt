@@ -10,7 +10,10 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MlxDriver } from '../../src/mlx-ml/mlx-driver.js';
-import { DEFAULT_MLX_TEST_MODEL } from '../integration/test-config.js';
+import {
+  DEFAULT_MLX_TEST_MODEL,
+  DEFAULT_MLX_TEST_BACKEND,
+} from '../integration/test-config.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 import { platform } from 'os';
 
@@ -37,7 +40,7 @@ describe.skipIf(!isMacOS)('MLX Parameters System Test', () => {
     console.log('⏳ This may take 10-30 seconds for initial model download...\n');
 
     // 実際のMLXドライバーを初期化
-    driver = new MlxDriver({ model: testModel });
+    driver = new MlxDriver({ model: testModel, backend: DEFAULT_MLX_TEST_BACKEND });
 
     // 初回のクエリでモデルをロード（ウォームアップ）
     try {
