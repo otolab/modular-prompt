@@ -7,6 +7,7 @@
 - [MLX (Apple Silicon)](#mlx-apple-silicon)
   - [環境要件](#環境要件)
   - [初回セットアップ](#初回セットアップ)
+  - [モデル設定ファイル](#モデル設定ファイル)
   - [テスト用モデルのダウンロード](#テスト用モデルのダウンロード)
   - [任意のモデルのダウンロード](#任意のモデルのダウンロード)
   - [トラブルシューティング](#トラブルシューティング-mlx)
@@ -69,6 +70,26 @@ pnpm --filter @modular-prompt/driver run runtime:cleanup mlx -- --yes
 1. uv パッケージマネージャーのインストール（未インストールの場合）
 2. `~/.modular-prompt/runtimes/mlx/.venv` に Python 仮想環境を作成
 3. MLX 関連パッケージのインストール
+
+### モデル設定ファイル
+
+通常利用のモデル alias は `~/.modular-prompt/models.yaml`、ローカル統合テスト用の alias は `~/.modular-prompt/models.testing.yaml` に分けて管理できます。別のディレクトリを使う場合は `MODULAR_PROMPT_HOME` を指定します。
+
+```bash
+cp packages/driver/test/integration/models.testing.yaml.example \
+  ~/.modular-prompt/models.testing.yaml
+```
+
+テスト実行時（Vitest または `NODE_ENV=test`）は `models.testing.yaml` が自動的にマージされます。extract や simple-chat を手元で testing モデルで実行する場合は、profile を明示します。
+
+```bash
+MODULAR_PROMPT_MODELS_PROFILE=testing modular-extract create meeting -m default docs/notes.txt
+MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"
+```
+
+マージ順は **base → `models.yaml` → `models.testing.yaml` → overlay** で、testing 側の同名 alias が通常設定を上書きします。認証情報は example に記載せず、環境変数またはローカルの `drivers` 設定で管理してください。
+
+同梱 example の `models.default` は MLX cache 統合テスト向けの text-only LM で、`driverOptions.backend: lm` を明示しています。VLM は通常の推論には使用できますが、MLX の prompt caching が無効になるため cache 統合テストには指定しないでください。
 
 ### テスト用モデルのダウンロード
 

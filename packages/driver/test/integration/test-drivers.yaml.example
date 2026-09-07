@@ -1,6 +1,12 @@
 # Integration Test Driver Configuration
 # 統合テスト用ドライバー設定
 #
+# 推奨: 新規セットアップでは
+# packages/driver/test/integration/models.testing.yaml.example を
+# ~/.modular-prompt/models.testing.yaml にコピーしてください。
+#
+# このファイルは後方互換のためのフォールバック設定です。
+#
 # このファイルをコピーして test-drivers.yaml を作成してください:
 #   cp test-drivers.yaml.example test-drivers.yaml
 #

@@ -140,6 +140,8 @@ simple-chat は **デフォルトで `merge` モード**です。マシン共通
 > **#341 との方針**  
 > Issue #341 では user yaml の無視（`override` 固定）も検討されましたが、simple-chat では **マシン共通 alias の再利用**を優先し `merge` をデフォルトにしています。user yaml を使わない場合は profile で `modelsConfig.mode: override` を指定してください。
 
+ローカル試行や統合テスト専用のモデルは `~/.modular-prompt/models.testing.yaml` に置けます。Vitest / `NODE_ENV=test` では自動マージされ、CLI では `MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"` のように profile を明示します。セットアップ手順は [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
+
 ### 内部構成（リファレンス実装）
 
 | 層 | 関数 | 責務 |

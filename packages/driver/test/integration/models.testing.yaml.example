@@ -1,0 +1,35 @@
+# Copy this file to ~/.modular-prompt/models.testing.yaml
+# (or set MODULAR_PROMPT_HOME to the directory containing it).
+#
+# Vitest / NODE_ENV=test automatically merges this file after models.yaml.
+# For local commands outside tests, set:
+#   MODULAR_PROMPT_MODELS_PROFILE=testing
+#
+# No API keys are stored here. Put provider credentials in the environment or
+# in the drivers section of your private models.testing.yaml.
+#
+# Keep models.default as a text-only LM: MLX VLM models disable prompt caching,
+# while mlx-cache.integration.test.ts requires a cache-capable LM.
+
+models:
+  default:
+    provider: mlx
+    model: prism-ml/Ternary-Bonsai-1.7B-mlx-2bit
+    driverOptions:
+      # The MLX auto detector recognizes qwen3 in mlx_vlm; force the text LM
+      # backend so prompt caching remains available for the cache suite.
+      backend: lm
+  mlx-native-tool:
+    provider: mlx
+    model: mlx-community/Josiefied-LFM2.5-1.2B-Instruct-abliterated-4bit
+    capabilities: [tools]
+  mlx-fallback-tool:
+    provider: mlx
+    model: Naturemort/Gemma-3-270m-it-GroomAttention
+
+# Example for an external API model (credentials should remain local and the
+# driver uses ANTHROPIC_API_KEY when apiKey is omitted):
+# models:
+#   anthropic:
+#     provider: anthropic
+#     model: claude-sonnet-4-20250514

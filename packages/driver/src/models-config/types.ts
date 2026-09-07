@@ -22,6 +22,8 @@ export interface ModelsConfigOptions {
    * overlay を指定したとき、user 全域 config を無視する場合は overlay を使う
    */
   source?: ModelsConfigSource;
+  /** 追加で読み込む user profile（例: `testing` → models.testing.yaml） */
+  profile?: string;
   /** アプリ同梱など、user より下のレイヤー */
   base?: ModelsConfig;
   /** 利用側 overlay（profile.modelsConfig 等） */

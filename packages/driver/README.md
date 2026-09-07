@@ -132,6 +132,34 @@ simple-chat では profile の `modelsConfig` に inline の `models` / `drivers
 
 不正な YAML は `loadModelsConfigFile()` が **例外を throw** します（js-yaml のパースエラーをそのまま伝播）。
 
+### テスト用モデル設定（`models.testing.yaml`）
+
+ローカル統合テストや手元試行で使うモデルは、通常設定と分けて
+`~/.modular-prompt/models.testing.yaml` に置けます。`MODULAR_PROMPT_HOME` を設定している場合は、そのディレクトリ配下を使用します。プロジェクト配下の設定ファイルは暗黙探索しません。
+
+`models.default` には cache 対応の text-only LM を指定してください。MLX VLM は prompt caching が無効になるため、cache 統合テストには使用できません。
+
+```yaml
+models:
+  default:
+    provider: mlx
+    model: prism-ml/Ternary-Bonsai-1.7B-mlx-2bit
+    driverOptions:
+      backend: lm  # qwen3 is otherwise detected through mlx_vlm; keep cache on
+  mlx-native-tool:
+    provider: mlx
+    model: mlx-community/Josiefied-LFM2.5-1.2B-Instruct-abliterated-4bit
+    capabilities: [tools]
+```
+
+マージ順は **base → `models.yaml` → `models.testing.yaml` → overlay** です。Vitest 実行中または `NODE_ENV=test` では testing 設定が自動で追加されます。CLI などで明示的に使う場合は次の環境変数を指定します。
+
+```bash
+MODULAR_PROMPT_MODELS_PROFILE=testing modular-extract create meeting -m default docs/notes.txt
+```
+
+ライブラリからは `resolveModelsConfig({ profile: 'testing' })` または `AIService.fromModelsConfig({ profile: 'testing' })` を使用できます。統合テストはこの設定から MLX/API ドライバーを導出し、設定が無い場合は従来の `test-drivers.yaml` にフォールバックします。サンプルは [`models.testing.yaml.example`](./test/integration/models.testing.yaml.example) を参照してください。
+
 
 ```typescript
 import { MlxDriver } from '@modular-prompt/driver';

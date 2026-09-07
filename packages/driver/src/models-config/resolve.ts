@@ -6,7 +6,7 @@ import type { DriverRegistry } from '../driver-registry/registry.js';
 import type { ApplicationConfig } from '../driver-registry/config-based-factory.js';
 import type { DriverProvider, ModelSpec } from '../driver-registry/types.js';
 import { loadModelsConfigFile } from './loader.js';
-import { getUserModelsConfigPath } from './paths.js';
+import { getModelsConfigPath, getUserModelsConfigPath } from './paths.js';
 import type {
   ModelReferenceInput,
   ModelSpecEntry,
@@ -68,8 +68,39 @@ export function mergeModelsConfig(
 /**
  * ユーザーレベルの models.yaml を読み込む（存在しない場合は空）
  */
-export function loadUserModelsConfig(): ModelsConfig {
-  return loadModelsConfigFile(getUserModelsConfigPath()) ?? {};
+export function loadUserModelsConfig(profile?: string): ModelsConfig {
+  const config = loadModelsConfigFile(getUserModelsConfigPath()) ?? {};
+  const resolvedProfile = resolveModelsProfile(profile);
+
+  if (!resolvedProfile || resolvedProfile === 'default') {
+    return config;
+  }
+
+  return mergeModelsConfig(
+    config,
+    loadModelsConfigFile(getModelsConfigPath(resolvedProfile)),
+    'merge'
+  );
+}
+
+/**
+ * 明示 profile、環境変数、実行コンテキストの順に user profile を解決する。
+ * Vitest / NODE_ENV=test では testing profile を自動的に追加する。
+ */
+function resolveModelsProfile(profile?: string): string | undefined {
+  if (profile !== undefined) {
+    return profile;
+  }
+
+  if (process.env.MODULAR_PROMPT_MODELS_PROFILE) {
+    return process.env.MODULAR_PROMPT_MODELS_PROFILE;
+  }
+
+  if (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)) {
+    return 'testing';
+  }
+
+  return undefined;
 }
 
 /**
@@ -88,7 +119,11 @@ export function resolveModelsConfig(options?: ModelsConfigOptions): ModelsConfig
   let config: ModelsConfig = options.base ? { ...options.base } : {};
 
   if (source === 'merge') {
-    config = mergeModelsConfig(config, loadUserModelsConfig(), mode);
+    config = mergeModelsConfig(
+      config,
+      loadUserModelsConfig(options.profile),
+      mode
+    );
   }
 
   if (options.overlay) {
