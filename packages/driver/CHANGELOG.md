@@ -1,5 +1,25 @@
 # @modular-prompt/driver
 
+## 0.16.0
+
+### Minor Changes
+
+- f2e1247: feat(driver): `models.testing.yaml` の profile 解決とローカル統合テスト設定を追加
+
+  `~/.modular-prompt/models.testing.yaml` を Vitest / `NODE_ENV=test` の自動マージ、または `MODULAR_PROMPT_MODELS_PROFILE=testing` の明示 profile として利用できます。既存の `test-drivers.yaml` は後方互換のためフォールバックします。
+
+  Closes #356
+
+### Patch Changes
+
+- ff885fa: chore: MLX Python 依存を更新（mlx-vlm 0.6.17、mlx 0.32.2、transformers 5.15.1）。mlx-lm は PyPI 最新の 0.31.3 を維持。
+- eb510e2: extract のモデル解決を AIService 経由に統一し、models.yaml の alias と生の MLX model ID を利用可能にする。driver から cache controller を注入できるようにし、runtime のキャッシュライフサイクルを維持する。
+- 7bec4ee: fix(driver): MLX KV キャッシュをストリーミング zip 圧縮で保存
+
+  MLX の KV キャッシュを `.safetensors.zip` として保存し、保存時に非圧縮の中間ファイルを作成しないようにする。
+
+- 6ce333b: setup-mlx / setup-pytorch コマンドを単一ソース（`setup-commands-core.mjs`）に統一し、monorepo ルートの再帰バグを `--filter` 委譲で修正。runtime CLI を `modular-prompt-runtime` bin として公開
+
 ## 0.15.0
 
 ### Minor Changes
