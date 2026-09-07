@@ -57,8 +57,8 @@ node packages/extract/bin/modular-extract.js extract meeting '登場人物を列
 # 3. コンテナ内の store を一覧表示
 node packages/extract/bin/modular-extract.js list
 
-# store 単位のキャッシュ削除（clean コマンドは後続 Issue）
-rm -rf ~/.modular-prompt/extract-cache/meeting
+# store 単位のキャッシュ削除
+node packages/extract/bin/modular-extract.js clean meeting
 ```
 
 | コマンド | 説明 |
@@ -66,6 +66,8 @@ rm -rf ~/.modular-prompt/extract-cache/meeting
 | `create <storename> [-d <container>] [-m <alias-or-model-id>] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を `<container>/<storename>/` に保存 |
 | `extract <storename> [-d <container>] [query...]` | 指定 store のキャッシュ済み corpus に対して抽出。query が cue になる |
 | `list [-d <container>]` | コンテナ内の全 store と manifest/KV のサマリを表示 |
+| `clean <storename> [-d <container>]` | 指定 store の manifest + KV キャッシュを再帰削除。存在しない store は no-op |
+| `clean --all [-d <container>]` | コンテナ全体を再帰削除。存在しないコンテナは no-op |
 | `extract <storename> --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
 | `--dry-run` | MLX を起動せず、compile 済みプロンプト全文を stdout に出力 |
 
@@ -87,7 +89,7 @@ modular-extract create meeting --dry-run docs/notes.txt
 modular-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
-`-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/extract/list 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/extract では `<storename>` が必須で、コンテナ配下の `<storename>/` が利用されます。
+`-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/extract/list/clean 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/extract/clean では `<storename>` が必須（`clean --all` を除く）で、コンテナ配下の `<storename>/` が利用されます。
 `-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
 `MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
 
@@ -152,8 +154,8 @@ try {
 | `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
 | `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors.zip` を削除 |
 | `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
-| `rm -rf <cache-dir>/<storename>` | 1 store の manifest + KV キャッシュを手動削除（`clean` は後続 Issue） |
-| `rm -rf <cache-dir>` | コンテナ内の全 store を手動削除 |
+| `clean <storename> [-d <container>]` | 1 store の manifest + KV キャッシュを再帰削除 |
+| `clean --all [-d <container>]` | コンテナ内の全 store を再帰削除 |
 
 `create` 直後に store 内へ `manifest.json` だけ残って `.safetensors.zip` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
 
@@ -312,12 +314,11 @@ modular-extract create contract [-d <cache-dir>] [-m <alias-or-model-id>] contra
 modular-extract extract meeting [-d <cache-dir>] '抽出したい内容の指示'
 modular-extract extract contract [-d <cache-dir>] '契約期間を抽出'
 modular-extract list [-d <cache-dir>]
-
-# store 単位のキャッシュ削除（clean コマンドは後続 Issue）
-rm -rf ~/.modular-prompt/extract-cache/meeting
+modular-extract clean meeting [-d <cache-dir>]
+modular-extract clean --all [-d <cache-dir>]
 ```
 
-`<storename>` は create/extract の positional 第1引数で必須です。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗し、後続 Issue の `clean <storename>` と手動削除を案内します。
+`<storename>` は create/extract/clean の positional 第1引数で必須です（`clean --all` を除く）。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗するため、`modular-extract clean <storename>`（必要に応じて `-d <container>`）で削除してから再実行します。
 
 `-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
 

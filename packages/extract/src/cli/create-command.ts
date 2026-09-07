@@ -30,8 +30,7 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
   if (await storeExists(storeDir)) {
     throw new Error(
       `Store already exists: ${storeDir}\n`
-      + `Run \`clean ${options.storename}\` before creating it again `
-      + '(clean is not implemented yet; remove the store directory manually).',
+      + `Run \`modular-extract clean ${options.storename}\` before creating it again.`,
     );
   }
 

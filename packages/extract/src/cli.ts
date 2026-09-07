@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MAX_TOKENS, resolveDefaultContainerDir } from './cli/constants.js';
 import { parseArgs } from './cli/args.js';
+import { runCleanCommand } from './cli/clean-command.js';
 import { runCreateCommand } from './cli/create-command.js';
 import { runExtractCommand } from './cli/extract-command.js';
 import { runListCommand } from './cli/list-command.js';
@@ -21,17 +22,21 @@ Usage:
   modular-extract create <storename> [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
   modular-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
   modular-extract list [-d <cache-dir>]
+  modular-extract clean <storename> [-d <cache-dir>]
+  modular-extract clean --all [-d <cache-dir>]
 
 Commands:
   create    Load input files and prepare KV cache in <cache-dir>/<storename>
   extract   Run extraction query against a prepared store
   list      List stores and their cache summaries
+  clean     Remove one store or the entire cache container
 
 Options:
   -d, --cache-dir <path>   Store container directory (default: ${resolveDefaultContainerDir()})
   -m, --model <model>      MLX model alias from models.yaml or raw model id
   --max-tokens <n>         Max tokens for extract (default: ${DEFAULT_MAX_TOKENS})
   --dry-run                Compile and print full prompt text (no MLX / no cache write)
+  --all                    Remove the entire cache container (clean only)
   -h, --help               Show help
 
 Store name:
@@ -82,6 +87,16 @@ async function main(): Promise<void> {
       dryRun: parsed.dryRun,
     });
     process.stdout.write(`${text}\n`);
+    return;
+  }
+
+  if (parsed.command === 'clean') {
+    const message = await runCleanCommand({
+      cacheDir,
+      storename: parsed.storename,
+      all: parsed.all,
+    });
+    process.stdout.write(`${message}\n`);
     return;
   }
 

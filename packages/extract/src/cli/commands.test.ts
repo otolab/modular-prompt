@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCreateCommand } from './create-command.js';
+import { runCleanCommand } from './clean-command.js';
 import { runExtractCommand } from './extract-command.js';
 import { readManifest } from './manifest.js';
 import { storeExists } from './store.js';
@@ -135,6 +136,38 @@ describe('cli store commands', () => {
       storename: 'meeting',
       files: [filePath],
     })).rejects.toThrow(/clean meeting/);
+  });
+
+  it('allows creating a store again after cleaning the whole container', async () => {
+    const inputDir = await mkdtemp(join(tmpdir(), 'extract-cli-input-'));
+    const filePath = join(inputDir, 'notes.txt');
+    await writeFile(filePath, 'notes', 'utf-8');
+
+    try {
+      await runCreateCommand({
+        cacheDir: tempDir,
+        storename: 'meeting',
+        files: [filePath],
+      });
+      await runCreateCommand({
+        cacheDir: tempDir,
+        storename: 'contract',
+        files: [filePath],
+      });
+
+      await expect(runCleanCommand({ cacheDir: tempDir, all: true }))
+        .resolves.toBe(`Removed cache container: ${tempDir}`);
+      await expect(storeExists(tempDir)).resolves.toBe(false);
+
+      await expect(runCreateCommand({
+        cacheDir: tempDir,
+        storename: 'meeting',
+        files: [filePath],
+      })).resolves.toBeUndefined();
+      await expect(storeExists(join(tempDir, 'meeting'))).resolves.toBe(true);
+    } finally {
+      await rm(inputDir, { recursive: true, force: true });
+    }
   });
 
   it('allows retry after runtime creation fails', async () => {

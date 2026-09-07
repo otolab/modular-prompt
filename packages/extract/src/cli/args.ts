@@ -1,6 +1,6 @@
 import { validateStorename } from './store.js';
 
-export type CliCommand = 'create' | 'extract' | 'list' | 'help';
+export type CliCommand = 'create' | 'extract' | 'list' | 'clean' | 'help';
 
 export interface ParsedArgs {
   command?: CliCommand;
@@ -8,6 +8,7 @@ export interface ParsedArgs {
   model?: string;
   maxTokens?: number;
   dryRun?: boolean;
+  all?: boolean;
   storename?: string;
   positional: string[];
 }
@@ -29,6 +30,9 @@ function parseMaxTokens(value: string): number {
 }
 
 function validateCommandOptions(result: ParsedArgs): void {
+  if (result.all && result.command !== 'clean') {
+    throw new Error('--all is only valid with clean');
+  }
   if (result.command === 'create' && result.maxTokens !== undefined) {
     throw new Error('--max-tokens is only valid with extract');
   }
@@ -41,6 +45,23 @@ function validateCommandOptions(result: ParsedArgs): void {
     }
     if (result.positional.length > 0) {
       throw new Error('list does not accept positional arguments');
+    }
+  }
+  if (result.command === 'clean') {
+    if (result.model !== undefined || result.maxTokens !== undefined || result.dryRun) {
+      throw new Error('clean does not accept create/extract options');
+    }
+    if (result.all) {
+      if (result.positional.length > 0) {
+        throw new Error('clean --all does not accept positional arguments');
+      }
+      return;
+    }
+    if (result.storename !== undefined && result.positional.length > 0) {
+      throw new Error('clean accepts only one storename');
+    }
+    if (!result.storename) {
+      throw new Error('clean requires a storename or --all');
     }
   }
 }
@@ -66,7 +87,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
 
     if (!result.command && !optionsEnded && !arg.startsWith('-')) {
-      if (arg === 'create' || arg === 'extract' || arg === 'list') {
+      if (arg === 'create' || arg === 'extract' || arg === 'list' || arg === 'clean') {
         result.command = arg;
         index += 1;
         continue;
@@ -92,6 +113,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
+    if (!optionsEnded && arg === '--all') {
+      result.all = true;
+      index += 1;
+      continue;
+    }
+
     if (!optionsEnded && arg === '--max-tokens') {
       const value = requireOptionValue(argv, index, arg, 'a positive integer');
       result.maxTokens = parseMaxTokens(value);
@@ -107,14 +134,19 @@ export function parseArgs(argv: string[]): ParsedArgs {
     index += 1;
   }
 
-  if (result.command === 'create' || result.command === 'extract') {
+  if (result.command === 'create' || result.command === 'extract' || result.command === 'clean') {
     const [storename, ...positional] = result.positional;
-    if (!storename) {
-      throw new Error(`${result.command} requires a storename as its first argument`);
+    if (!(result.command === 'clean' && result.all)) {
+      if (!storename) {
+        if (result.command === 'clean') {
+          throw new Error('clean requires a storename or --all');
+        }
+        throw new Error(`${result.command} requires a storename as its first argument`);
+      }
+      validateStorename(storename);
+      result.storename = storename;
+      result.positional = positional;
     }
-    validateStorename(storename);
-    result.storename = storename;
-    result.positional = positional;
   }
 
   validateCommandOptions(result);

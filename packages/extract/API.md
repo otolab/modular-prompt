@@ -195,18 +195,20 @@ function createExtractSession<TContext = ExtractContext>(
   - `releaseCache`（デフォルト `true`）— `false` のとき handle を release しない。固定 cacheDir をプロセス間で再利用する場合に使う
   - `releaseCache: true` のとき `cacheController.release()` が呼ばれ、続く `runtime.close()` で KV ファイルが削除される（固定 cacheDir モード）
 
-手動クリーン: cache ディレクトリを `rm -rf` で削除（CLI の想定運用）。
+CLI の `clean <storename>` で store 単位、`clean --all` で cache container 全体を削除できる。対象が存在しない場合は no-op になる。
 
 ---
 
 ## CLI（`modular-extract`）
 
-`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
+`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
 
 ```bash
 modular-extract create <storename> [-m <model>] [--dry-run] <files...>
 modular-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
 modular-extract list
+modular-extract clean <storename>
+modular-extract clean --all
 ```
 
 container を指定する場合は、各コマンドに `-d <cache-dir>` を追加する。
@@ -215,9 +217,11 @@ container を指定する場合は、各コマンドに `-d <cache-dir>` を追�
 modular-extract create meeting -d ~/.modular-prompt/extract-cache -m default docs/meeting.txt
 modular-extract extract meeting -d ~/.modular-prompt/extract-cache '参加者を列挙'
 modular-extract list -d ~/.modular-prompt/extract-cache
+modular-extract clean meeting -d ~/.modular-prompt/extract-cache
+modular-extract clean --all -d ~/.modular-prompt/extract-cache
 ```
 
-`<storename>` は create/extract の positional 第1引数として必須で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`extract`、`list`、`clean` は予約語である。
+`<storename>` は create/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`extract`、`list`、`clean` は予約語である。
 
 これは破壊的変更であり、旧 CLI 引数形式と旧レイアウト（container 直下の `manifest.json` と cache files）はサポートしない。旧デフォルト `./.extract-cache` の自動検出・自動移行も行わない。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って、新しいデフォルトまたは `-d` で指定した store container へ移動する。
 
