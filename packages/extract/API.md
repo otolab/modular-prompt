@@ -119,7 +119,21 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 | `inputChunk` / `inputChunksFromJson` | 関数 | chunk 入力ヘルパ |
 | `normalizeMaterials` 等 | 関数 | 正規化ヘルパ（テスト・高度な用途） |
 
+### 内部 API（named store 拡張の共有実装）
+
+`src/extract-store.ts` は package root からは export しない内部 API ですが、CLI と将来の store 管理入口が共有する disk 上の store 操作を担当します。`add-command.ts` はファイル読み込み、引数由来のエラー、`--dry-run` の出力だけを担当し、prefill と manifest の更新はこの層を呼び出します。
+
+| API | 入力 / 出力 | 責務と保証 |
+|-----|-------------|------------|
+| `mergeMaterials(existing, incoming)` | `MaterialInput[]` → merged `MaterialInput[]` | `id`（省略時は `title`）で順序を保ってマージ。同一 id・同一内容はスキップし、内容差分はエラー |
+| `prepareExtractCache({ cacheDir, model, materials })` | `Promise<string>`（解決済み model） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
+| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
+
+`appendToExtractStore` は `manifest.model` を使い、成功時だけ `updatedAt` と materials を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
+
 ---
+
+create/add が内部で使う `prepareExtractCache` は `cachePreparation: 'required'` で session を実行するため、cache controller が空 handle を返した場合は driver query、manifest 書き込み、store の rename 交換に進みません。通常の `createExtractSession` は省略時の `best-effort` 契約を維持します。
 
 ## `createMlxExtractRuntime(options)`
 
@@ -161,6 +175,7 @@ function createExtractSession<TContext = ExtractContext>(
 | `domainModule` | `PromptModule<TContext>` | — | base の上に merge |
 | `corpus` | `ExtractCorpus` | ✅ | セッション固定 corpus |
 | `schema` | `object` | — | JSON Schema（structured output） |
+| `cachePreparation` | `'best-effort' \| 'required'` | — | 通常は `best-effort`（省略時）。`required` は空 handle をエラーにして driver query を実行しない |
 
 #### `ExtractCorpus`
 
@@ -201,10 +216,11 @@ CLI の `clean <storename>` で store 単位、`clean --all` で cache container
 
 ## CLI（`modular-extract`）
 
-`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
+`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/add/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
 
 ```bash
 modular-extract create <storename> [-m <model>] [--dry-run] <files...>
+modular-extract add <storename> [--dry-run] <files...>
 modular-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
 modular-extract list
 modular-extract clean <storename>
@@ -215,13 +231,18 @@ container を指定する場合は、各コマンドに `-d <cache-dir>` を追�
 
 ```bash
 modular-extract create meeting -d ~/.modular-prompt/extract-cache -m default docs/meeting.txt
+modular-extract add meeting -d ~/.modular-prompt/extract-cache docs/day2.txt
 modular-extract extract meeting -d ~/.modular-prompt/extract-cache '参加者を列挙'
 modular-extract list -d ~/.modular-prompt/extract-cache
 modular-extract clean meeting -d ~/.modular-prompt/extract-cache
 modular-extract clean --all -d ~/.modular-prompt/extract-cache
 ```
 
-`<storename>` は create/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`extract`、`list`、`clean` は予約語である。
+`<storename>` は create/add/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`add`、`extract`、`list`、`clean` は予約語である。
+
+`add <storename> [--dry-run] <files...>` は既存 store の manifest にファイルを追記し、manifest の model で prepare cue を実行する。既存 cache を staging store に複製してから incremental prefill と manifest 更新を行い、成功時にだけ store を入れ替える。prefill または manifest 更新が失敗した場合は元の store を保持する。同じ絶対パス `id` の同一内容はスキップし、内容が異なる場合は `clean` + `create` を案内してエラーにする。
+
+`add --dry-run` はマージ後の compile 済みプロンプトを表示し、MLX の起動・KV cache の書き込み・manifest の更新を行わない。`add` では `-m` と `--max-tokens` は指定できない。
 
 これは破壊的変更であり、旧 CLI 引数形式と旧レイアウト（container 直下の `manifest.json` と cache files）はサポートしない。旧デフォルト `./.extract-cache` の自動検出・自動移行も行わない。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って、新しいデフォルトまたは `-d` で指定した store container へ移動する。
 

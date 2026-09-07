@@ -16,7 +16,7 @@ describe('store paths', () => {
     },
   );
 
-  it.each(['create', 'extract', 'list', 'clean'])('rejects reserved storename %s', (storename) => {
+  it.each(['create', 'add', 'extract', 'list', 'clean'])('rejects reserved storename %s', (storename) => {
     expect(() => validateStorename(storename)).toThrow(/reserved/);
   });
 });

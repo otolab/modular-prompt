@@ -1,7 +1,6 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { createExtractSession } from '../create-extract-session.js';
-import { createMlxExtractRuntime } from '../create-mlx-extract-runtime.js';
+import { prepareExtractCache } from '../extract-store.js';
 import { CACHE_PREPARE_CUE } from './constants.js';
 import { loadMaterialsFromFiles } from './load-materials.js';
 import { writeManifest } from './manifest.js';
@@ -36,41 +35,31 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
 
   await mkdir(storeDir, { recursive: true });
 
-  let runtime: Awaited<ReturnType<typeof createMlxExtractRuntime>> | undefined;
   let storeReady = false;
+  let preparedModel: string | undefined;
   try {
-    runtime = await createMlxExtractRuntime({ model: options.model, cacheDir: storeDir });
-    const session = createExtractSession({
-      driver: runtime.driver,
-      cacheController: runtime.cacheController,
-      model: runtime.model,
-      corpus: { materials },
+    preparedModel = await prepareExtractCache({
+      cacheDir: storeDir,
+      model: options.model,
+      materials,
     });
-
-    await session.extract({
-      cue: CACHE_PREPARE_CUE,
-      options: { maxTokens: 1, temperature: 0 },
-    });
-    await session.close({ releaseCache: false });
+    const createdAt = new Date().toISOString();
 
     await writeManifest(storeDir, {
       version: 1,
       storename: options.storename,
-      model: runtime.model,
+      model: preparedModel,
       materials,
-      createdAt: new Date().toISOString(),
+      createdAt,
+      updatedAt: createdAt,
     });
     storeReady = true;
   } finally {
-    try {
-      await runtime?.close();
-    } finally {
-      if (!storeReady) {
-        await rm(storeDir, { recursive: true, force: true });
-      }
+    if (!storeReady) {
+      await rm(storeDir, { recursive: true, force: true });
     }
   }
 
   console.error(`Cache prepared: ${storeDir}`);
-  console.error(`Materials: ${materials.length} file(s), model: ${runtime?.model}`);
+  console.error(`Materials: ${materials.length} file(s), model: ${preparedModel}`);
 }

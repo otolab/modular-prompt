@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PromptModule } from '@modular-prompt/core';
-import type { CacheHandle } from '@modular-prompt/driver';
+import type { CacheHandle, PromptCacheController } from '@modular-prompt/driver';
 import { partitionPrompt, TestDriver } from '@modular-prompt/driver';
 import {
   prepareSessionCache,
@@ -157,6 +157,38 @@ describe('createExtractSession cache integration', () => {
     expect(tracking.releases).toContain('cache-1');
     expect(tracking.releases).toContain('cache-2');
     expect(tracking.controller.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps best-effort query behavior when cache preparation returns an empty handle', async () => {
+    let queryCount = 0;
+    const driver = new TestDriver({
+      responses: () => {
+        queryCount += 1;
+        return 'query succeeded without cache';
+      },
+    });
+    const cacheController: PromptCacheController = {
+      prepare: async () => ({
+        ref: '',
+        includes: { instructions: false, dataElementCount: 0, tools: false },
+      }),
+      release: () => {},
+      close: async () => {},
+    };
+
+    const session = createExtractSession({
+      driver,
+      baseModule,
+      corpus,
+      cacheController,
+      model: 'test-model',
+    });
+
+    await expect(session.extract({ cue: 'List characters' })).resolves.toMatchObject({
+      text: 'query succeeded without cache',
+    });
+    expect(queryCount).toBe(1);
+    await session.close();
   });
 
   it('does not close cacheController on session close', async () => {

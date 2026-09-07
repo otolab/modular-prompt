@@ -36,6 +36,11 @@ export interface ExtractSessionOptions<TContext = ExtractContext> {
   corpus: ExtractCorpus;
   /** Output schema (Phase 3: structured output). Accepted at session creation. */
   schema?: object;
+  /**
+   * Cache preparation policy. Normal sessions are best-effort; store
+   * preparation uses `required` so an empty cache handle cannot be committed.
+   */
+  cachePreparation?: 'best-effort' | 'required';
 }
 
 export interface ExtractRequest {

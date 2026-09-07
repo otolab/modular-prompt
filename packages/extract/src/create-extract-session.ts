@@ -58,6 +58,7 @@ export function createExtractSession<TContext = ExtractContext>(
         request,
         baseModule,
         cacheState,
+        { required: options.cachePreparation === 'required' },
       );
 
       const compiled = compileExtractPrompt(

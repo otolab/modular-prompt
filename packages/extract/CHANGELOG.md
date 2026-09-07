@@ -4,12 +4,16 @@
 
 ### Breaking Changes
 
-- `modular-extract create` / `extract` は storename を positional 第1引数として必須化しました。`-d` は store コンテナを指し、各 store は `<container>/<storename>/` に独立した manifest と KV キャッシュを持ちます。
-- `modular-extract list` でコンテナ内の store サマリを確認できます。create/extract/list/clean の `-d` 省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` 指定時は `${MODULAR_PROMPT_HOME}/extract-cache`）を使用します。
+- `modular-extract create` / `add` / `extract` は storename を positional 第1引数として必須化しました。`-d` は store コンテナを指し、各 store は `<container>/<storename>/` に独立した manifest と KV キャッシュを持ちます。
+- `modular-extract list` でコンテナ内の store サマリを確認できます。create/add/extract/list/clean の `-d` 省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` 指定時は `${MODULAR_PROMPT_HOME}/extract-cache`）を使用します。
 - 旧デフォルト `./.extract-cache` の自動検出・自動移行は行いません。既存キャッシュは README の手動移行手順に従って、新しいデフォルトの store container へ移動してください。
 - 旧 CLI 引数形式と旧レイアウト（コンテナ直下の `manifest.json`）も自動移行しません。
 
 ### Minor Changes
+
+- `modular-extract add <storename> <files...>` で既存 store の corpus と KV cache を incremental prefill により拡張できるようにしました。`--dry-run`、同一 id の重複スキップ、内容変更時のエラー、失敗時に既存 store を保持する staging 更新、manifest の `updatedAt` に対応しています。
+
+  Closes #355
 
 - `modular-extract clean <storename>` で store 単位、`modular-extract clean --all` で cache container 全体の manifest と KV キャッシュを削除できるようにしました。存在しない対象は no-op になります。
 
