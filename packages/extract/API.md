@@ -133,6 +133,8 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 
 ---
 
+create/add が内部で使う `prepareExtractCache` は `cachePreparation: 'required'` で session を実行するため、cache controller が空 handle を返した場合は driver query、manifest 書き込み、store の rename 交換に進みません。通常の `createExtractSession` は省略時の `best-effort` 契約を維持します。
+
 ## `createMlxExtractRuntime(options)`
 
 ```typescript
@@ -173,6 +175,7 @@ function createExtractSession<TContext = ExtractContext>(
 | `domainModule` | `PromptModule<TContext>` | — | base の上に merge |
 | `corpus` | `ExtractCorpus` | ✅ | セッション固定 corpus |
 | `schema` | `object` | — | JSON Schema（structured output） |
+| `cachePreparation` | `'best-effort' \| 'required'` | — | 通常は `best-effort`（省略時）。`required` は空 handle をエラーにして driver query を実行しない |
 
 #### `ExtractCorpus`
 

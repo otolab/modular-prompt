@@ -159,7 +159,7 @@ try {
 | `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
 | `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors.zip` を削除 |
 | `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
-| `add <storename> files...` | 既存 store を staging にコピーし、追加 corpus の incremental prefill と manifest 更新が成功した後に入れ替え |
+| `add <storename> files...` | 既存 store を staging にコピーし、必須 cache prepare（空 handle は失敗）と manifest 更新が成功した後に入れ替え |
 | `clean <storename> [-d <container>]` | 1 store の manifest + KV キャッシュを再帰削除 |
 | `clean --all [-d <container>]` | コンテナ内の全 store を再帰削除 |
 
@@ -329,7 +329,7 @@ modular-extract clean --all [-d <cache-dir>]
 
 `add <storename> files...` は manifest の model を使って既存 store に資料を追加します。新しいファイルは絶対パスを `id` として追記され、同じ `id`・同じ内容の再追加はスキップされます。同じ `id` の内容が変わっている場合は、キャッシュとの不整合を避けるためエラーになります。その場合は `clean` してから `create` し直してください。`add --dry-run` は MLX を起動せず、マージ後のプロンプトを表示します。
 
-`add` は既存 store を直接上書きしません。staging store で prefill と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、prefill または manifest 更新に失敗した場合は既存の corpus と KV cache が保持されます。
+`add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
 `-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
 

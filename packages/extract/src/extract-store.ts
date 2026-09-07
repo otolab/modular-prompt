@@ -57,6 +57,7 @@ export async function prepareExtractCache(
       cacheController: runtime.cacheController,
       model: runtime.model,
       corpus: { materials: options.materials },
+      cachePreparation: 'required',
     });
 
     await session.extract({

@@ -9,6 +9,11 @@ export interface CacheLifecycleState {
   controllerReady: boolean;
 }
 
+export interface PrepareSessionCacheOptions {
+  /** Reject an empty cache handle instead of falling back to an uncached query. */
+  required?: boolean;
+}
+
 export async function ensureCacheControllerReady(
   driver: AIDriver,
   state: CacheLifecycleState,
@@ -32,6 +37,7 @@ export async function prepareSessionCache<TContext>(
   request: ExtractRequest,
   baseModule: PromptModule<TContext> | undefined,
   state: CacheLifecycleState,
+  options: PrepareSessionCacheOptions = {},
 ): Promise<CacheHandle | null> {
   const compiled = compileExtractPrompt(sessionBaseModule, corpus, request, baseModule);
   const { cacheable } = partitionPrompt(compiled);
@@ -39,6 +45,9 @@ export async function prepareSessionCache<TContext>(
     cacheable.instructions.length > 0 || cacheable.data.length > 0;
 
   if (!hasCacheableContent) {
+    if (options.required && !state.handle) {
+      throw new Error('Required cache preparation failed: prompt has no cacheable content');
+    }
     return state.handle;
   }
 
@@ -49,6 +58,16 @@ export async function prepareSessionCache<TContext>(
     tools: request.options?.tools,
     reasoningEffort: request.options?.reasoningEffort,
   });
+
+  if (!newHandle.ref) {
+    if (options.required) {
+      throw new Error(
+        'Required cache preparation failed: cache controller returned an empty handle',
+      );
+    }
+    state.handle = null;
+    return state.handle;
+  }
 
   if (state.handle?.ref && newHandle.supersedes === state.handle.ref) {
     cacheController.release(state.handle.ref);
