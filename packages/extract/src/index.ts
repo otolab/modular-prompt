@@ -6,6 +6,7 @@ export {
   resolveModelSpec,
 } from './model-resolution.js';
 export { resolveSessionModules } from './resolve-session-modules.js';
+export { resolveStoreDir, validateStorename } from './cli/store.js';
 export { compileExtractPrompt } from './compile-extract-prompt.js';
 export { buildExtractContext } from './extract-context.js';
 export {

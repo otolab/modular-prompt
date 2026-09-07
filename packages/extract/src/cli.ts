@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CACHE_DIR, DEFAULT_MAX_TOKENS } from './cli/constants.js';
+import { parseArgs } from './cli/args.js';
 import { runCreateCommand } from './cli/create-command.js';
 import { runExtractCommand } from './cli/extract-command.js';
+import { runListCommand } from './cli/list-command.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(
@@ -16,22 +18,24 @@ function printHelp(): void {
   console.log(`modular-extract v${packageJson.version}
 
 Usage:
-  modular-extract create [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
-  modular-extract extract -d <cache-dir> [--max-tokens <n>] [--dry-run] <query...>
+  modular-extract create <storename> [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
+  modular-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
+  modular-extract list [-d <cache-dir>]
 
 Commands:
-  create    Load input files and prepare KV cache in <cache-dir>
-  extract   Run extraction query against a prepared cache directory
+  create    Load input files and prepare KV cache in <cache-dir>/<storename>
+  extract   Run extraction query against a prepared store
+  list      List stores and their cache summaries
 
 Options:
-  -d, --cache-dir <path>   Cache directory (create default: ${DEFAULT_CACHE_DIR})
+  -d, --cache-dir <path>   Store container directory (default: ${DEFAULT_CACHE_DIR})
   -m, --model <model>      MLX model alias from models.yaml or raw model id
   --max-tokens <n>         Max tokens for extract (default: ${DEFAULT_MAX_TOKENS})
   --dry-run                Compile and print full prompt text (no MLX / no cache write)
   -h, --help               Show help
 
-Cache cleanup:
-  rm -rf <cache-dir>
+Store name:
+  Must match [a-zA-Z0-9][a-zA-Z0-9_-]* and cannot be create, extract, list, or clean.
 
 Note:
   Without -m, models.default (or the first model entry) is selected from bundled config merged with
@@ -40,81 +44,6 @@ Note:
   If no model is configured, specify -m <model-id-or-alias> or define models.default.
   MLX backend is fixed to mlx-lm (backend: lm) for prompt cache support.
 `);
-}
-
-interface ParsedArgs {
-  command?: 'create' | 'extract' | 'help';
-  cacheDir?: string;
-  model?: string;
-  maxTokens?: number;
-  dryRun?: boolean;
-  positional: string[];
-}
-
-function parseArgs(argv: string[]): ParsedArgs {
-  const result: ParsedArgs = { positional: [] };
-  let index = 0;
-
-  while (index < argv.length) {
-    const arg = argv[index]!;
-
-    if (arg === '-h' || arg === '--help') {
-      result.command = 'help';
-      return result;
-    }
-
-    if (!result.command && !arg.startsWith('-')) {
-      if (arg === 'create' || arg === 'extract') {
-        result.command = arg;
-        index += 1;
-        continue;
-      }
-    }
-
-    if (arg === '-d' || arg === '--cache-dir') {
-      result.cacheDir = argv[index + 1];
-      if (!result.cacheDir) {
-        throw new Error(`${arg} requires a path`);
-      }
-      index += 2;
-      continue;
-    }
-
-    if (arg === '-m' || arg === '--model') {
-      result.model = argv[index + 1];
-      if (!result.model) {
-        throw new Error(`${arg} requires a model id`);
-      }
-      index += 2;
-      continue;
-    }
-
-    if (arg === '--dry-run') {
-      result.dryRun = true;
-      index += 1;
-      continue;
-    }
-
-    if (arg === '--max-tokens') {
-      const value = argv[index + 1];
-      const parsed = Number.parseInt(value ?? '', 10);
-      if (!Number.isFinite(parsed) || parsed < 1) {
-        throw new Error('--max-tokens must be a positive integer');
-      }
-      result.maxTokens = parsed;
-      index += 2;
-      continue;
-    }
-
-    if (arg.startsWith('-')) {
-      throw new Error(`Unknown option: ${arg}`);
-    }
-
-    result.positional.push(arg);
-    index += 1;
-  }
-
-  return result;
 }
 
 async function main(): Promise<void> {
@@ -131,6 +60,7 @@ async function main(): Promise<void> {
   if (parsed.command === 'create') {
     const output = await runCreateCommand({
       cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
+      storename: parsed.storename!,
       model: parsed.model,
       files: parsed.positional,
       dryRun: parsed.dryRun,
@@ -141,15 +71,20 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!parsed.cacheDir) {
-    throw new Error('extract requires -d <cache-dir>');
+  if (parsed.command === 'extract') {
+    const text = await runExtractCommand({
+      cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
+      storename: parsed.storename!,
+      query: parsed.positional.join(' '),
+      maxTokens: parsed.maxTokens,
+      dryRun: parsed.dryRun,
+    });
+    process.stdout.write(`${text}\n`);
+    return;
   }
 
-  const text = await runExtractCommand({
-    cacheDir: parsed.cacheDir,
-    query: parsed.positional.join(' '),
-    maxTokens: parsed.maxTokens,
-    dryRun: parsed.dryRun,
+  const text = await runListCommand({
+    cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
   });
   process.stdout.write(`${text}\n`);
 }

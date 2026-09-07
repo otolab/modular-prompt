@@ -79,7 +79,18 @@ import {
   inputChunksFromJson,
   mergeExtractBaseModule,
   defaultExtractBaseModule,
+  resolveStoreDir,
+  validateStorename,
 } from '@modular-prompt/extract';
+```
+
+named store のパス解決と入力検証をライブラリから利用する場合:
+
+```typescript
+import { resolveStoreDir, validateStorename } from '@modular-prompt/extract';
+
+validateStorename('meeting');
+const storeDir = resolveStoreDir('.extract-cache', 'meeting');
 ```
 
 ### 公開シンボル
@@ -91,6 +102,8 @@ import {
 | `resolveModelSpec` | 関数 | models.yaml の alias または生 model ID を extract 用 ModelSpec に解決 |
 | `createDriver` | 関数 | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
 | `resolveSessionModules` | 関数 | base (+ domain) モジュールを解決 |
+| `resolveStoreDir` | 関数 | cache コンテナと storename から store ディレクトリを解決 |
+| `validateStorename` | 関数 | storename の形式と予約語を検証 |
 | `compileExtractPrompt` | 関数 | context 付き compile（高度な用途） |
 | `buildExtractContext` | 関数 | corpus + request から `ExtractContext` を構築 |
 | `defaultExtractBaseModule` | 定数 | デフォルト base `PromptModule` |
@@ -177,6 +190,30 @@ function createExtractSession<TContext = ExtractContext>(
   - `releaseCache: true` のとき `cacheController.release()` が呼ばれ、続く `runtime.close()` で KV ファイルが削除される（固定 cacheDir モード）
 
 手動クリーン: cache ディレクトリを `rm -rf` で削除（CLI の想定運用）。
+
+---
+
+## CLI（`modular-extract`）
+
+`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list 共通で使用する。省略時は `./.extract-cache`。
+
+```bash
+modular-extract create <storename> [-m <model>] [--dry-run] <files...>
+modular-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
+modular-extract list
+```
+
+container を指定する場合は、各コマンドに `-d <cache-dir>` を追加する。
+
+```bash
+modular-extract create meeting -d .extract-cache -m default docs/meeting.txt
+modular-extract extract meeting -d .extract-cache '参加者を列挙'
+modular-extract list -d .extract-cache
+```
+
+`<storename>` は create/extract の positional 第1引数として必須で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`extract`、`list`、`clean` は予約語である。
+
+これは破壊的変更であり、旧 CLI 引数形式はサポートしない。旧レイアウト（container 直下の `manifest.json` と cache files）も読み取り・互換レイヤー・自動移行の対象外である。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って store directory へ移動する。
 
 ---
 

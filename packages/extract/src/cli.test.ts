@@ -58,6 +58,7 @@ describe('cli/create dry-run', () => {
 
     const prompt = await runCreateCommand({
       cacheDir: join(tempDir, 'cache'),
+      storename: 'meeting',
       model: 'test-model',
       files: [filePath],
       dryRun: true,
