@@ -1,5 +1,18 @@
 # @modular-prompt/simple-chat
 
+## 0.5.1
+
+### Patch Changes
+
+- 6ce333b: setup-mlx / setup-pytorch コマンドを単一ソース（`setup-commands-core.mjs`）に統一し、monorepo ルートの再帰バグを `--filter` 委譲で修正。runtime CLI を `modular-prompt-runtime` bin として公開
+- Updated dependencies [ff885fa]
+- Updated dependencies [eb510e2]
+- Updated dependencies [f2e1247]
+- Updated dependencies [7bec4ee]
+- Updated dependencies [6ce333b]
+  - @modular-prompt/driver@0.16.0
+  - @modular-prompt/process@0.5.9
+
 ## 0.5.0
 
 ### Minor Changes
