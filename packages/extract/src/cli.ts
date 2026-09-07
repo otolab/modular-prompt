@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CACHE_DIR, DEFAULT_MAX_TOKENS } from './cli/constants.js';
+import { DEFAULT_MAX_TOKENS, resolveDefaultContainerDir } from './cli/constants.js';
 import { parseArgs } from './cli/args.js';
 import { runCreateCommand } from './cli/create-command.js';
 import { runExtractCommand } from './cli/extract-command.js';
@@ -28,7 +28,7 @@ Commands:
   list      List stores and their cache summaries
 
 Options:
-  -d, --cache-dir <path>   Store container directory (default: ${DEFAULT_CACHE_DIR})
+  -d, --cache-dir <path>   Store container directory (default: ${resolveDefaultContainerDir()})
   -m, --model <model>      MLX model alias from models.yaml or raw model id
   --max-tokens <n>         Max tokens for extract (default: ${DEFAULT_MAX_TOKENS})
   --dry-run                Compile and print full prompt text (no MLX / no cache write)
@@ -57,9 +57,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  const cacheDir = parsed.cacheDir ?? resolveDefaultContainerDir();
+
   if (parsed.command === 'create') {
     const output = await runCreateCommand({
-      cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
+      cacheDir,
       storename: parsed.storename!,
       model: parsed.model,
       files: parsed.positional,
@@ -73,7 +75,7 @@ async function main(): Promise<void> {
 
   if (parsed.command === 'extract') {
     const text = await runExtractCommand({
-      cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
+      cacheDir,
       storename: parsed.storename!,
       query: parsed.positional.join(' '),
       maxTokens: parsed.maxTokens,
@@ -84,7 +86,7 @@ async function main(): Promise<void> {
   }
 
   const text = await runListCommand({
-    cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
+    cacheDir,
   });
   process.stdout.write(`${text}\n`);
 }
