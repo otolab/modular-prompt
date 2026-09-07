@@ -5,8 +5,9 @@
 ### Breaking Changes
 
 - `modular-extract create` / `extract` は storename を positional 第1引数として必須化しました。`-d` は store コンテナを指し、各 store は `<container>/<storename>/` に独立した manifest と KV キャッシュを持ちます。
-- `modular-extract list` でコンテナ内の store サマリを確認できます。create/extract/list の `-d` 省略時は `.extract-cache` を使用します。
-- 旧 CLI 引数形式と旧レイアウト（コンテナ直下の `manifest.json`）は自動移行しません。既存キャッシュは README の手動移行手順に従って store ディレクトリへ移動してください。
+- `modular-extract list` でコンテナ内の store サマリを確認できます。create/extract/list の `-d` 省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` 指定時は `${MODULAR_PROMPT_HOME}/extract-cache`）を使用します。
+- 旧デフォルト `./.extract-cache` の自動検出・自動移行は行いません。既存キャッシュは README の手動移行手順に従って、新しいデフォルトの store container へ移動してください。
+- 旧 CLI 引数形式と旧レイアウト（コンテナ直下の `manifest.json`）も自動移行しません。
 
 ## 0.2.0
 

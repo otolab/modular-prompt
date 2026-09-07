@@ -48,7 +48,7 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-# 1. 入力ファイルから meeting store を作成（デフォルト: ./.extract-cache）
+# 1. 入力ファイルから meeting store を作成（デフォルト: ~/.modular-prompt/extract-cache）
 node packages/extract/bin/modular-extract.js create meeting -m 'your-mlx-model' docs/*.txt
 
 # 2. 抽出クエリ（cue）を実行 — 結果は stdout
@@ -58,7 +58,7 @@ node packages/extract/bin/modular-extract.js extract meeting '登場人物を列
 node packages/extract/bin/modular-extract.js list
 
 # store 単位のキャッシュ削除（clean コマンドは後続 Issue）
-rm -rf .extract-cache/meeting
+rm -rf ~/.modular-prompt/extract-cache/meeting
 ```
 
 | コマンド | 説明 |
@@ -87,7 +87,7 @@ modular-extract create meeting --dry-run docs/notes.txt
 modular-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
-`-d` 省略時のデフォルトは `./.extract-cache` で、create/extract/list 共通の **store コンテナ**を指定します。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/extract では `<storename>` が必須で、コンテナ配下の `<storename>/` が利用されます。
+`-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/extract/list 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/extract では `<storename>` が必須で、コンテナ配下の `<storename>/` が利用されます。
 `-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
 `MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
 
@@ -288,6 +288,7 @@ console.log(result.structured); // schema に沿った JSON
 | `createMlxExtractRuntime` | MLX 用 driver + cacheController バンドル |
 | `resolveModelSpec` | alias または生 model ID から extract 用 ModelSpec を解決 |
 | `createDriver` | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
+| `resolveDefaultContainerDir` | `MODULAR_PROMPT_HOME` に基づくデフォルト cache container を解決 |
 | `resolveStoreDir` | cache コンテナと storename から store ディレクトリを解決 |
 | `validateStorename` | storename の形式と予約語を検証 |
 | `defaultExtractBaseModule` | デフォルト base モジュール |
@@ -306,14 +307,14 @@ console.log(result.structured); // schema に沿った JSON
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-modular-extract create meeting [-d .extract-cache] [-m <alias-or-model-id>] file1.txt file2.txt
-modular-extract create contract [-d .extract-cache] [-m <alias-or-model-id>] contract.pdf
-modular-extract extract meeting [-d .extract-cache] '抽出したい内容の指示'
-modular-extract extract contract [-d .extract-cache] '契約期間を抽出'
-modular-extract list [-d .extract-cache]
+modular-extract create meeting [-d <cache-dir>] [-m <alias-or-model-id>] file1.txt file2.txt
+modular-extract create contract [-d <cache-dir>] [-m <alias-or-model-id>] contract.pdf
+modular-extract extract meeting [-d <cache-dir>] '抽出したい内容の指示'
+modular-extract extract contract [-d <cache-dir>] '契約期間を抽出'
+modular-extract list [-d <cache-dir>]
 
 # store 単位のキャッシュ削除（clean コマンドは後続 Issue）
-rm -rf .extract-cache/meeting
+rm -rf ~/.modular-prompt/extract-cache/meeting
 ```
 
 `<storename>` は create/extract の positional 第1引数で必須です。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗し、後続 Issue の `clean <storename>` と手動削除を案内します。
@@ -322,18 +323,27 @@ rm -rf .extract-cache/meeting
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 
-この変更は破壊的変更です。旧 CLI の `create ...` / `extract -d ...` 形式と、コンテナ直下に `manifest.json` を置くレイアウトは自動移行・互換読み取りしません。必要な store 名を決めて、旧キャッシュを手動で store ディレクトリへ移動してください。
+デフォルト cache container の変更は破壊的変更です。旧 `./.extract-cache` は自動検出・自動移行しません。#353 以降の named store レイアウトを使用していた場合は、必要な store を新しいデフォルト配下へ手動で移動してください。`MODULAR_PROMPT_HOME` を設定している場合は、移行先の `~/.modular-prompt` を設定値に置き換えます。
 
 ```bash
-# 例: 旧 .extract-cache を meeting store として移行
-mkdir -p .extract-cache/meeting
-mv .extract-cache/manifest.json \
-  .extract-cache/cache-index.json \
-  .extract-cache/*.safetensors* \
-  .extract-cache/meeting/
+# 例: named store の meeting を旧 .extract-cache から移行
+mkdir -p ~/.modular-prompt/extract-cache
+mv ./.extract-cache/meeting ~/.modular-prompt/extract-cache/
 ```
 
-移行後は新形式で `modular-extract extract meeting '...'` を実行します。複数 corpus を保持する場合は、それぞれ別の storename と store ディレクトリに分けてください。
+移行後は新形式で `modular-extract extract meeting '...'` を実行します。複数の store がある場合は、それぞれ移動してください。
+
+#353 より前の flat レイアウト（コンテナ直下の `manifest.json` と cache files）を使用していた場合は、storename を決めて次のように移行します。
+
+```bash
+mkdir -p ~/.modular-prompt/extract-cache/meeting
+mv ./.extract-cache/manifest.json \
+  ./.extract-cache/cache-index.json \
+  ./.extract-cache/*.safetensors* \
+  ~/.modular-prompt/extract-cache/meeting/
+```
+
+旧 CLI の `create ...` / `extract -d ...` 形式と旧 flat レイアウトは、いずれも自動移行・互換読み取りしません。
 
 ## テスト
 

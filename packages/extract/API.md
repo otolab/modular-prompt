@@ -79,6 +79,7 @@ import {
   inputChunksFromJson,
   mergeExtractBaseModule,
   defaultExtractBaseModule,
+  resolveDefaultContainerDir,
   resolveStoreDir,
   validateStorename,
 } from '@modular-prompt/extract';
@@ -87,10 +88,14 @@ import {
 named store のパス解決と入力検証をライブラリから利用する場合:
 
 ```typescript
-import { resolveStoreDir, validateStorename } from '@modular-prompt/extract';
+import {
+  resolveDefaultContainerDir,
+  resolveStoreDir,
+  validateStorename,
+} from '@modular-prompt/extract';
 
 validateStorename('meeting');
-const storeDir = resolveStoreDir('.extract-cache', 'meeting');
+const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 ```
 
 ### 公開シンボル
@@ -102,6 +107,7 @@ const storeDir = resolveStoreDir('.extract-cache', 'meeting');
 | `resolveModelSpec` | 関数 | models.yaml の alias または生 model ID を extract 用 ModelSpec に解決 |
 | `createDriver` | 関数 | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
 | `resolveSessionModules` | 関数 | base (+ domain) モジュールを解決 |
+| `resolveDefaultContainerDir` | 関数 | `MODULAR_PROMPT_HOME` に基づくデフォルト cache container を解決 |
 | `resolveStoreDir` | 関数 | cache コンテナと storename から store ディレクトリを解決 |
 | `validateStorename` | 関数 | storename の形式と予約語を検証 |
 | `compileExtractPrompt` | 関数 | context 付き compile（高度な用途） |
@@ -195,7 +201,7 @@ function createExtractSession<TContext = ExtractContext>(
 
 ## CLI（`modular-extract`）
 
-`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list 共通で使用する。省略時は `./.extract-cache`。
+`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
 
 ```bash
 modular-extract create <storename> [-m <model>] [--dry-run] <files...>
@@ -206,14 +212,14 @@ modular-extract list
 container を指定する場合は、各コマンドに `-d <cache-dir>` を追加する。
 
 ```bash
-modular-extract create meeting -d .extract-cache -m default docs/meeting.txt
-modular-extract extract meeting -d .extract-cache '参加者を列挙'
-modular-extract list -d .extract-cache
+modular-extract create meeting -d ~/.modular-prompt/extract-cache -m default docs/meeting.txt
+modular-extract extract meeting -d ~/.modular-prompt/extract-cache '参加者を列挙'
+modular-extract list -d ~/.modular-prompt/extract-cache
 ```
 
 `<storename>` は create/extract の positional 第1引数として必須で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`extract`、`list`、`clean` は予約語である。
 
-これは破壊的変更であり、旧 CLI 引数形式はサポートしない。旧レイアウト（container 直下の `manifest.json` と cache files）も読み取り・互換レイヤー・自動移行の対象外である。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って store directory へ移動する。
+これは破壊的変更であり、旧 CLI 引数形式と旧レイアウト（container 直下の `manifest.json` と cache files）はサポートしない。旧デフォルト `./.extract-cache` の自動検出・自動移行も行わない。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って、新しいデフォルトまたは `-d` で指定した store container へ移動する。
 
 ---
 
