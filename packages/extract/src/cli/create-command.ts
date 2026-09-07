@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createExtractSession } from '../create-extract-session.js';
 import { createMlxExtractRuntime } from '../create-mlx-extract-runtime.js';
@@ -37,8 +37,10 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
 
   await mkdir(storeDir, { recursive: true });
 
-  const runtime = await createMlxExtractRuntime({ model: options.model, cacheDir: storeDir });
+  let runtime: Awaited<ReturnType<typeof createMlxExtractRuntime>> | undefined;
+  let storeReady = false;
   try {
+    runtime = await createMlxExtractRuntime({ model: options.model, cacheDir: storeDir });
     const session = createExtractSession({
       driver: runtime.driver,
       cacheController: runtime.cacheController,
@@ -59,10 +61,17 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
       materials,
       createdAt: new Date().toISOString(),
     });
+    storeReady = true;
   } finally {
-    await runtime.close();
+    try {
+      await runtime?.close();
+    } finally {
+      if (!storeReady) {
+        await rm(storeDir, { recursive: true, force: true });
+      }
+    }
   }
 
   console.error(`Cache prepared: ${storeDir}`);
-  console.error(`Materials: ${materials.length} file(s), model: ${runtime.model}`);
+  console.error(`Materials: ${materials.length} file(s), model: ${runtime?.model}`);
 }

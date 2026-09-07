@@ -5,10 +5,13 @@ import { tmpdir } from 'node:os';
 import { runCreateCommand } from './create-command.js';
 import { runExtractCommand } from './extract-command.js';
 import { readManifest } from './manifest.js';
+import { storeExists } from './store.js';
+import type * as ManifestModule from './manifest.js';
 
-const { createRuntimeMock, createSessionMock } = vi.hoisted(() => ({
+const { createRuntimeMock, createSessionMock, writeManifestMock } = vi.hoisted(() => ({
   createRuntimeMock: vi.fn(),
   createSessionMock: vi.fn(),
+  writeManifestMock: vi.fn(),
 }));
 
 vi.mock('../create-mlx-extract-runtime.js', () => ({
@@ -19,6 +22,14 @@ vi.mock('../create-extract-session.js', () => ({
   createExtractSession: createSessionMock,
 }));
 
+vi.mock('./manifest.js', async () => {
+  const actual = await vi.importActual<typeof ManifestModule>('./manifest.js');
+  writeManifestMock.mockImplementation(
+    (...args: Parameters<typeof actual.writeManifest>) => actual.writeManifest(...args),
+  );
+  return { ...actual, writeManifest: writeManifestMock };
+});
+
 describe('cli store commands', () => {
   let tempDir: string;
 
@@ -26,6 +37,7 @@ describe('cli store commands', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'extract-cli-commands-'));
     createRuntimeMock.mockReset();
     createSessionMock.mockReset();
+    writeManifestMock.mockClear();
     createRuntimeMock.mockImplementation(async ({ model }: { model?: string }) => ({
       driver: {},
       cacheController: {},
@@ -123,5 +135,74 @@ describe('cli store commands', () => {
       storename: 'meeting',
       files: [filePath],
     })).rejects.toThrow(/clean meeting/);
+  });
+
+  it('allows retry after runtime creation fails', async () => {
+    const filePath = join(tempDir, 'runtime-failure.txt');
+    const storename = 'runtime-failure';
+    await writeFile(filePath, 'runtime failure', 'utf-8');
+    const runtimeError = new Error('runtime creation failed');
+    createRuntimeMock.mockRejectedValueOnce(runtimeError);
+
+    await expect(runCreateCommand({
+      cacheDir: tempDir,
+      storename,
+      files: [filePath],
+    })).rejects.toBe(runtimeError);
+
+    expect(await storeExists(join(tempDir, storename))).toBe(false);
+    await expect(runCreateCommand({
+      cacheDir: tempDir,
+      storename,
+      files: [filePath],
+    })).resolves.toBeUndefined();
+    expect(await storeExists(join(tempDir, storename))).toBe(true);
+  });
+
+  it('allows retry after session extraction fails', async () => {
+    const filePath = join(tempDir, 'session-failure.txt');
+    const storename = 'session-failure';
+    await writeFile(filePath, 'session failure', 'utf-8');
+    const sessionError = new Error('session extraction failed');
+    createSessionMock.mockImplementationOnce(() => ({
+      extract: vi.fn().mockRejectedValue(sessionError),
+      close: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    await expect(runCreateCommand({
+      cacheDir: tempDir,
+      storename,
+      files: [filePath],
+    })).rejects.toBe(sessionError);
+
+    expect(await storeExists(join(tempDir, storename))).toBe(false);
+    await expect(runCreateCommand({
+      cacheDir: tempDir,
+      storename,
+      files: [filePath],
+    })).resolves.toBeUndefined();
+    expect(await storeExists(join(tempDir, storename))).toBe(true);
+  });
+
+  it('allows retry after manifest writing fails', async () => {
+    const filePath = join(tempDir, 'manifest-failure.txt');
+    const storename = 'manifest-failure';
+    await writeFile(filePath, 'manifest failure', 'utf-8');
+    const manifestError = new Error('manifest writing failed');
+    writeManifestMock.mockRejectedValueOnce(manifestError);
+
+    await expect(runCreateCommand({
+      cacheDir: tempDir,
+      storename,
+      files: [filePath],
+    })).rejects.toBe(manifestError);
+
+    expect(await storeExists(join(tempDir, storename))).toBe(false);
+    await expect(runCreateCommand({
+      cacheDir: tempDir,
+      storename,
+      files: [filePath],
+    })).resolves.toBeUndefined();
+    expect(await storeExists(join(tempDir, storename))).toBe(true);
   });
 });
