@@ -1,6 +1,6 @@
 import { validateStorename } from './store.js';
 
-export type CliCommand = 'create' | 'extract' | 'list' | 'clean' | 'help';
+export type CliCommand = 'create' | 'add' | 'extract' | 'list' | 'clean' | 'help';
 
 export interface ParsedArgs {
   command?: CliCommand;
@@ -33,10 +33,10 @@ function validateCommandOptions(result: ParsedArgs): void {
   if (result.all && result.command !== 'clean') {
     throw new Error('--all is only valid with clean');
   }
-  if (result.command === 'create' && result.maxTokens !== undefined) {
+  if ((result.command === 'create' || result.command === 'add') && result.maxTokens !== undefined) {
     throw new Error('--max-tokens is only valid with extract');
   }
-  if (result.command === 'extract' && result.model !== undefined) {
+  if ((result.command === 'extract' || result.command === 'add') && result.model !== undefined) {
     throw new Error('--model is only valid with create');
   }
   if (result.command === 'list') {
@@ -87,7 +87,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
 
     if (!result.command && !optionsEnded && !arg.startsWith('-')) {
-      if (arg === 'create' || arg === 'extract' || arg === 'list' || arg === 'clean') {
+      if (arg === 'create' || arg === 'add' || arg === 'extract' || arg === 'list' || arg === 'clean') {
         result.command = arg;
         index += 1;
         continue;
@@ -134,7 +134,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     index += 1;
   }
 
-  if (result.command === 'create' || result.command === 'extract' || result.command === 'clean') {
+  if (result.command === 'create' || result.command === 'add' || result.command === 'extract' || result.command === 'clean') {
     const [storename, ...positional] = result.positional;
     if (!(result.command === 'clean' && result.all)) {
       if (!storename) {

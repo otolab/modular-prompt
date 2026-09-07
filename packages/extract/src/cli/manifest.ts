@@ -10,6 +10,7 @@ export interface ExtractCacheManifest {
   model: string;
   materials: MaterialInput[];
   createdAt: string;
+  updatedAt?: string;
 }
 
 export function manifestPath(cacheDir: string): string {
@@ -28,7 +29,12 @@ export async function manifestExists(cacheDir: string): Promise<boolean> {
 export async function readManifest(cacheDir: string): Promise<ExtractCacheManifest> {
   const raw = await readFile(manifestPath(cacheDir), 'utf-8');
   const parsed = JSON.parse(raw) as ExtractCacheManifest;
-  if (parsed.version !== 1 || !parsed.model || !Array.isArray(parsed.materials)) {
+  if (
+    parsed.version !== 1
+    || !parsed.model
+    || !Array.isArray(parsed.materials)
+    || (parsed.updatedAt !== undefined && typeof parsed.updatedAt !== 'string')
+  ) {
     throw new Error(`Invalid manifest: ${manifestPath(cacheDir)}`);
   }
   return parsed;

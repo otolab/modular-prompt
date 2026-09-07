@@ -51,19 +51,23 @@ pnpm --filter @modular-prompt/extract build
 # 1. 入力ファイルから meeting store を作成（デフォルト: ~/.modular-prompt/extract-cache）
 node packages/extract/bin/modular-extract.js create meeting -m 'your-mlx-model' docs/*.txt
 
-# 2. 抽出クエリ（cue）を実行 — 結果は stdout
+# 2. 既存 store にファイルを追加（incremental prefill）
+node packages/extract/bin/modular-extract.js add meeting docs/day2.txt
+
+# 3. 抽出クエリ（cue）を実行 — 結果は stdout
 node packages/extract/bin/modular-extract.js extract meeting '登場人物を列挙'
 
-# 3. コンテナ内の store を一覧表示
+# 4. コンテナ内の store を一覧表示
 node packages/extract/bin/modular-extract.js list
 
-# store 単位のキャッシュ削除
+# 5. store 単位のキャッシュ削除
 node packages/extract/bin/modular-extract.js clean meeting
 ```
 
 | コマンド | 説明 |
 |---------|------|
 | `create <storename> [-d <container>] [-m <alias-or-model-id>] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を `<container>/<storename>/` に保存 |
+| `add <storename> [-d <container>] [files...]` | 既存 store の corpus にファイルを追記し、KV cache を incremental prefill で拡張 |
 | `extract <storename> [-d <container>] [query...]` | 指定 store のキャッシュ済み corpus に対して抽出。query が cue になる |
 | `list [-d <container>]` | コンテナ内の全 store と manifest/KV のサマリを表示 |
 | `clean <storename> [-d <container>]` | 指定 store の manifest + KV キャッシュを再帰削除。存在しない store は no-op |
@@ -78,6 +82,7 @@ Store: meeting
   Model: mlx-community/SomeModel-4bit
   Materials: 2 (notes.txt, meeting.md)
   Created: 2026-09-07T03:00:00.000Z
+  Updated: 2026-09-07T04:00:00.000Z
   KV cache: present
 ```
 
@@ -89,7 +94,7 @@ modular-extract create meeting --dry-run docs/notes.txt
 modular-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
-`-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/extract/list/clean 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/extract/clean では `<storename>` が必須（`clean --all` を除く）で、コンテナ配下の `<storename>/` が利用されます。
+`-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/add/extract/list/clean 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/add/extract/clean では `<storename>` が必須（`clean --all` を除く）で、コンテナ配下の `<storename>/` が利用されます。
 `-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
 `MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
 
@@ -154,6 +159,7 @@ try {
 | `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
 | `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors.zip` を削除 |
 | `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
+| `add <storename> files...` | 既存 store を staging にコピーし、追加 corpus の incremental prefill と manifest 更新が成功した後に入れ替え |
 | `clean <storename> [-d <container>]` | 1 store の manifest + KV キャッシュを再帰削除 |
 | `clean --all [-d <container>]` | コンテナ内の全 store を再帰削除 |
 
@@ -169,7 +175,7 @@ try {
 
 | 変更内容 | 対応 |
 |---------|------|
-| `corpus` を変えたい | **新しいセッション**を作る |
+| `corpus` を変えたい | ライブラリでは **新しいセッション**を作る。CLI store は `add` で incremental prefill する |
 | `baseModule` を変えたい | **新しいセッション**を作る |
 | 前回の抽出結果を参照したい | 次の `extract()` の `inputs` に明示的に渡す（自動累積しない） |
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
@@ -310,6 +316,7 @@ console.log(result.structured); // schema に沿った JSON
 pnpm --filter @modular-prompt/extract build
 
 modular-extract create meeting [-d <cache-dir>] [-m <alias-or-model-id>] file1.txt file2.txt
+modular-extract add meeting [-d <cache-dir>] file3.txt
 modular-extract create contract [-d <cache-dir>] [-m <alias-or-model-id>] contract.pdf
 modular-extract extract meeting [-d <cache-dir>] '抽出したい内容の指示'
 modular-extract extract contract [-d <cache-dir>] '契約期間を抽出'
@@ -318,7 +325,11 @@ modular-extract clean meeting [-d <cache-dir>]
 modular-extract clean --all [-d <cache-dir>]
 ```
 
-`<storename>` は create/extract/clean の positional 第1引数で必須です（`clean --all` を除く）。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗するため、`modular-extract clean <storename>`（必要に応じて `-d <container>`）で削除してから再実行します。
+`<storename>` は create/add/extract/clean の positional 第1引数で必須です（`clean --all` を除く）。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`add`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗するため、`modular-extract clean <storename>`（必要に応じて `-d <container>`）で削除してから再実行します。
+
+`add <storename> files...` は manifest の model を使って既存 store に資料を追加します。新しいファイルは絶対パスを `id` として追記され、同じ `id`・同じ内容の再追加はスキップされます。同じ `id` の内容が変わっている場合は、キャッシュとの不整合を避けるためエラーになります。その場合は `clean` してから `create` し直してください。`add --dry-run` は MLX を起動せず、マージ後のプロンプトを表示します。
+
+`add` は既存 store を直接上書きしません。staging store で prefill と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、prefill または manifest 更新に失敗した場合は既存の corpus と KV cache が保持されます。
 
 `-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
 

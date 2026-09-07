@@ -13,6 +13,7 @@ export interface StoreSummary {
   model: string;
   materialTitles: string[];
   createdAt: string;
+  updatedAt?: string;
   hasKvCache: boolean;
 }
 
@@ -20,7 +21,7 @@ async function listStoreDirectories(containerDir: string): Promise<string[]> {
   try {
     const entries = await readdir(containerDir, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
       .map((entry) => entry.name)
       .sort((left, right) => left.localeCompare(right));
   } catch (error: unknown) {
@@ -53,6 +54,7 @@ export async function listStores(cacheDir: string): Promise<StoreSummary[]> {
       model: manifest.model,
       materialTitles: manifest.materials.map((material) => material.title),
       createdAt: manifest.createdAt,
+      updatedAt: manifest.updatedAt,
       hasKvCache: await hasKvCache(storeDir),
     });
   }
@@ -64,13 +66,17 @@ function formatSummary(summary: StoreSummary): string {
   const materials = summary.materialTitles.length > 0
     ? ` (${summary.materialTitles.join(', ')})`
     : '';
-  return [
+  const lines = [
     `Store: ${summary.storename}`,
     `  Model: ${summary.model}`,
     `  Materials: ${summary.materialTitles.length}${materials}`,
     `  Created: ${summary.createdAt}`,
-    `  KV cache: ${summary.hasKvCache ? 'present' : 'missing'}`,
-  ].join('\n');
+  ];
+  if (summary.updatedAt) {
+    lines.push(`  Updated: ${summary.updatedAt}`);
+  }
+  lines.push(`  KV cache: ${summary.hasKvCache ? 'present' : 'missing'}`);
+  return lines.join('\n');
 }
 
 export async function runListCommand(options: ListCommandOptions): Promise<string> {

@@ -30,6 +30,7 @@ describe('cli/list', () => {
         { title: 'agenda.txt', content: 'agenda' },
       ],
       createdAt: '2026-09-07T03:00:00.000Z',
+      updatedAt: '2026-09-07T04:00:00.000Z',
     });
     await writeManifest(contractDir, {
       version: 1,
@@ -49,6 +50,7 @@ describe('cli/list', () => {
     expect(output).toContain('Store: meeting');
     expect(output).toContain('  Materials: 2 (notes.txt, agenda.txt)');
     expect(output).toContain('  Created: 2026-09-07T03:00:00.000Z');
+    expect(output).toContain('  Updated: 2026-09-07T04:00:00.000Z');
     expect(output).toContain('  KV cache: present');
     expect(output.indexOf('Store: contract')).toBeLessThan(output.indexOf('Store: meeting'));
 

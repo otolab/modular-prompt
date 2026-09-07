@@ -201,10 +201,11 @@ CLI の `clean <storename>` で store 単位、`clean --all` で cache container
 
 ## CLI（`modular-extract`）
 
-`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
+`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/add/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
 
 ```bash
 modular-extract create <storename> [-m <model>] [--dry-run] <files...>
+modular-extract add <storename> [--dry-run] <files...>
 modular-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
 modular-extract list
 modular-extract clean <storename>
@@ -215,13 +216,18 @@ container を指定する場合は、各コマンドに `-d <cache-dir>` を追�
 
 ```bash
 modular-extract create meeting -d ~/.modular-prompt/extract-cache -m default docs/meeting.txt
+modular-extract add meeting -d ~/.modular-prompt/extract-cache docs/day2.txt
 modular-extract extract meeting -d ~/.modular-prompt/extract-cache '参加者を列挙'
 modular-extract list -d ~/.modular-prompt/extract-cache
 modular-extract clean meeting -d ~/.modular-prompt/extract-cache
 modular-extract clean --all -d ~/.modular-prompt/extract-cache
 ```
 
-`<storename>` は create/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`extract`、`list`、`clean` は予約語である。
+`<storename>` は create/add/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`add`、`extract`、`list`、`clean` は予約語である。
+
+`add <storename> [--dry-run] <files...>` は既存 store の manifest にファイルを追記し、manifest の model で prepare cue を実行する。既存 cache を staging store に複製してから incremental prefill と manifest 更新を行い、成功時にだけ store を入れ替える。prefill または manifest 更新が失敗した場合は元の store を保持する。同じ絶対パス `id` の同一内容はスキップし、内容が異なる場合は `clean` + `create` を案内してエラーにする。
+
+`add --dry-run` はマージ後の compile 済みプロンプトを表示し、MLX の起動・KV cache の書き込み・manifest の更新を行わない。`add` では `-m` と `--max-tokens` は指定できない。
 
 これは破壊的変更であり、旧 CLI 引数形式と旧レイアウト（container 直下の `manifest.json` と cache files）はサポートしない。旧デフォルト `./.extract-cache` の自動検出・自動移行も行わない。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って、新しいデフォルトまたは `-d` で指定した store container へ移動する。
 

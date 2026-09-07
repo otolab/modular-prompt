@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCreateCommand } from './create-command.js';
+import { runAddCommand } from './add-command.js';
 import { runCleanCommand } from './clean-command.js';
 import { runExtractCommand } from './extract-command.js';
 import { readManifest } from './manifest.js';
@@ -136,6 +137,176 @@ describe('cli store commands', () => {
       storename: 'meeting',
       files: [filePath],
     })).rejects.toThrow(/clean meeting/);
+  });
+
+  it('adds materials to an existing store and prepares the merged corpus', async () => {
+    const firstFile = join(tempDir, 'day1.txt');
+    const secondFile = join(tempDir, 'day2.txt');
+    await writeFile(firstFile, 'Alice met Bob on day one.', 'utf-8');
+    await writeFile(secondFile, 'They agreed on day two.', 'utf-8');
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      model: 'meeting-model',
+      files: [firstFile],
+    });
+    createRuntimeMock.mockClear();
+    createSessionMock.mockClear();
+
+    await runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [secondFile],
+    });
+
+    const manifest = await readManifest(join(tempDir, 'meeting'));
+    expect(manifest.materials).toEqual([
+      expect.objectContaining({ id: firstFile, content: 'Alice met Bob on day one.' }),
+      expect.objectContaining({ id: secondFile, content: 'They agreed on day two.' }),
+    ]);
+    expect(manifest.updatedAt).toEqual(expect.any(String));
+    expect(createRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'meeting-model',
+      cacheDir: expect.stringContaining('.meeting.add-'),
+    }));
+    expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'meeting-model',
+      corpus: { materials: manifest.materials },
+    }));
+
+    createRuntimeMock.mockClear();
+    createSessionMock.mockClear();
+    await expect(runExtractCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      query: 'Summarize both days',
+    })).resolves.toBe('mock extraction');
+    expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      corpus: { materials: manifest.materials },
+    }));
+  });
+
+  it('renders the merged corpus without running MLX in add dry-run mode', async () => {
+    const firstFile = join(tempDir, 'first.txt');
+    const secondFile = join(tempDir, 'second.txt');
+    await writeFile(firstFile, 'first material', 'utf-8');
+    await writeFile(secondFile, 'second material', 'utf-8');
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [firstFile],
+    });
+    createRuntimeMock.mockClear();
+
+    const prompt = await runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [secondFile],
+      dryRun: true,
+    });
+
+    expect(prompt).toContain('first material');
+    expect(prompt).toContain('second material');
+    expect(createRuntimeMock).not.toHaveBeenCalled();
+    expect((await readManifest(join(tempDir, 'meeting'))).materials).toHaveLength(1);
+  });
+
+  it('skips re-adding identical material and rejects changed duplicate content', async () => {
+    const filePath = join(tempDir, 'notes.txt');
+    await writeFile(filePath, 'original notes', 'utf-8');
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [filePath],
+    });
+    createRuntimeMock.mockClear();
+
+    await runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [filePath],
+    });
+    expect((await readManifest(join(tempDir, 'meeting'))).materials).toHaveLength(1);
+
+    await writeFile(filePath, 'changed notes', 'utf-8');
+    createRuntimeMock.mockClear();
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [filePath],
+    })).rejects.toThrow(/clean.*create/);
+    expect(createRuntimeMock).not.toHaveBeenCalled();
+    expect((await readManifest(join(tempDir, 'meeting'))).materials[0]?.content)
+      .toBe('original notes');
+  });
+
+  it('keeps the existing store when add preparation fails', async () => {
+    const firstFile = join(tempDir, 'first.txt');
+    const secondFile = join(tempDir, 'second.txt');
+    await writeFile(firstFile, 'first material', 'utf-8');
+    await writeFile(secondFile, 'second material', 'utf-8');
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [firstFile],
+    });
+    const originalManifest = await readFile(join(tempDir, 'meeting', 'manifest.json'), 'utf-8');
+    const preparationError = new Error('incremental prefill failed');
+    createSessionMock.mockImplementationOnce(() => ({
+      extract: vi.fn().mockRejectedValue(preparationError),
+      close: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [secondFile],
+    })).rejects.toBe(preparationError);
+
+    expect(await readFile(join(tempDir, 'meeting', 'manifest.json'), 'utf-8'))
+      .toBe(originalManifest);
+    expect((await readManifest(join(tempDir, 'meeting'))).materials).toHaveLength(1);
+  });
+
+  it('keeps the existing store when add manifest writing fails', async () => {
+    const firstFile = join(tempDir, 'first.txt');
+    const secondFile = join(tempDir, 'second.txt');
+    await writeFile(firstFile, 'first material', 'utf-8');
+    await writeFile(secondFile, 'second material', 'utf-8');
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [firstFile],
+    });
+    const originalManifest = await readFile(join(tempDir, 'meeting', 'manifest.json'), 'utf-8');
+    const manifestError = new Error('incremental manifest write failed');
+    writeManifestMock.mockRejectedValueOnce(manifestError);
+
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [secondFile],
+    })).rejects.toBe(manifestError);
+
+    expect(await readFile(join(tempDir, 'meeting', 'manifest.json'), 'utf-8'))
+      .toBe(originalManifest);
+    expect((await readManifest(join(tempDir, 'meeting'))).materials).toHaveLength(1);
+  });
+
+  it('reports a clear error when adding to a missing store', async () => {
+    const filePath = join(tempDir, 'notes.txt');
+    await writeFile(filePath, 'notes', 'utf-8');
+
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'missing',
+      files: [filePath],
+    })).rejects.toThrow(/Store not found.*create missing/s);
   });
 
   it('allows creating a store again after cleaning the whole container', async () => {

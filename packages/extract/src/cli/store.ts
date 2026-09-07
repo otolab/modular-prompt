@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const STORE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
-const RESERVED_STORE_NAMES = new Set(['create', 'extract', 'list', 'clean']);
+const RESERVED_STORE_NAMES = new Set(['create', 'add', 'extract', 'list', 'clean']);
 
 /** Validate a store name used as a single directory component. */
 export function validateStorename(storename: string): void {

@@ -40,6 +40,23 @@ describe('cli argument parser', () => {
     });
   });
 
+  it('takes the first positional argument after add as the storename', () => {
+    expect(parseArgs([
+      'add',
+      'meeting',
+      '--dry-run',
+      '-d',
+      '.extract-cache',
+      'day2.txt',
+    ])).toEqual({
+      command: 'add',
+      cacheDir: '.extract-cache',
+      dryRun: true,
+      storename: 'meeting',
+      positional: ['day2.txt'],
+    });
+  });
+
   it('accepts the common cache container option for list', () => {
     expect(parseArgs(['list', '--cache-dir', '.extract-cache'])).toEqual({
       command: 'list',
@@ -66,14 +83,14 @@ describe('cli argument parser', () => {
     });
   });
 
-  it.each(['', 'bad/name', '_bad', 'bad name', 'create', 'extract', 'list', 'clean'])(
+  it.each(['', 'bad/name', '_bad', 'bad name', 'create', 'add', 'extract', 'list', 'clean'])(
     'rejects invalid storename %j',
     (storename) => {
       expect(() => parseArgs(['create', storename, 'notes.txt'])).toThrow(/storename/);
     },
   );
 
-  it.each(['create', 'extract'])('requires a storename for %s', (command) => {
+  it.each(['create', 'add', 'extract'])('requires a storename for %s', (command) => {
     expect(() => parseArgs([command])).toThrow(/storename as its first argument/);
   });
 
@@ -88,5 +105,9 @@ describe('cli argument parser', () => {
       .toThrow(/only valid with extract/);
     expect(() => parseArgs(['extract', 'meeting', '--model', 'model', 'query']))
       .toThrow(/only valid with create/);
+    expect(() => parseArgs(['add', 'meeting', '--model', 'model', 'notes.txt']))
+      .toThrow(/only valid with create/);
+    expect(() => parseArgs(['add', 'meeting', '--max-tokens', '10', 'notes.txt']))
+      .toThrow(/only valid with extract/);
   });
 });

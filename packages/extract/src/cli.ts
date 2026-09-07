@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_MAX_TOKENS, resolveDefaultContainerDir } from './cli/constants.js';
 import { parseArgs } from './cli/args.js';
+import { runAddCommand } from './cli/add-command.js';
 import { runCleanCommand } from './cli/clean-command.js';
 import { runCreateCommand } from './cli/create-command.js';
 import { runExtractCommand } from './cli/extract-command.js';
@@ -20,6 +21,7 @@ function printHelp(): void {
 
 Usage:
   modular-extract create <storename> [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
+  modular-extract add <storename> [-d <cache-dir>] [--dry-run] <files...>
   modular-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
   modular-extract list [-d <cache-dir>]
   modular-extract clean <storename> [-d <cache-dir>]
@@ -27,6 +29,7 @@ Usage:
 
 Commands:
   create    Load input files and prepare KV cache in <cache-dir>/<storename>
+  add       Append input files and incrementally extend an existing store
   extract   Run extraction query against a prepared store
   list      List stores and their cache summaries
   clean     Remove one store or the entire cache container
@@ -40,7 +43,7 @@ Options:
   -h, --help               Show help
 
 Store name:
-  Must match [a-zA-Z0-9][a-zA-Z0-9_-]* and cannot be create, extract, list, or clean.
+  Must match [a-zA-Z0-9][a-zA-Z0-9_-]* and cannot be create, add, extract, list, or clean.
 
 Note:
   Without -m, models.default (or the first model entry) is selected from bundled config merged with
@@ -69,6 +72,19 @@ async function main(): Promise<void> {
       cacheDir,
       storename: parsed.storename!,
       model: parsed.model,
+      files: parsed.positional,
+      dryRun: parsed.dryRun,
+    });
+    if (typeof output === 'string') {
+      process.stdout.write(`${output}\n`);
+    }
+    return;
+  }
+
+  if (parsed.command === 'add') {
+    const output = await runAddCommand({
+      cacheDir,
+      storename: parsed.storename!,
       files: parsed.positional,
       dryRun: parsed.dryRun,
     });
