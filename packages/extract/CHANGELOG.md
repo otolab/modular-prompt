@@ -42,7 +42,7 @@
 
 ### Breaking Changes
 
-- `modular-prompt-extract` を CLI bin 名として公開します。旧 CLI bin は公開されないため、利用者は新しいコマンド名へ移行してください。
+- CLI bin 名を `modular-extract` から `modular-prompt-extract` に変更しました。旧 bin は公開されない破壊的変更のため、既存の呼び出しを新しいコマンド名へ移行してください。
 - `modular-prompt-extract create` / `add` / `extract` は storename を positional 第 1 引数として必須化しました。`-d` は store コンテナを指し、各 store は `<container>/<storename>/` に独立した manifest と KV キャッシュを持ちます。
 - `modular-prompt-extract list` でコンテナ内の store サマリを確認できます。create/add/extract/list/clean の `-d` 省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` 指定時は `${MODULAR_PROMPT_HOME}/extract-cache`）を使用します。
 - 旧デフォルト `./.extract-cache` の自動検出・自動移行は行いません。既存キャッシュは README の手動移行手順に従って、新しいデフォルトの store container へ移動してください。
