@@ -155,7 +155,7 @@ models:
 マージ順は **base → `models.yaml` → `models.testing.yaml` → overlay** です。Vitest 実行中または `NODE_ENV=test` では testing 設定が自動で追加されます。CLI などで明示的に使う場合は次の環境変数を指定します。
 
 ```bash
-MODULAR_PROMPT_MODELS_PROFILE=testing modular-extract create meeting -m default docs/notes.txt
+MODULAR_PROMPT_MODELS_PROFILE=testing modular-prompt-extract create meeting -m default docs/notes.txt
 ```
 
 ライブラリからは `resolveModelsConfig({ profile: 'testing' })` または `AIService.fromModelsConfig({ profile: 'testing' })` を使用できます。統合テストはこの設定から MLX/API ドライバーを導出し、設定が無い場合は従来の `test-drivers.yaml` にフォールバックします。サンプルは [`models.testing.yaml.example`](./test/integration/models.testing.yaml.example) を参照してください。
