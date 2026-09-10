@@ -17,15 +17,15 @@ const packageJson = JSON.parse(
 ) as { version: string };
 
 function printHelp(): void {
-  console.log(`modular-extract v${packageJson.version}
+  console.log(`modular-prompt-extract v${packageJson.version}
 
 Usage:
-  modular-extract create <storename> [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
-  modular-extract add <storename> [-d <cache-dir>] [--dry-run] <files...>
-  modular-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
-  modular-extract list [-d <cache-dir>]
-  modular-extract clean <storename> [-d <cache-dir>]
-  modular-extract clean --all [-d <cache-dir>]
+  modular-prompt-extract create <storename> [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
+  modular-prompt-extract add <storename> [-d <cache-dir>] [--dry-run] <files...>
+  modular-prompt-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
+  modular-prompt-extract list [-d <cache-dir>]
+  modular-prompt-extract clean <storename> [-d <cache-dir>]
+  modular-prompt-extract clean --all [-d <cache-dir>]
 
 Commands:
   create    Load input files and prepare KV cache in <cache-dir>/<storename>

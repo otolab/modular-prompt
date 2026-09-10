@@ -29,7 +29,7 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
   if (await storeExists(storeDir)) {
     throw new Error(
       `Store already exists: ${storeDir}\n`
-      + `Run \`modular-extract clean ${options.storename}\` before creating it again.`,
+      + `Run \`modular-prompt-extract clean ${options.storename}\` before creating it again.`,
     );
   }
 

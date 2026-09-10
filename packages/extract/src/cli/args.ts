@@ -66,7 +66,7 @@ function validateCommandOptions(result: ParsedArgs): void {
   }
 }
 
-/** Parse modular-extract command-line arguments. */
+/** Parse modular-prompt-extract command-line arguments. */
 export function parseArgs(argv: string[]): ParsedArgs {
   const result: ParsedArgs = { positional: [] };
   let index = 0;

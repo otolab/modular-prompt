@@ -214,28 +214,28 @@ CLI の `clean <storename>` で store 単位、`clean --all` で cache container
 
 ---
 
-## CLI（`modular-extract`）
+## CLI（`modular-prompt-extract`）
 
-`modular-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/add/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
+`modular-prompt-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/add/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
 
 ```bash
-modular-extract create <storename> [-m <model>] [--dry-run] <files...>
-modular-extract add <storename> [--dry-run] <files...>
-modular-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
-modular-extract list
-modular-extract clean <storename>
-modular-extract clean --all
+modular-prompt-extract create <storename> [-m <model>] [--dry-run] <files...>
+modular-prompt-extract add <storename> [--dry-run] <files...>
+modular-prompt-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
+modular-prompt-extract list
+modular-prompt-extract clean <storename>
+modular-prompt-extract clean --all
 ```
 
 container を指定する場合は、各コマンドに `-d <cache-dir>` を追加する。
 
 ```bash
-modular-extract create meeting -d ~/.modular-prompt/extract-cache -m default docs/meeting.txt
-modular-extract add meeting -d ~/.modular-prompt/extract-cache docs/day2.txt
-modular-extract extract meeting -d ~/.modular-prompt/extract-cache '参加者を列挙'
-modular-extract list -d ~/.modular-prompt/extract-cache
-modular-extract clean meeting -d ~/.modular-prompt/extract-cache
-modular-extract clean --all -d ~/.modular-prompt/extract-cache
+modular-prompt-extract create meeting -d ~/.modular-prompt/extract-cache -m default docs/meeting.txt
+modular-prompt-extract add meeting -d ~/.modular-prompt/extract-cache docs/day2.txt
+modular-prompt-extract extract meeting -d ~/.modular-prompt/extract-cache '参加者を列挙'
+modular-prompt-extract list -d ~/.modular-prompt/extract-cache
+modular-prompt-extract clean meeting -d ~/.modular-prompt/extract-cache
+modular-prompt-extract clean --all -d ~/.modular-prompt/extract-cache
 ```
 
 `<storename>` は create/add/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`add`、`extract`、`list`、`clean` は予約語である。
