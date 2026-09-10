@@ -1,5 +1,15 @@
 # @modular-prompt/extract
 
+## 1.0.0
+
+### Major Changes
+
+- 0ae551d: chore(extract): rename the CLI bin to `modular-prompt-extract`
+
+  The published CLI bin is renamed from `modular-extract` to `modular-prompt-extract`. The old bin is removed, so update existing invocations before upgrading.
+
+  Closes #362
+
 ## 0.3.0
 
 ### Minor Changes
