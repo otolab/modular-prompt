@@ -46,10 +46,10 @@ Store name:
   Must match [a-zA-Z0-9][a-zA-Z0-9_-]* and cannot be create, add, extract, list, or clean.
 
 Note:
-  Without -m, models.default (or the first model entry) is selected from bundled config merged with
-  ~/.modular-prompt/models.yaml (MODULAR_PROMPT_HOME can override its location).
-  MLX_MODEL is also supported for backward compatibility as the bundled default; user yaml overrides it.
-  If no model is configured, specify -m <model-id-or-alias> or define models.default.
+  Without -m, models.default is selected from ~/.modular-prompt/models.yaml
+  (MODULAR_PROMPT_HOME can override its location). No model is bundled.
+  If no model is configured, specify -m <model-id-or-alias> or define models.default
+  in the user models.yaml.
   MLX backend is fixed to mlx-lm (backend: lm) for prompt cache support.
 `);
 }

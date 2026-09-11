@@ -145,12 +145,12 @@ function createMlxExtractRuntime(
 
 | プロパティ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| `model` | `string` | — | MLX モデルの alias または生の HF model ID。省略時は bundled + user models.yaml から解決。`MLX_MODEL` も後方互換で同梱 default として使用 |
+| `model` | `string` | — | MLX モデルの alias または生の HF model ID。省略時は user models.yaml の `models.default` から解決。未設定時はエラー |
 | `cacheDir` | `string` | — | 固定キャッシュディレクトリ。省略時は managed temp dir |
 
 `MlxExtractRuntime.close()` は `driver.close()` + `cacheController.close()` を行う。
 
-`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、**mlx-lm バックエンド（`backend: 'lm'`）に固定**する。`auto` で VLM が選ばれるとプロンプトキャッシュが無効になるため。モデル指定を省略した場合は `models.default`、なければ `models` の先頭エントリを使用する。同梱設定より `~/.modular-prompt/models.yaml` が優先される。`MLX_MODEL` を設定した場合は同梱 default のモデル ID が置き換わり、user yaml の `models.default` がさらに優先される。
+`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、**mlx-lm バックエンド（`backend: 'lm'`）に固定**する。`auto` で VLM が選ばれるとプロンプトキャッシュが無効になるため。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。
 
 `createDriver(model, { cacheController })` は runtime 内部で使用する低レベル helper で、戻り値は `{ driver, spec }`。`spec.model` は alias 解決後の生 model ID である。
 

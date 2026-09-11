@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import {
   getUserModelsConfigPath,
 } from '@modular-prompt/driver';
-import { BUNDLED_DEFAULT_MODEL, BUNDLED_MODELS_CONFIG } from './default-models.js';
+import { BUNDLED_MODELS_CONFIG } from './default-models.js';
 import { resolveMergedModels, resolveModelSpec } from './model-resolution.js';
 
 describe('extract model resolution', () => {
@@ -53,16 +53,18 @@ describe('extract model resolution', () => {
     });
   });
 
-  it('uses models.default, then the first entry when no model is specified', () => {
-    expect(resolveModelSpec(undefined, {
+  it('does not use the first model entry when no model is specified', () => {
+    expect(() => resolveModelSpec(undefined, {
       models: {
         first: { provider: 'mlx', model: 'first/model' },
         second: { provider: 'mlx', model: 'second/model' },
       },
-    }).model).toBe('first/model');
+    })).toThrow(/No model configured/);
+  });
 
-    expect(resolveModelSpec(undefined, BUNDLED_MODELS_CONFIG).model)
-      .toBe(BUNDLED_DEFAULT_MODEL);
+  it('does not provide a bundled model when no model is specified', () => {
+    expect(() => resolveModelSpec(undefined, BUNDLED_MODELS_CONFIG))
+      .toThrow(/No model configured/);
   });
 
   it('explains how to configure a model when none is available', () => {

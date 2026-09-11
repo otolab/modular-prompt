@@ -11,7 +11,7 @@ import { validateProfileOptions } from './utils/profile-validator.js';
  * Create the default profile used when no profile file is specified.
  *
  * Keep model selection out of this profile so the user's models.yaml can
- * provide the default model before ai-chat's built-in fallback is used.
+ * provide the default model when no explicit model is supplied.
  */
 function createDefaultProfile(): DialogProfile {
   return {

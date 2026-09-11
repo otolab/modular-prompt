@@ -75,6 +75,26 @@ pnpm --filter @modular-prompt/driver run runtime:cleanup mlx -- --yes
 
 通常利用のモデル alias は `~/.modular-prompt/models.yaml`、ローカル統合テスト用の alias は `~/.modular-prompt/models.testing.yaml` に分けて管理できます。別のディレクトリを使う場合は `MODULAR_PROMPT_HOME` を指定します。
 
+#### 通常利用の設定
+
+simple-chat や extract を `-m` なしで実行するには、通常利用用の `models.yaml` に `models.default` を明示します。次の最小設定を保存したあと、`simple-chat "こんにちは"` などの CLI 例を実行できます。
+
+```bash
+mkdir -p ~/.modular-prompt
+cat > ~/.modular-prompt/models.yaml <<'YAML'
+models:
+  default:
+    provider: mlx
+    model: mlx-community/gemma-3-270m-it-4bit
+YAML
+```
+
+`MODULAR_PROMPT_HOME` を設定している場合は、上記ファイルをそのディレクトリの `models.yaml` として作成してください。モデルを設定しない場合は、CLI の `-m <model-id-or-alias>` で明示的にモデルを指定します。
+
+#### 統合テスト用の設定
+
+`models.testing.yaml` は通常利用の設定とは別に、統合テストや testing profile で使うモデルを定義するためのファイルです。通常利用用の `models.yaml` の代わりにはなりません。
+
 ```bash
 cp packages/driver/test/integration/models.testing.yaml.example \
   ~/.modular-prompt/models.testing.yaml
@@ -89,7 +109,7 @@ MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"
 
 マージ順は **base → `models.yaml` → `models.testing.yaml` → overlay** で、testing 側の同名 alias が通常設定を上書きします。認証情報は example に記載せず、環境変数またはローカルの `drivers` 設定で管理してください。
 
-同梱 example の `models.default` は MLX cache 統合テスト向けの text-only LM で、`driverOptions.backend: lm` を明示しています。VLM は通常の推論には使用できますが、MLX の prompt caching が無効になるため cache 統合テストには指定しないでください。
+`models.testing.yaml.example` の `models.default` は MLX cache 統合テスト向けの text-only LM で、`driverOptions.backend: lm` を明示しています。VLM は通常の推論には使用できますが、MLX の prompt caching が無効になるため cache 統合テストには指定しないでください。
 
 ### テスト用モデルのダウンロード
 

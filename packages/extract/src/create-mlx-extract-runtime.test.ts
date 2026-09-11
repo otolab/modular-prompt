@@ -88,6 +88,21 @@ describe('createMlxExtractRuntime', () => {
     expect(cacheControllerClose).toHaveBeenCalledOnce();
   });
 
+  it('fails before driver creation when no model is configured', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    aiServiceFromMergedConfig.mockReturnValue({
+      modelsConfig: {},
+      createDriver: aiServiceCreateDriver,
+    });
+
+    await expect(createMlxExtractRuntime({})).rejects.toThrow(
+      'No model configured: specify -m <model-id-or-alias> or define models.default '
+      + 'in ~/.modular-prompt/models.yaml',
+    );
+    expect(aiServiceCreateDriver).not.toHaveBeenCalled();
+    expect(cacheControllerClose).toHaveBeenCalledOnce();
+  });
+
   it('closes the driver and cache when capabilities fail, preserving the original error', async () => {
     const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
     const capabilitiesError = new Error('capabilities unavailable');

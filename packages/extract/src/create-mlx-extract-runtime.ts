@@ -6,7 +6,7 @@ import {
 import { createDriver } from './model-resolution.js';
 
 export interface MlxExtractRuntimeOptions {
-  /** MLX model ID or alias in models.yaml. Omitted uses the resolved default. */
+  /** MLX model ID or alias in models.yaml. Omitted uses user-configured models.default. */
   model?: string;
   /** Fixed cache directory. When omitted, a managed temp directory is used. */
   cacheDir?: string;

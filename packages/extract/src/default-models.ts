@@ -1,24 +1,10 @@
 /**
- * extract 同梱の models 設定
+ * extract の base models 設定。
  *
- * user の ~/.modular-prompt/models.yaml から alias や default を上書きできる。
+ * モデルは同梱せず、user の ~/.modular-prompt/models.yaml から解決する。
  */
 
 import type { ModelsConfig } from '@modular-prompt/driver';
 
-/**
- * extract が -m なしで使用する同梱デフォルトモデル。
- * MLX_MODEL は既存利用者向けに後方互換でサポートし、user yaml が優先される。
- */
-export const BUNDLED_DEFAULT_MODEL =
-  process.env.MLX_MODEL ?? 'prism-ml/Ternary-Bonsai-1.7B-mlx-2bit';
-
-/** 同梱モデル設定（user models.yaml より低い優先度） */
-export const BUNDLED_MODELS_CONFIG: ModelsConfig = {
-  models: {
-    default: {
-      provider: 'mlx',
-      model: BUNDLED_DEFAULT_MODEL,
-    },
-  },
-};
+/** 同梱モデルを持たない base config（user models.yaml より低い優先度） */
+export const BUNDLED_MODELS_CONFIG: ModelsConfig = {};
