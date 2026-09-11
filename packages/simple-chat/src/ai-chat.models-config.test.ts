@@ -12,7 +12,6 @@ import {
   resolveProfileModelSpec,
   resolveMergedModels,
 } from './ai-chat.js';
-import { BUNDLED_MODELS_CONFIG } from './default-models.js';
 import type { DialogProfile } from './types.js';
 
 const INLINE_MODELS = {
@@ -67,6 +66,14 @@ describe('resolveModelSpec', () => {
   it('falls back to models.default alias', () => {
     const spec = resolveModelSpec({}, INLINE_MODELS);
     expect(spec.model).toBe('inline/default');
+  });
+
+  it('does not fall back to the first model entry', () => {
+    expect(() => resolveModelSpec({}, {
+      models: {
+        first: { provider: 'mlx', model: 'inline/first' },
+      },
+    })).toThrow(/No model configured/);
   });
 });
 
@@ -143,13 +150,13 @@ describe('resolveProfileModelSpec with models.yaml', () => {
     expect(spec.model).toBe('overlay/model');
   });
 
-  it('uses bundled default model when no workflow model specified', () => {
-    const spec = resolveProfileModelSpec({});
-    expect(spec.model).toBe(BUNDLED_MODELS_CONFIG.models!.default!.model);
-    expect(spec.provider).toBe('mlx');
+  it('throws when no model is configured', () => {
+    expect(() => resolveProfileModelSpec({})).toThrow(
+      /No model configured: specify -m <model-id-or-alias>/,
+    );
   });
 
-  it('user default alias overrides bundled default', () => {
+  it('resolves a user default alias', () => {
     writeFileSync(
       getUserModelsConfigPath(),
       `models:
@@ -234,7 +241,7 @@ describe('resolveMergedModels', () => {
     rmSync(tempHome, { recursive: true, force: true });
   });
 
-  it('merges bundled, user, and profile overlay', () => {
+  it('merges user models and profile overlay without a bundled default', () => {
     writeFileSync(
       getUserModelsConfigPath(),
       `models:
@@ -253,6 +260,6 @@ describe('resolveMergedModels', () => {
     });
 
     expect(merged.models?.shared?.model).toBe('profile/shared');
-    expect(merged.models?.default?.model).toBe(BUNDLED_MODELS_CONFIG.models!.default!.model);
+    expect(merged.models?.default).toBeUndefined();
   });
 });

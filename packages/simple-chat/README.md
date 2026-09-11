@@ -122,20 +122,18 @@ simple-chat は **model 先行**でモデルを選びます。provider / MLX bac
 | 1 | CLI override | `-m`, `--provider`, `--backend` |
 | 2 | `profile.model` | alias または生の model 名 |
 | 3 | `workflow.models.default` | `ref: local-chat` または `provider` + `model` |
-| 4 | マージ済み `models.default` | 同梱 → user yaml → profile overlay |
+| 4 | マージ済み `models.default` | user yaml または profile `modelsConfig` overlay |
 
 いずれも未指定の場合はエラーです（暗黙の runtime / defaults 解決はありません）。
 
 ### models.yaml との統合
 
-マージ優先（下ほど高）: **同梱 `BUNDLED_MODELS_CONFIG`** → **`~/.modular-prompt/models.yaml`**（`MODULAR_PROMPT_HOME` で変更可）→ **profile `modelsConfig` overlay**
-
-デフォルトの同梱 model は `LiquidAI/LFM2.5-1.2B-JP-MLX-4bit`（`models.default` alias）です。
+マージ優先（下ほど高）: **`~/.modular-prompt/models.yaml`**（`MODULAR_PROMPT_HOME` で変更可）→ **profile `modelsConfig` overlay**。simple-chat はモデルを同梱しないため、明示的な `-m`、`profile.model`、`workflow.models.default`、または user/profile の `models.default` が必要です。
 
 simple-chat は **デフォルトで `merge` モード**です。マシン共通の alias 定義（`local-chat` 等）を user yaml で共有しつつ、プロファイル overlay で上書きできます。
 
 - **`modelsConfig.mode: merge`**（既定）— user yaml をマージ
-- **`modelsConfig.mode: override`** — user yaml を無視し、同梱 + profile overlay のみ
+- **`modelsConfig.mode: override`** — user yaml を無視し、profile overlay のみ
 
 > **#341 との方針**  
 > Issue #341 では user yaml の無視（`override` 固定）も検討されましたが、simple-chat では **マシン共通 alias の再利用**を優先し `merge` をデフォルトにしています。user yaml を使わない場合は profile で `modelsConfig.mode: override` を指定してください。

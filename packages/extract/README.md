@@ -95,8 +95,7 @@ modular-prompt-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
 `-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/add/extract/list/clean 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/add/extract/clean では `<storename>` が必須（`clean --all` を除く）で、コンテナ配下の `<storename>/` が利用されます。
-`-m` 省略時は、同梱 models 設定と `~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）をマージし、`models.default`、なければ先頭のモデルを使用します。user yaml の `default` は同梱 default を上書きします。
-`MLX_MODEL` 環境変数も後方互換のためサポートしており、設定時は同梱 default のモデル ID として扱います。user yaml の `models.default` は `MLX_MODEL` より優先されます。
+`-m` を省略した場合は、`~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）の `models.default` が明示されている場合だけ、そのモデルを使用します。同梱モデル、`models` の先頭エントリへの fallback、`MLX_MODEL` による default 差し替えはありません。モデル未設定時は MLX を起動せず、`-m <model-id-or-alias>` を指定するか user yaml に `models.default` を定義するようエラーを表示します。
 
 ローカルテスト用のモデルは `~/.modular-prompt/models.testing.yaml` に分けて置き、手元の extract 実行では `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定できます。設定ファイルのサンプルと統合テストの convention alias は [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
@@ -122,7 +121,7 @@ import {
 } from '@modular-prompt/extract';
 
 const runtime = await createMlxExtractRuntime({
-  model: 'prism-ml/Ternary-Bonsai-1.7B-mlx-2bit',
+  model: 'your-mlx-model',
 });
 
 try {
@@ -183,7 +182,7 @@ try {
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
 | セッション終了 | `session.close()` — デフォルトで handle `release()`。固定 cacheDir を残す場合は `{ releaseCache: false }` |
 
-`cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ models.yaml 解決を行います。指定する場合は alias または生の HF model ID を使えます。キャッシュ非対応モードは提供しない。
+`cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。モデル設定がない場合はエラーになります。指定する場合は alias または生の HF model ID を使えます。キャッシュ非対応モードは提供しない。
 
 詳細は [プロンプトキャッシュ設計](../../docs/CACHE_DESIGN.md) および [API 仕様](./API.md) を参照。
 
@@ -333,7 +332,7 @@ modular-prompt-extract clean --all [-d <cache-dir>]
 
 `add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は同梱 models 設定に user の `~/.modular-prompt/models.yaml` を重ねて解決します。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` はその ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` は manifest に保存された ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 

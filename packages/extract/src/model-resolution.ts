@@ -1,6 +1,5 @@
 import {
   AIService,
-  resolveDefaultModelFromConfig,
   resolveModelName,
   resolveModelReference,
   type AIDriver,
@@ -33,7 +32,7 @@ function createAIService(): AIService {
   return AIService.fromMergedConfig(BUNDLED_MODELS_CONFIG, undefined, { mode: 'merge' });
 }
 
-/** bundled + user models.yaml を解決する（user の default/alias が優先）。 */
+/** user models.yaml を含む models 設定を解決する（user の default/alias を使用）。 */
 export function resolveMergedModels(): ModelsConfig {
   return createAIService().modelsConfig;
 }
@@ -41,7 +40,8 @@ export function resolveMergedModels(): ModelsConfig {
 /**
  * extract で使用する ModelSpec を解決する。
  *
- * 優先順位は明示 model（alias または生 ID）→ models.default → models の先頭。
+ * 優先順位は明示 model（alias または生 ID）→ models.default。
+ * 同梱の暗黙 default や models の先頭エントリは使用しない。
  */
 export function resolveModelSpec(
   model: string | undefined,
@@ -53,13 +53,13 @@ export function resolveModelSpec(
       ?? resolveModelName(explicitModel, models, inferProvider);
   }
 
-  const fallback = resolveDefaultModelFromConfig(models);
-  if (fallback) {
-    return fallback;
+  const configuredDefault = resolveModelReference({ ref: 'default' }, models);
+  if (configuredDefault) {
+    return configuredDefault;
   }
 
   throw new Error(
-    'No extract model configured: specify -m <model-id-or-alias> '
+    'No model configured: specify -m <model-id-or-alias> '
     + 'or define models.default in ~/.modular-prompt/models.yaml',
   );
 }

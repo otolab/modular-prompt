@@ -14,7 +14,6 @@ import {
   AIService,
   resolveModelReference,
   resolveModelName,
-  resolveDefaultModelFromConfig,
   RuntimeNotReadyError,
 } from '@modular-prompt/driver';
 import { formatRuntimeNotReadyMessage } from './runtime-status.js';
@@ -96,7 +95,7 @@ function createAIService(profile: DialogProfile): AIService {
   );
 }
 
-/** bundled + user + profile から ModelsConfig を解決する */
+/** user + profile から ModelsConfig を解決する */
 export function resolveMergedModels(profile: DialogProfile): ModelsConfig {
   return createAIService(profile).modelsConfig;
 }
@@ -105,6 +104,7 @@ export function resolveMergedModels(profile: DialogProfile): ModelsConfig {
  * profile と merged models から使用する ModelSpec を解決する
  *
  * 優先順位: override.model → profile.model → workflow.models.default → models.default
+ * 同梱の暗黙 default や models の先頭エントリは使用しない。
  */
 export function resolveModelSpec(
   profile: DialogProfile,
@@ -135,13 +135,14 @@ export function resolveModelSpec(
     throw new Error('workflow.models.default is incomplete: specify ref or provider+model');
   }
 
-  const fallback = resolveDefaultModelFromConfig(models);
-  if (!fallback) {
+  const configuredDefault = resolveModelReference({ ref: 'default' }, models);
+  if (!configuredDefault) {
     throw new Error(
-      'No model configured: specify -m, profile.model, workflow.models.default, or models.default',
+      'No model configured: specify -m <model-id-or-alias>, profile.model, '
+      + 'workflow.models.default, or models.default in ~/.modular-prompt/models.yaml',
     );
   }
-  return finalize(fallback);
+  return finalize(configuredDefault);
 }
 
 /** merged models 込みで ModelSpec を解決する（統合テスト・デバッグ用） */

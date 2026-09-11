@@ -3,16 +3,16 @@
  *
  * 実行例（リポジトリルート）:
  *   npx tsx packages/extract/examples/dialogue-extraction.ts
+ *
+ * 前提: user models.yaml に models.default が設定されていること
  */
 import {
   createExtractSession,
   createMlxExtractRuntime,
 } from '@modular-prompt/extract';
 
-const MODEL = process.env.MLX_MODEL ?? 'prism-ml/Ternary-Bonsai-1.7B-mlx-2bit';
-
 async function main() {
-  const runtime = await createMlxExtractRuntime({ model: MODEL });
+  const runtime = await createMlxExtractRuntime({});
 
   try {
     const session = createExtractSession({
