@@ -83,7 +83,7 @@ cp packages/driver/test/integration/models.testing.yaml.example \
 テスト実行時（Vitest または `NODE_ENV=test`）は `models.testing.yaml` が自動的にマージされます。extract や simple-chat を手元で testing モデルで実行する場合は、profile を明示します。
 
 ```bash
-MODULAR_PROMPT_MODELS_PROFILE=testing modular-extract create meeting -m default docs/notes.txt
+MODULAR_PROMPT_MODELS_PROFILE=testing modular-prompt-extract create meeting -m default docs/notes.txt
 MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"
 ```
 

@@ -1,6 +1,6 @@
 {
   "name": "@modular-prompt/extract",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Document extraction session API for modular prompt framework",
   "type": "module",
   "main": "./dist/index.js",
@@ -63,6 +63,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "bin": {
-    "modular-extract": "./bin/modular-extract.js"
+    "modular-prompt-extract": "./bin/modular-prompt-extract.js"
   }
 }

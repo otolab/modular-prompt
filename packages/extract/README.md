@@ -49,19 +49,19 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 pnpm --filter @modular-prompt/extract build
 
 # 1. 入力ファイルから meeting store を作成（デフォルト: ~/.modular-prompt/extract-cache）
-node packages/extract/bin/modular-extract.js create meeting -m 'your-mlx-model' docs/*.txt
+node packages/extract/bin/modular-prompt-extract.js create meeting -m 'your-mlx-model' docs/*.txt
 
 # 2. 既存 store にファイルを追加（incremental prefill）
-node packages/extract/bin/modular-extract.js add meeting docs/day2.txt
+node packages/extract/bin/modular-prompt-extract.js add meeting docs/day2.txt
 
 # 3. 抽出クエリ（cue）を実行 — 結果は stdout
-node packages/extract/bin/modular-extract.js extract meeting '登場人物を列挙'
+node packages/extract/bin/modular-prompt-extract.js extract meeting '登場人物を列挙'
 
 # 4. コンテナ内の store を一覧表示
-node packages/extract/bin/modular-extract.js list
+node packages/extract/bin/modular-prompt-extract.js list
 
 # 5. store 単位のキャッシュ削除
-node packages/extract/bin/modular-extract.js clean meeting
+node packages/extract/bin/modular-prompt-extract.js clean meeting
 ```
 
 | コマンド | 説明 |
@@ -88,10 +88,10 @@ Store: meeting
 
 ```bash
 # プロンプト確認（create）
-modular-extract create meeting --dry-run docs/notes.txt
+modular-prompt-extract create meeting --dry-run docs/notes.txt
 
 # プロンプト確認（extract — store の manifest が必要）
-modular-extract extract meeting --dry-run '登場人物を列挙'
+modular-prompt-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
 `-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/add/extract/list/clean 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/add/extract/clean では `<storename>` が必須（`clean --all` を除く）で、コンテナ配下の `<storename>/` が利用されます。
@@ -310,24 +310,24 @@ console.log(result.structured); // schema に沿った JSON
 
 完全な API リファレンスは [API.md](./API.md) を参照。
 
-## CLI（`modular-extract`）
+## CLI（`modular-prompt-extract`）
 
-`bin/modular-extract.js` 経由で利用できる簡易 CLI。
+`bin/modular-prompt-extract.js` 経由で利用できる簡易 CLI。
 
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-modular-extract create meeting [-d <cache-dir>] [-m <alias-or-model-id>] file1.txt file2.txt
-modular-extract add meeting [-d <cache-dir>] file3.txt
-modular-extract create contract [-d <cache-dir>] [-m <alias-or-model-id>] contract.pdf
-modular-extract extract meeting [-d <cache-dir>] '抽出したい内容の指示'
-modular-extract extract contract [-d <cache-dir>] '契約期間を抽出'
-modular-extract list [-d <cache-dir>]
-modular-extract clean meeting [-d <cache-dir>]
-modular-extract clean --all [-d <cache-dir>]
+modular-prompt-extract create meeting [-d <cache-dir>] [-m <alias-or-model-id>] file1.txt file2.txt
+modular-prompt-extract add meeting [-d <cache-dir>] file3.txt
+modular-prompt-extract create contract [-d <cache-dir>] [-m <alias-or-model-id>] contract.pdf
+modular-prompt-extract extract meeting [-d <cache-dir>] '抽出したい内容の指示'
+modular-prompt-extract extract contract [-d <cache-dir>] '契約期間を抽出'
+modular-prompt-extract list [-d <cache-dir>]
+modular-prompt-extract clean meeting [-d <cache-dir>]
+modular-prompt-extract clean --all [-d <cache-dir>]
 ```
 
-`<storename>` は create/add/extract/clean の positional 第1引数で必須です（`clean --all` を除く）。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`add`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗するため、`modular-extract clean <storename>`（必要に応じて `-d <container>`）で削除してから再実行します。
+`<storename>` は create/add/extract/clean の positional 第1引数で必須です（`clean --all` を除く）。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`add`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗するため、`modular-prompt-extract clean <storename>`（必要に応じて `-d <container>`）で削除してから再実行します。
 
 `add <storename> files...` は manifest の model を使って既存 store に資料を追加します。新しいファイルは絶対パスを `id` として追記され、同じ `id`・同じ内容の再追加はスキップされます。同じ `id` の内容が変わっている場合は、キャッシュとの不整合を避けるためエラーになります。その場合は `clean` してから `create` し直してください。`add --dry-run` は MLX を起動せず、マージ後のプロンプトを表示します。
 
@@ -345,7 +345,7 @@ mkdir -p ~/.modular-prompt/extract-cache
 mv ./.extract-cache/meeting ~/.modular-prompt/extract-cache/
 ```
 
-移行後は新形式で `modular-extract extract meeting '...'` を実行します。複数の store がある場合は、それぞれ移動してください。
+移行後は新形式で `modular-prompt-extract extract meeting '...'` を実行します。複数の store がある場合は、それぞれ移動してください。
 
 #353 より前の flat レイアウト（コンテナ直下の `manifest.json` と cache files）を使用していた場合は、storename を決めて次のように移行します。
 

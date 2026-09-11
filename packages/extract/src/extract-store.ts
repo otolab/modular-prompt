@@ -119,7 +119,7 @@ export function mergeMaterials(
     if (previous && !hasSameContent(previous, material)) {
       throw new Error(
         `Material content differs for duplicate id '${id}'. `
-        + 'Run `modular-extract clean <storename>` and create the store again.',
+        + 'Run `modular-prompt-extract clean <storename>` and create the store again.',
       );
     }
   }
@@ -130,7 +130,7 @@ export function mergeMaterials(
 function missingStoreError(storeDir: string, storename: string): Error {
   return new Error(
     `Store not found: ${storeDir}\n`
-    + `Run \`modular-extract create ${storename} <files...>\` first.`,
+    + `Run \`modular-prompt-extract create ${storename} <files...>\` first.`,
   );
 }
 
