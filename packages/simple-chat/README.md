@@ -51,6 +51,16 @@ modular-prompt-runtime setup --status
 
 ## 使用方法
 
+以下の CLI 例は、`~/.modular-prompt/models.yaml` に `models.default` を設定済みであることを前提にしています。最小構成は次のとおりです。モデルを設定しない場合は、各コマンドに `-m <model-id-or-alias>` を追加してください。
+
+```yaml
+# ~/.modular-prompt/models.yaml
+models:
+  default:
+    provider: mlx
+    model: mlx-community/gemma-3-270m-it-4bit
+```
+
 ### CLIとして使用
 
 ```bash
