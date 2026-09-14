@@ -62,6 +62,13 @@ def _vlm_exact_cache_path(store: Any, cache_hash: int) -> Path:
     return store.dir / f"{store.EXACT_PREFIX}{exact_id}{store.SUFFIX}"
 
 
+def _vlm_exact_cache_filename(cache_hash: int) -> str:
+    """Return the pinned 0.7.0 exact snapshot filename for ``cache_hash``."""
+    unsigned_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
+    exact_id = hashlib.sha256(unsigned_hash).hexdigest()[:32]
+    return f"exact_{exact_id}.safetensors"
+
+
 def _read_vlm_cache_meta(cache_path: str) -> dict[str, Any] | None:
     try:
         with open(cache_path + ".meta.json") as f:
@@ -70,9 +77,12 @@ def _read_vlm_cache_meta(cache_path: str) -> dict[str, Any] | None:
             return None
         if meta.get("cache_hash") is None or meta.get("token_count") is None:
             return None
+        cache_hash = int(meta["cache_hash"])
+        if Path(cache_path).name != _vlm_exact_cache_filename(cache_hash):
+            return None
         return {
             **meta,
-            "cache_hash": int(meta["cache_hash"]),
+            "cache_hash": cache_hash,
             "token_count": int(meta["token_count"]),
         }
     except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
@@ -367,6 +377,16 @@ class MlxVlmBackend(ModelBackend):
         store = None
         try:
             store = _new_vlm_disk_store(cache_path, logical_path=False)
+            expected_path = _vlm_exact_cache_path(store, meta["cache_hash"])
+            requested_path = Path(cache_path).resolve()
+            if requested_path != expected_path.resolve():
+                sys.stderr.write(
+                    f"VLM exact cache hash does not match snapshot path: {cache_path}\n"
+                )
+                return None
+            if not expected_path.is_file():
+                sys.stderr.write(f"VLM exact cache snapshot missing: {cache_path}\n")
+                return None
             loaded = store.load_exact_cache(meta["cache_hash"])
             if loaded is None:
                 sys.stderr.write(f"VLM exact cache not found: {cache_path}\n")

@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from handlers.generate import handle_generate
 
 
@@ -54,6 +56,26 @@ def test_vlm_generate_reports_cache_load_failure(capsys):
         "rendered prompt",
         cache_path="mlx-vlm-memory://missing-ref",
     )
+
+    output = capsys.readouterr().out
+    assert '"cache_loaded": false' in output
+    generate_call = next(call for call in backend.calls if call[0] == "generate")
+    assert generate_call[1] == "rendered prompt"
+    assert generate_call[3] is None
+
+
+@pytest.mark.parametrize("snapshot_state", ["missing", "corrupt"])
+def test_vlm_file_cache_load_failure_uses_cold_path(capsys, tmp_path, snapshot_state):
+    backend = _Backend()
+    backend.cache = None
+    cache_path = tmp_path / "exact_snapshot.safetensors"
+    if snapshot_state == "corrupt":
+        cache_path.write_bytes(b"corrupt")
+    cache_path.with_name(cache_path.name + ".meta.json").write_text(
+        '{"layout":"exact_cache_v1","cache_hash":1,"token_count":2}'
+    )
+
+    handle_generate(backend, "rendered prompt", cache_path=str(cache_path))
 
     output = capsys.readouterr().out
     assert '"cache_loaded": false' in output

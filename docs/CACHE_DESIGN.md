@@ -132,7 +132,7 @@ VLM の通常の ref はディスク上の `exact_cache_v1` snapshot です。�
 
 `APCManager.store_exact_cache()` / `lookup_exact_cache()` も調査しましたが、これは APC のメモリ LRU・prefix lookup と連動する API です。Phase 2 は TypeScript controller が完全一致キーを管理し、VLM incremental prefill を行わないため、backend では直接 `DiskBlockStore.save_exact_cache` / `load_exact_cache` を採用しています。保存形式の metadata は `layout: exact_cache_v1`、`cache_hash`、`extra_hash`、`token_ids`、cache entry 数などです。
 
-VLM の論理 path が `/cache/<key>.vlm.safetensors` の場合、実体は `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors`、sidecar は実体 path に `.meta.json` を付けた `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors.meta.json` です。sidecar には LM と同じ `token_count`、`prefix_offsets`、`prefix_hashes` を保存し、さらに backend 固有の `layout` / `cache_hash` を持ちます。`.vlm.safetensors` は APC namespace directory の名前であり、実体の拡張子は `.safetensors` です。
+VLM の論理 path が `/cache/<key>.vlm.safetensors` の場合、実体は `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors`、sidecar は実体 path に `.meta.json` を付けた `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors.meta.json` です。sidecar には LM と同じ `token_count`、`prefix_offsets`、`prefix_hashes` を保存し、さらに backend 固有の `layout` / `cache_hash` を持ちます。load 時は sidecar の `cache_hash` から導出した exact snapshot path と実際の ref を照合し、mismatched sidecar、snapshot 不在、破損 snapshot は cache load failure として cold path に落とします。`.vlm.safetensors` は APC namespace directory の名前であり、実体の拡張子は `.safetensors` です。
 
 LM の `.safetensors.zip`（zip 内 `prompt_cache.safetensors`）と VLM の `exact_cache_v1` は別形式で、相互に読み込みません。画像あり VLM は vision feature cache を持たないため、常に cold path です。
 

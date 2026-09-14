@@ -200,3 +200,108 @@ def test_cache_prefill_rejects_empty_prompt():
 
     with pytest.raises(ValueError, match="non-empty text prompt"):
         backend.cache_prefill("memory-ref", "")
+
+
+def test_load_cache_rejects_sidecar_hash_for_another_snapshot(monkeypatch, tmp_path):
+    backend = _backend()
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            raise AssertionError("a mismatched sidecar must not load any snapshot")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    namespace = tmp_path / "cache.vlm.safetensors"
+    namespace.mkdir()
+    requested_hash = vlm_module._vlm_cache_hash(str(namespace / "logical-ref"))
+    other_hash = requested_hash + 1
+    requested_path = namespace / vlm_module._vlm_exact_cache_filename(requested_hash)
+    requested_path.touch()
+    requested_path.with_name(requested_path.name + ".meta.json").write_text(
+        json.dumps({
+            "layout": "exact_cache_v1",
+            "cache_hash": other_hash,
+            "token_count": 1,
+        })
+    )
+
+    assert backend.load_cache_from_file(str(requested_path)) is None
+
+
+def test_load_cache_rejects_missing_snapshot(monkeypatch, tmp_path):
+    backend = _backend()
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            raise AssertionError("a missing snapshot must be rejected before load")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    namespace = tmp_path / "cache.vlm.safetensors"
+    namespace.mkdir()
+    cache_hash = vlm_module._vlm_cache_hash(str(namespace / "logical-ref"))
+    requested_path = namespace / vlm_module._vlm_exact_cache_filename(cache_hash)
+    requested_path.with_name(requested_path.name + ".meta.json").write_text(
+        json.dumps({
+            "layout": "exact_cache_v1",
+            "cache_hash": cache_hash,
+            "token_count": 1,
+        })
+    )
+
+    assert backend.load_cache_from_file(str(requested_path)) is None
+
+
+def test_load_cache_rejects_corrupt_snapshot(monkeypatch, tmp_path):
+    backend = _backend()
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            raise ValueError("corrupt safetensors")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    namespace = tmp_path / "cache.vlm.safetensors"
+    namespace.mkdir()
+    cache_hash = vlm_module._vlm_cache_hash(str(namespace / "logical-ref"))
+    requested_path = namespace / vlm_module._vlm_exact_cache_filename(cache_hash)
+    requested_path.write_bytes(b"corrupt")
+    requested_path.with_name(requested_path.name + ".meta.json").write_text(
+        json.dumps({
+            "layout": "exact_cache_v1",
+            "cache_hash": cache_hash,
+            "token_count": 1,
+        })
+    )
+
+    assert backend.load_cache_from_file(str(requested_path)) is None
