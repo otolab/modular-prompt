@@ -167,6 +167,87 @@ def _image_extra_hash(images: list[Any]) -> int:
     return int.from_bytes(digest.digest()[:8], "little", signed=True)
 
 
+class _CollisionResistantVisionFeatureCache:
+    """Wrap mlx-vlm's process-local cache with a complete image identity.
+
+    mlx-vlm 0.7.0 hashes only ``PIL.Image.tobytes()`` for PIL inputs.  That
+    allows images with the same byte payload but different mode or dimensions
+    to share an entry.  The dispatch API only requires ``get``/``put`` (plus
+    the usual cache housekeeping methods), so pass a digest string to the
+    pinned cache instead.  The digest includes the image position in a list,
+    mode, dimensions, and bytes before it reaches upstream's key builder.
+    """
+
+    _KEY_DOMAIN = b"modular-prompt:vision-feature-cache-v2\0"
+
+    def __init__(self, cache: Any) -> None:
+        self._cache = cache
+
+    @classmethod
+    def _source_key(cls, image_source: Any) -> str:
+        if isinstance(image_source, (list, tuple)):
+            digest = hashlib.sha256()
+            digest.update(cls._KEY_DOMAIN)
+            digest.update(b"list\0")
+            digest.update(len(image_source).to_bytes(4, "little", signed=False))
+            for index, item in enumerate(image_source):
+                item_key = cls._source_key(item).encode("utf-8")
+                digest.update(index.to_bytes(4, "little", signed=False))
+                digest.update(len(item_key).to_bytes(4, "little", signed=False))
+                digest.update(item_key)
+            return f"modular-prompt:vision:list:{digest.hexdigest()}"
+
+        if isinstance(image_source, str):
+            digest = hashlib.sha256()
+            digest.update(cls._KEY_DOMAIN)
+            digest.update(b"source\0")
+            raw_source = image_source.encode("utf-8")
+            digest.update(len(raw_source).to_bytes(8, "little", signed=False))
+            digest.update(raw_source)
+            return f"modular-prompt:vision:source:{digest.hexdigest()}"
+
+        tobytes = getattr(image_source, "tobytes", None)
+        if callable(tobytes):
+            raw = bytes(tobytes())
+            mode = str(getattr(image_source, "mode", "")).encode("utf-8")
+            size = getattr(image_source, "size", (0, 0))
+            width, height = size if isinstance(size, (list, tuple)) else (0, 0)
+            shape = getattr(image_source, "shape", ())
+            dtype = str(getattr(image_source, "dtype", "")).encode("utf-8")
+            digest = hashlib.sha256()
+            digest.update(cls._KEY_DOMAIN)
+            digest.update(b"image\0")
+            digest.update(len(mode).to_bytes(4, "little", signed=False))
+            digest.update(mode)
+            digest.update(int(width).to_bytes(8, "little", signed=False))
+            digest.update(int(height).to_bytes(8, "little", signed=False))
+            shape_bytes = repr(tuple(shape)).encode("utf-8")
+            digest.update(len(shape_bytes).to_bytes(4, "little", signed=False))
+            digest.update(shape_bytes)
+            digest.update(len(dtype).to_bytes(4, "little", signed=False))
+            digest.update(dtype)
+            digest.update(len(raw).to_bytes(8, "little", signed=False))
+            digest.update(raw)
+            return f"modular-prompt:vision:image:{digest.hexdigest()}"
+
+        return f"modular-prompt:vision:object:{type(image_source).__name__}:{id(image_source)}"
+
+    def get(self, image_source: Any) -> Any:
+        return self._cache.get(self._source_key(image_source))
+
+    def put(self, image_source: Any, features: Any) -> None:
+        self._cache.put(self._source_key(image_source), features)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+    def __contains__(self, image_source: Any) -> bool:
+        return self._cache.__contains__(self._source_key(image_source))
+
+
 class MlxVlmBackend(ModelBackend):
     """`mlx_vlm` backend for vision-language models."""
 
@@ -191,7 +272,7 @@ class MlxVlmBackend(ModelBackend):
             return None
         cache = self._vision_caches.get(int(max_image_size))
         if cache is None:
-            cache = VisionFeatureCache()
+            cache = _CollisionResistantVisionFeatureCache(VisionFeatureCache())
             self._vision_caches[int(max_image_size)] = cache
         return cache
 

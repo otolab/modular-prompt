@@ -102,8 +102,55 @@ def test_stream_generate_passes_prompt_and_vision_caches_with_images(monkeypatch
     )
 
     assert calls["kwargs"]["prompt_cache"] is prompt_cache
-    assert isinstance(calls["kwargs"]["vision_cache"], _VisionCache)
+    vision_cache = calls["kwargs"]["vision_cache"]
+    assert isinstance(
+        vision_cache,
+        vlm_module._CollisionResistantVisionFeatureCache,
+    )
+    assert isinstance(vision_cache._cache, _VisionCache)
     assert calls["kwargs"]["image"] == ["image.png"]
+
+
+def test_process_local_vision_cache_does_not_reuse_features_for_same_bytes_with_different_layout(
+    monkeypatch,
+):
+    backend = _backend()
+    from PIL import Image
+
+    same_bytes = bytes(range(12))
+    image_rgb = Image.frombytes("RGB", (2, 2), same_bytes)
+    image_rgba = Image.frombytes("RGBA", (1, 3), same_bytes)
+    image_map = {"rgb.png": image_rgb, "rgba.png": image_rgba}
+    monkeypatch.setattr(
+        vlm_module,
+        "load_and_resize_images",
+        lambda paths, size: [image_map[path] for path in paths],
+    )
+
+    seen_features = []
+
+    def fake_stream_generate(*args, **kwargs):
+        vision_cache = kwargs["vision_cache"]
+        image = kwargs["image"]
+        features = vision_cache.get(image)
+        if features is None:
+            features = object()
+            vision_cache.put(image, features)
+        # This mirrors the upstream dispatch contract: the cache hit/miss is
+        # supplied to the model as cached_image_features.
+        kwargs["cached_image_features"] = features
+        seen_features.append(kwargs["cached_image_features"])
+        yield SimpleNamespace(text="ok")
+
+    monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
+
+    list(backend.stream_generate("prompt", {"max_tokens": 1}, images=["rgb.png"]))
+    list(backend.stream_generate("prompt", {"max_tokens": 1}, images=["rgba.png"]))
+    list(backend.stream_generate("prompt", {"max_tokens": 1}, images=["rgb.png"]))
+
+    assert len(seen_features) == 3
+    assert seen_features[0] is not seen_features[1]
+    assert seen_features[0] is seen_features[2]
 
 
 def test_cache_prefill_save_load_and_generate_with_token_ids(monkeypatch, tmp_path):
@@ -286,7 +333,11 @@ def test_image_cache_prefill_persists_extra_hash_and_rejects_another_image(monke
     assert meta["image_refs"] == ["image-a.png"]
     assert meta["max_image_size"] == 512
     assert calls[0][1]["image"] == [image_a]
-    assert isinstance(calls[0][1]["vision_cache"], _VisionCache)
+    assert isinstance(
+        calls[0][1]["vision_cache"],
+        vlm_module._CollisionResistantVisionFeatureCache,
+    )
+    assert isinstance(calls[0][1]["vision_cache"]._cache, _VisionCache)
 
     assert backend.load_cache_from_file(
         str(actual_path), images=["image-a.png"], max_image_size=512
