@@ -77,6 +77,8 @@ node packages/extract/bin/modular-prompt-extract.js clean meeting
 
 `list` は各 store の model、materials 数・タイトル、作成日時、KV cache の有無を表示します。
 
+CLI の `create` / `add` は入力ファイルを UTF-8 の文字列として読み込みます。画像ファイルを `Attachment` に変換する機能はなく、CLI の画像 material は Phase 3 の対象外です。画像を corpus に含める場合は library API の `MaterialInput.content: Attachment[]` を使用してください。MLX VLM の画像入力・画像 cache が受け付けるのは local file path のみで、URL や data URI は未対応です。
+
 ```text
 Store: meeting
   Model: mlx-community/SomeModel-4bit

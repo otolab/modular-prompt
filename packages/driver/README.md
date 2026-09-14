@@ -139,6 +139,8 @@ simple-chat では profile の `modelsConfig` に inline の `models` / `drivers
 
 `models.default` には cache 対応の text-only LM または cache を使う MLX VLM を指定できます。MLX VLM の cache は `backend: vlm`（または `auto`）で起動し、画像なしリクエストは `mlx-vlm==0.7.0` の `exact_cache_v1`、画像付きリクエストは専用の `vision_cache_v1` namespace としてディスクへ保存されます。画像付き cache は text-only VLM / LM の cache（LM の `.safetensors.zip` を含む）とは相互利用できません。
 
+MLX VLM の画像入力は local file path のみ対応します。URL / data URI の loader は実装していないため、画像付き cache 経路でも利用できません。
+
 ```yaml
 models:
   default:
@@ -294,7 +296,7 @@ const driver = new MlxDriver({
 });
 ```
 
-VLM の text-only cache は `cacheDir/<key>.vlm.safetensors/exact_<hash>.safetensors`、画像付き cache は `cacheDir/<key>.vlm-vision.safetensors/exact_<hash>.safetensors` に保存されます。実体ごとの `.meta.json` に `token_count` 等を記録し、画像付き sidecar には image hash、resize 条件、`vision_cache_v1` の version も記録します。VLM の incremental prefill と LM archive との互換性は提供しません。画像 feature tensor 自体は process-local の `VisionFeatureCache` に保持し、再起動後は再構築します。
+VLM の text-only cache は `cacheDir/<key>.vlm.safetensors/exact_<hash>.safetensors`、画像付き cache は `cacheDir/<key>.vlm-vision.safetensors/exact_<hash>.safetensors` に保存されます。実体ごとの `.meta.json` に `token_count` 等を記録し、画像付き sidecar には image hash、resize 条件、`vision_cache_v1` の version も記録します。VLM の incremental prefill と LM archive との互換性は提供しません。画像 feature tensor 自体は process-local の `VisionFeatureCache` に保持し、再起動後は再構築します。Pinned `mlx-vlm==0.7.0` の PIL key は bytes のみですが、MLX backend は mode・寸法・bytes・画像列を含む wrapper key を upstream cache に渡して衝突を防ぎます。
 
 #### 特殊トークンの確認
 

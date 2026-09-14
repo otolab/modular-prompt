@@ -98,10 +98,12 @@ interface ChatMessage {
 interface Attachment {
   type: 'text' | 'image_url' | 'file';
   text?: string;
-  image_url?: { url: string };  // local path, URL, or supported data source
+  image_url?: { url: string };  // driver-dependent: local path, URL, or data source
   file?: { path: string; mime_type: string };
 }
 ```
+
+`Attachment` は共通型ですが、入力源の対応範囲は driver ごとに異なります。MLX VLM の画像入力および画像 cache 経路は local file path のみ対応し、URL / data URI は未対応です。MLX は local path を `PIL.Image.open()` で読み込むため、URL や data URI を自動取得しません。他 driver の URL / data source 対応は各 driver の仕様に従います。
 
 ### QueryOptions
 

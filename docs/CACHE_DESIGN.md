@@ -151,7 +151,7 @@ LM の `.safetensors.zip`（zip 内 `prompt_cache.safetensors`）と VLM の sna
 - `image_count`、`image_refs`、`max_image_size`
 - `vision_feature_cache_version: mlx-vlm-0.7.0`
 
-`MlxVlmBackend` は mlx-vlm 0.7.0 の `VisionFeatureCache` を process-local に保持し、`stream_generate(..., vision_cache=...)` を通じて upstream が `cached_image_features` をモデルへ渡す経路を使います。永続化するのは prompt/KV exact snapshot と sidecar の同一性情報であり、opaque な MLX の projected feature tensor 自体は保存しません。プロセス再起動後は画像を再処理して feature cache を再構築します。
+`MlxVlmBackend` は mlx-vlm 0.7.0 の `VisionFeatureCache` を process-local に保持し、`stream_generate(..., vision_cache=...)` を通じて upstream が `cached_image_features` をモデルへ渡す経路を使います。0.7.0 の upstream PIL key は `tobytes()` のみなので、backend は wrapper を挟み、mode・寸法・bytes と画像列 index を含む digest string を upstream cache に渡します。これにより同じ bytes 長でも mode / 寸法が異なる画像の feature が誤共有されません。永続化するのは prompt/KV exact snapshot と sidecar の同一性情報であり、opaque な MLX の projected feature tensor 自体は保存しません。プロセス再起動後は画像を再処理して feature cache を再構築します。
 
 画像同一性は、`load_and_resize_images()` 後の正規化済み PIL payload（mode、幅・高さ、bytes）を hash して `extra_hash` にします。mlx-vlm dispatch 前の pixel tensor は backend から直接取得できないため、prefill と load が同じ modular-prompt 側の正規化入力を検証できる設計にしています。これにより、同一 token 列でも画像が異なる場合は別の `extra_hash` / controller key になり、resize 条件が異なる場合も cache miss になります。load 時は sidecar の layout、hash、画像数、resize 条件、feature cache version、exact snapshot の token 数と `extra_hash` を検証し、さらに保存済み token IDs が現行 prompt の prefix と一致することを確認します。失敗時は `cache_loaded: false` の cold path です。
 

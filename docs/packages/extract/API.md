@@ -55,6 +55,8 @@ API 境界では Element を直接渡さない。`buildExtractContext` が正規
 
 `id` 省略時は `title` を使用。
 
+library API では `content: Attachment[]` による画像 material を指定できます。MLX VLM の画像 cache 経路で利用できる画像は local file path のみで、URL / data URI は未対応です。CLI の `create` / `add` は入力ファイルを UTF-8 text として読むだけで `Attachment` を生成しないため、CLI 画像 material は Phase 3 の対象外です。
+
 #### `MessageInput`
 
 標準: `{ role: 'system' | 'assistant' | 'user'; content: ... }`  
@@ -222,6 +224,8 @@ CLI の `clean <storename>` で store 単位、`clean --all` で cache container
 ## CLI（`modular-prompt-extract`）
 
 `modular-prompt-extract` は cache container 内に named store を作成・利用する。`-d` の値は container パスで、create/add/extract/list/clean 共通で使用する。省略時は `~/.modular-prompt/extract-cache`（`MODULAR_PROMPT_HOME` を設定した場合は `${MODULAR_PROMPT_HOME}/extract-cache`）。
+
+CLI の `create` / `add` は各入力ファイルを UTF-8 の文字列として `MaterialInput.content` に格納します。画像ファイルを `Attachment` に変換する CLI 経路はなく、CLI 画像 material は Phase 3 の対象外です。画像 material の縦切りは library API の `MaterialInput.content: Attachment[]` を使用してください。
 
 ```bash
 modular-prompt-extract create <storename> [-m <model>] [--dry-run] <files...>
