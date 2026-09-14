@@ -341,7 +341,7 @@ modular-prompt-extract clean --all [-d <cache-dir>]
 
 `add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` は manifest に保存された ID で再開します。backend はモデル設定の `backend`（`auto` / `lm` / `vlm`）に従います。VLM は text-only cache のみを使用し、画像入力では cache を読みません。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID と選択した MLX `backend`（`auto` / `lm` / `vlm` / `optiq`）を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の値を新しい runtime に渡して再開します。backend がない既存 manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache のみを使用し、画像入力では cache を読みません。
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 

@@ -1,6 +1,7 @@
 import {
   MlxCacheController,
   type AIDriver,
+  type MlxBackendMode,
   type PromptCacheController,
 } from '@modular-prompt/driver';
 import { createDriver } from './model-resolution.js';
@@ -8,6 +9,8 @@ import { createDriver } from './model-resolution.js';
 export interface MlxExtractRuntimeOptions {
   /** MLX model ID or alias in models.yaml. Omitted uses user-configured models.default. */
   model?: string;
+  /** Explicit MLX backend. Omitted preserves model config and defaults to `auto`. */
+  backend?: MlxBackendMode;
   /** Fixed cache directory. When omitted, a managed temp directory is used. */
   cacheDir?: string;
 }
@@ -23,6 +26,8 @@ export interface MlxExtractRuntime {
   driver: AIDriver;
   cacheController: PromptCacheController;
   model: string;
+  /** Backend selected for this runtime; persisted by extract stores. */
+  backend: MlxBackendMode;
   /** Release driver and cache controller when all sessions using this runtime are done. */
   close(): Promise<void>;
 }
@@ -58,7 +63,10 @@ export async function createMlxExtractRuntime(
   );
   let driverForCleanup: AIDriver | undefined;
   try {
-    const resolved = await createDriver(options.model, { cacheController });
+    const resolved = await createDriver(options.model, {
+      cacheController,
+      backend: options.backend,
+    });
     const driver = resolved.driver;
     driverForCleanup = driver;
 
@@ -70,6 +78,7 @@ export async function createMlxExtractRuntime(
       driver,
       cacheController,
       model: resolved.spec.model,
+      backend: resolved.spec.backend ?? 'auto',
       async close() {
         try {
           await driver.close();

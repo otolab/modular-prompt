@@ -1,5 +1,6 @@
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { MlxBackendMode } from '@modular-prompt/driver';
 import type { MaterialInput } from '../extract-elements.js';
 import { MANIFEST_FILENAME } from './constants.js';
 
@@ -8,9 +9,15 @@ export interface ExtractCacheManifest {
   /** Store name for self-describing cache directories. */
   storename?: string;
   model: string;
+  /** MLX backend selected when the store was prepared. Missing means `auto` for legacy stores. */
+  backend?: MlxBackendMode;
   materials: MaterialInput[];
   createdAt: string;
   updatedAt?: string;
+}
+
+function isMlxBackend(value: unknown): value is MlxBackendMode {
+  return value === 'auto' || value === 'lm' || value === 'vlm' || value === 'optiq';
 }
 
 export function manifestPath(cacheDir: string): string {
@@ -33,6 +40,7 @@ export async function readManifest(cacheDir: string): Promise<ExtractCacheManife
     parsed.version !== 1
     || !parsed.model
     || !Array.isArray(parsed.materials)
+    || (parsed.backend !== undefined && !isMlxBackend(parsed.backend))
     || (parsed.updatedAt !== undefined && typeof parsed.updatedAt !== 'string')
   ) {
     throw new Error(`Invalid manifest: ${manifestPath(cacheDir)}`);

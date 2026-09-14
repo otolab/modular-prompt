@@ -3,6 +3,7 @@ import {
   resolveModelName,
   resolveModelReference,
   type AIDriver,
+  type MlxBackendMode,
   type DriverProvider,
   type ModelSpec,
   type ModelsConfig,
@@ -15,6 +16,8 @@ import { BUNDLED_MODELS_CONFIG } from './default-models.js';
 export interface ExtractDriverOptions {
   /** セッションと共有する KV cache controller */
   cacheController?: PromptCacheController;
+  /** Persisted or explicitly selected MLX backend for extract. */
+  backend?: MlxBackendMode;
 }
 
 export interface ExtractDriverResult {
@@ -78,7 +81,7 @@ function withExtractDriverOptions(
   // Preserve a model's explicit backend and let MLX auto-detect when none is
   // configured.  In particular, extract must not force a VLM model through
   // the mlx-lm backend just to enable prompt caching.
-  const backend = spec.backend ?? existingDriverOptions?.backend ?? 'auto';
+  const backend = options.backend ?? spec.backend ?? existingDriverOptions?.backend ?? 'auto';
   const driverOptions: MlxModelDriverOptions = {
     ...existingDriverOptions,
     backend,

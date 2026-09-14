@@ -94,6 +94,7 @@ describe('createMlxExtractRuntime', () => {
       }),
     );
     expect(runtime.model).toBe('resolved/vlm-model');
+    expect(runtime.backend).toBe('vlm');
     expect(mockDriver.getCapabilities).toHaveBeenCalledOnce();
 
     await runtime.close();
@@ -113,6 +114,23 @@ describe('createMlxExtractRuntime', () => {
         }),
       }),
     );
+    expect(runtime.backend).toBe('auto');
+
+    await runtime.close();
+  });
+
+  it('lets a persisted backend override a changed model configuration', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    const runtime = await createMlxExtractRuntime({ model: 'raw/vlm-model', backend: 'vlm' });
+
+    expect(aiServiceCreateDriver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'raw/vlm-model',
+        backend: 'vlm',
+        driverOptions: expect.objectContaining({ backend: 'vlm' }),
+      }),
+    );
+    expect(runtime.backend).toBe('vlm');
 
     await runtime.close();
   });
