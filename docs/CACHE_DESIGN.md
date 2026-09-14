@@ -116,6 +116,8 @@ export interface CacheHandle {
 - MlxCacheController (VLM): Python プロセス内の opaque ref（例: `mlx-vlm-memory://abc123/def456`）
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
 
+VLM の `mlx-vlm-memory://` ref は、作成元と同じ Python プロセス内でのみ有効です。Python process の `close()` または restart 後は無効になり、unknown ref や cache clone failure は cache miss として cold generate にフォールバックします。ref / handle を別 process へ持ち越すことはできず、ディスクへ永続化されません。
+
 **trimTokens**
 
 KVキャッシュを指定トークン数にトリムして読み込む（incremental prefill用）。
@@ -360,6 +362,8 @@ usage?: {
 | `cacheWriteTokens` | 同一 `streamQuery` 内の `prepare()` で新規作成した prefill トークン数（`getStats().cacheGrowthTokens` の差分） |
 
 `promptTokens` はキャッシュ分を差し引いた値ではありません。キャッシュヒット分は `cacheReadTokens` で別途報告します。
+
+VLM の cache load が失敗した場合、Python stream meta の `cache_loaded: false` を受けて、そのリクエストの `cacheReadTokens` は 0 になります。prefill 自体が完了していれば `cacheWriteTokens` は実際に作成した prefill 分を示します。
 
 ### AbortSignal とキャッシュ
 
