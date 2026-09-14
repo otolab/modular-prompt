@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { createExtractSession } from './create-extract-session.js';
 import { createMlxExtractRuntime } from './create-mlx-extract-runtime.js';
+import type { MlxBackendMode } from '@modular-prompt/driver';
 import type { MaterialInput } from './extract-elements.js';
 import { CACHE_PREPARE_CUE } from './cli/constants.js';
 import {
@@ -19,8 +20,15 @@ export interface PrepareExtractCacheOptions {
   cacheDir: string;
   /** MLX model alias or resolved model ID. */
   model?: string;
+  /** Persisted/configured MLX backend. Missing preserves the `auto` fallback. */
+  backend?: MlxBackendMode;
   /** Corpus to prefill into the cache. */
   materials: readonly MaterialInput[];
+}
+
+export interface PreparedExtractCache {
+  model: string;
+  backend: MlxBackendMode;
 }
 
 async function closeRuntimePreservingError(
@@ -40,13 +48,14 @@ async function closeRuntimePreservingError(
  * Prepare the persistent corpus cache and release all runtime resources.
  *
  * The caller owns the manifest transaction. This operation only creates or
- * extends the cache in `cacheDir` and returns the model ID resolved by MLX.
+ * extends the cache in `cacheDir` and returns the model/backend resolved by MLX.
  */
 export async function prepareExtractCache(
   options: PrepareExtractCacheOptions,
-): Promise<string> {
+): Promise<PreparedExtractCache> {
   const runtime = await createMlxExtractRuntime({
     model: options.model,
+    backend: options.backend,
     cacheDir: options.cacheDir,
   });
   let operationError: unknown;
@@ -65,7 +74,10 @@ export async function prepareExtractCache(
       options: { maxTokens: 1, temperature: 0 },
     });
     await session.close({ releaseCache: false });
-    return runtime.model;
+    return {
+      model: runtime.model,
+      backend: runtime.backend ?? 'auto',
+    };
   } catch (error: unknown) {
     operationError = error;
     throw error;
@@ -165,6 +177,7 @@ export interface AppendToExtractStoreOptions {
 export interface AppendToExtractStoreResult {
   manifest: ExtractCacheManifest;
   model: string;
+  backend: MlxBackendMode;
   addedMaterials: number;
 }
 
@@ -221,13 +234,16 @@ export async function appendToExtractStore(
   try {
     await cp(storeDir, stagingDir, { recursive: true, force: true });
 
-    const model = await prepareExtractCache({
+    const prepared = await prepareExtractCache({
       cacheDir: stagingDir,
       model: previousManifest.model,
+      backend: previousManifest.backend,
       materials,
     });
     const nextManifest: ExtractCacheManifest = {
       ...previousManifest,
+      model: prepared.model,
+      backend: prepared.backend,
       materials,
       updatedAt: (options.now ?? (() => new Date().toISOString()))(),
     };
@@ -237,7 +253,8 @@ export async function appendToExtractStore(
     committed = true;
     return {
       manifest: nextManifest,
-      model,
+      model: prepared.model,
+      backend: prepared.backend,
       addedMaterials: materials.length - previousManifest.materials.length,
     };
   } finally {

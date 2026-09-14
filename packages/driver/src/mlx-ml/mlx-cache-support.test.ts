@@ -7,14 +7,14 @@ import {
 
 describe('MLX cache support', () => {
   it('binds VLM caches without disabling them', async () => {
-    const controller = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+    const controller = new MlxCacheController();
     const support = createMlxCacheSupport(controller);
     expect(support).toBeDefined();
     expect(support?.shouldDisableForVlm('vlm')).toBe(false);
 
     const process = {
       cachePrefill: vi.fn().mockResolvedValue({
-        cache_path: 'mlx-vlm-memory://backend-ref',
+        cache_path: '/fixed-vlm-cache/cache.vlm.safetensors/exact_0123456789abcdef.safetensors',
         token_count: 4,
       }),
     };
@@ -36,7 +36,7 @@ describe('MLX cache support', () => {
       model: 'test-vlm',
       instructions: [{ type: 'text', content: 'cached' }],
     });
-    expect(handle.ref).toMatch(/^mlx-vlm-memory:\/\//);
+    expect(handle.ref).toContain('.vlm.safetensors/exact_');
     expect(support!.readTokenCount(handle.ref)).toBe(4);
 
     await support!.close();

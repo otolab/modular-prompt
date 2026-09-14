@@ -3,7 +3,12 @@
  */
 
 import type { ApplicationConfig } from '../driver-registry/config-based-factory.js';
-import type { DriverCapability, DriverProvider, ModelSpec } from '../driver-registry/types.js';
+import type {
+  DriverCapability,
+  DriverProvider,
+  MlxBackendMode,
+  ModelSpec,
+} from '../driver-registry/types.js';
 
 /** models セクションのマージモード */
 export type ModelsMergeMode = 'merge' | 'override';
@@ -36,6 +41,8 @@ export interface ModelsConfigOptions {
 export interface ModelSpecEntry {
   model: string;
   provider: DriverProvider | string;
+  /** MLX backend selection (`auto`, `lm`, `vlm`, or `optiq`). */
+  backend?: MlxBackendMode;
   capabilities?: DriverCapability[];
   runtime?: string;
   maxInputTokens?: number;

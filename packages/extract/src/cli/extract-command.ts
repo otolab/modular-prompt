@@ -40,6 +40,7 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
   const runtime = await createMlxExtractRuntime({
     model: manifest.model,
     cacheDir: storeDir,
+    ...(manifest.backend ? { backend: manifest.backend } : {}),
   });
 
   try {

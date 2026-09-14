@@ -102,4 +102,33 @@ describe('cli/manifest', () => {
     await writeFile(manifestPath(tempDir), '{"version":2}', 'utf-8');
     await expect(readManifest(tempDir)).rejects.toThrow(/Invalid manifest/);
   });
+
+  it('accepts a legacy manifest without backend and leaves it for auto fallback', async () => {
+    const manifest = {
+      version: 1 as const,
+      model: 'legacy-model',
+      materials: [{ title: 'doc', content: 'body' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    await writeManifest(tempDir, manifest);
+
+    await expect(readManifest(tempDir)).resolves.toEqual(manifest);
+  });
+
+  it('validates persisted MLX backend values', async () => {
+    await writeFile(
+      manifestPath(tempDir),
+      JSON.stringify({
+        version: 1,
+        model: 'test-model',
+        backend: 'unknown',
+        materials: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+      'utf-8',
+    );
+
+    await expect(readManifest(tempDir)).rejects.toThrow(/Invalid manifest/);
+  });
 });

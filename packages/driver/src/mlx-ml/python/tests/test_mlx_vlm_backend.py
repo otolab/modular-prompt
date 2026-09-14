@@ -1,4 +1,8 @@
 import sys
+from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -91,7 +95,7 @@ def test_stream_generate_does_not_pass_cache_with_images(monkeypatch):
     assert calls["kwargs"]["image"] == ["image.png"]
 
 
-def test_cache_prefill_clone_load_and_generate_with_token_ids(monkeypatch):
+def test_cache_prefill_save_load_and_generate_with_token_ids(monkeypatch, tmp_path):
     backend = _backend()
     created = []
     calls = []
@@ -108,19 +112,62 @@ def test_cache_prefill_clone_load_and_generate_with_token_ids(monkeypatch):
         yield SimpleNamespace(text="prefill")
 
     from mlx_vlm.models import cache as vlm_cache
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+        saved = {}
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+            self.dir.mkdir(parents=True, exist_ok=True)
+
+        def save_exact_cache(self, cache_hash, token_ids, extra_hash, prompt_cache):
+            raw_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
+            exact_id = hashlib.sha256(raw_hash).hexdigest()[:32]
+            path = self.dir / f"exact_{exact_id}.safetensors"
+            self.saved[(str(self.dir), int(cache_hash))] = (
+                tuple(token_ids),
+                int(extra_hash),
+                deepcopy(prompt_cache),
+            )
+            path.touch()
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            return self.saved.get((str(self.dir), int(cache_hash)))
+
+        def close(self):
+            pass
 
     monkeypatch.setattr(vlm_cache, "make_prompt_cache", fake_make_prompt_cache)
     monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
 
-    result = backend.cache_prefill("memory-ref", "prompt")
+    logical_path = str(tmp_path / "cache.vlm.safetensors")
+    result = backend.cache_prefill(
+        logical_path,
+        "prompt",
+        prefix_offsets=[len("prompt")],
+        prefix_hashes=["prompt-hash"],
+    )
 
-    assert result == {"cache_path": "memory-ref", "token_count": len("prompt")}
+    actual_path = Path(result["cache_path"])
+    assert actual_path.parent == Path(logical_path)
+    assert actual_path.name.startswith("exact_")
+    assert result["token_count"] == len("prompt")
+    assert actual_path.is_file()
+    meta = json.loads(Path(str(actual_path) + ".meta.json").read_text())
+    assert meta["layout"] == "exact_cache_v1"
+    assert meta["token_count"] == len("prompt")
+    assert meta["prefix_offsets"] == [len("prompt")]
+    assert meta["prefix_hashes"] == ["prompt-hash"]
     assert calls[0][0] == "prompt"
     assert calls[0][1]["image"] is None
     assert calls[0][1]["prompt_cache"] is created[0]
     assert calls[0][1]["max_tokens"] == 0
 
-    loaded = backend.load_cache_from_file("memory-ref")
+    loaded = backend.load_cache_from_file(str(actual_path))
     assert loaded is not created[0]
     assert loaded[0] is not created[0][0]
     assert loaded[0].offset == len("prompt")
@@ -153,3 +200,108 @@ def test_cache_prefill_rejects_empty_prompt():
 
     with pytest.raises(ValueError, match="non-empty text prompt"):
         backend.cache_prefill("memory-ref", "")
+
+
+def test_load_cache_rejects_sidecar_hash_for_another_snapshot(monkeypatch, tmp_path):
+    backend = _backend()
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            raise AssertionError("a mismatched sidecar must not load any snapshot")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    namespace = tmp_path / "cache.vlm.safetensors"
+    namespace.mkdir()
+    requested_hash = vlm_module._vlm_cache_hash(str(namespace / "logical-ref"))
+    other_hash = requested_hash + 1
+    requested_path = namespace / vlm_module._vlm_exact_cache_filename(requested_hash)
+    requested_path.touch()
+    requested_path.with_name(requested_path.name + ".meta.json").write_text(
+        json.dumps({
+            "layout": "exact_cache_v1",
+            "cache_hash": other_hash,
+            "token_count": 1,
+        })
+    )
+
+    assert backend.load_cache_from_file(str(requested_path)) is None
+
+
+def test_load_cache_rejects_missing_snapshot(monkeypatch, tmp_path):
+    backend = _backend()
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            raise AssertionError("a missing snapshot must be rejected before load")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    namespace = tmp_path / "cache.vlm.safetensors"
+    namespace.mkdir()
+    cache_hash = vlm_module._vlm_cache_hash(str(namespace / "logical-ref"))
+    requested_path = namespace / vlm_module._vlm_exact_cache_filename(cache_hash)
+    requested_path.with_name(requested_path.name + ".meta.json").write_text(
+        json.dumps({
+            "layout": "exact_cache_v1",
+            "cache_hash": cache_hash,
+            "token_count": 1,
+        })
+    )
+
+    assert backend.load_cache_from_file(str(requested_path)) is None
+
+
+def test_load_cache_rejects_corrupt_snapshot(monkeypatch, tmp_path):
+    backend = _backend()
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            raise ValueError("corrupt safetensors")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    namespace = tmp_path / "cache.vlm.safetensors"
+    namespace.mkdir()
+    cache_hash = vlm_module._vlm_cache_hash(str(namespace / "logical-ref"))
+    requested_path = namespace / vlm_module._vlm_exact_cache_filename(cache_hash)
+    requested_path.write_bytes(b"corrupt")
+    requested_path.with_name(requested_path.name + ".meta.json").write_text(
+        json.dumps({
+            "layout": "exact_cache_v1",
+            "cache_hash": cache_hash,
+            "token_count": 1,
+        })
+    )
+
+    assert backend.load_cache_from_file(str(requested_path)) is None

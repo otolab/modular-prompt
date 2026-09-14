@@ -126,10 +126,10 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 | API | 入力 / 出力 | 責務と保証 |
 |-----|-------------|------------|
 | `mergeMaterials(existing, incoming)` | `MaterialInput[]` → merged `MaterialInput[]` | `id`（省略時は `title`）で順序を保ってマージ。同一 id・同一内容はスキップし、内容差分はエラー |
-| `prepareExtractCache({ cacheDir, model, materials })` | `Promise<string>`（解決済み model） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
-| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
+| `prepareExtractCache({ cacheDir, model, backend?, materials })` | `Promise<{ model, backend }>`（解決済み model/backend） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
+| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, backend, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
 
-`appendToExtractStore` は `manifest.model` を使い、成功時だけ `updatedAt` と materials を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
+`appendToExtractStore` は `manifest.model` と `manifest.backend`（未指定時は `auto` fallback）を使い、成功時だけ `updatedAt`、materials、解決済み backend を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
 
 ---
 
@@ -146,13 +146,16 @@ function createMlxExtractRuntime(
 | プロパティ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
 | `model` | `string` | — | MLX モデルの alias または生の HF model ID。省略時は user models.yaml の `models.default` から解決。未設定時はエラー |
+| `backend` | `'auto' \| 'lm' \| 'vlm' \| 'optiq'` | — | MLX backend の明示指定。省略時は models.yaml の指定、さらに未指定なら `auto` |
 | `cacheDir` | `string` | — | 固定キャッシュディレクトリ。省略時は managed temp dir |
 
 `MlxExtractRuntime.close()` は `driver.close()` + `cacheController.close()` を行う。
 
-`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、**mlx-lm バックエンド（`backend: 'lm'`）に固定**する。extract の Phase 1 では、ディスク／増分キャッシュを使う LM 経路だけを対象にするため。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。
+runtime の `backend` プロパティは実際に driver へ渡した選択値であり、extract store の manifest に保存されます。backend のない既存 manifest は `auto` として再開します。
 
-`createDriver(model, { cacheController })` は runtime 内部で使用する低レベル helper で、戻り値は `{ driver, spec }`。`spec.model` は alias 解決後の生 model ID である。
+`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、models.yaml の MLX backend 指定を保持する。backend 未指定時は `auto` としてモデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` の場合も、画像なしの text-only exact KV cache を固定 cacheDir に永続化できる。VLM の画像 feature cache と incremental prefill は対象外。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。
+
+`createDriver(model, { cacheController, backend? })` は runtime 内部で使用する低レベル helper で、戻り値は `{ driver, spec }`。`spec.model` は alias 解決後の生 model ID である。
 
 ---
 

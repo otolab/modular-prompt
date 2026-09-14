@@ -109,8 +109,8 @@ describe('MlxDriver', () => {
   });
 
   describe('VLM prompt cache', () => {
-    it('keeps VLM cache in memory and reports read/write usage', async () => {
-      const cacheController = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+    it('uses a VLM file cache and reports read/write usage', async () => {
+      const cacheController = new MlxCacheController();
       const driver = new MlxDriver({
         model: 'test-vlm',
         cacheController,
@@ -140,7 +140,7 @@ describe('MlxDriver', () => {
       });
       process.render.mockResolvedValue({ formatted_prompt: 'rendered', error: null });
       process.cachePrefill.mockResolvedValue({
-        cache_path: 'mlx-vlm-memory://backend-ref',
+        cache_path: '/tmp/mlx-vlm/cache.vlm.safetensors/exact_backend_ref.safetensors',
         token_count: 3,
       });
       process.generate.mockResolvedValue(
@@ -161,7 +161,7 @@ describe('MlxDriver', () => {
         expect.any(Object),
         undefined,
         undefined,
-        expect.stringMatching(/^mlx-vlm-memory:\/\//),
+        expect.stringContaining('.vlm.safetensors/exact_'),
         undefined,
       );
 
@@ -169,7 +169,7 @@ describe('MlxDriver', () => {
     });
 
     it('does not report a cache read when VLM cache loading fails', async () => {
-      const cacheController = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+      const cacheController = new MlxCacheController();
       const driver = new MlxDriver({
         model: 'test-vlm',
         cacheController,
@@ -199,7 +199,7 @@ describe('MlxDriver', () => {
       });
       process.render.mockResolvedValue({ formatted_prompt: 'rendered', error: null });
       process.cachePrefill.mockResolvedValue({
-        cache_path: 'mlx-vlm-memory://backend-ref',
+        cache_path: '/tmp/mlx-vlm/cache.vlm.safetensors/exact_backend_ref.safetensors',
         token_count: 3,
       });
       process.generate.mockResolvedValue(

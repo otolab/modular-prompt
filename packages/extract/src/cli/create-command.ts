@@ -36,9 +36,9 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
   await mkdir(storeDir, { recursive: true });
 
   let storeReady = false;
-  let preparedModel: string | undefined;
+  let prepared: Awaited<ReturnType<typeof prepareExtractCache>> | undefined;
   try {
-    preparedModel = await prepareExtractCache({
+    prepared = await prepareExtractCache({
       cacheDir: storeDir,
       model: options.model,
       materials,
@@ -48,7 +48,8 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
     await writeManifest(storeDir, {
       version: 1,
       storename: options.storename,
-      model: preparedModel,
+      model: prepared.model,
+      backend: prepared.backend,
       materials,
       createdAt,
       updatedAt: createdAt,
@@ -61,5 +62,5 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
   }
 
   console.error(`Cache prepared: ${storeDir}`);
-  console.error(`Materials: ${materials.length} file(s), model: ${preparedModel}`);
+  console.error(`Materials: ${materials.length} file(s), model: ${prepared.model}, backend: ${prepared.backend}`);
 }

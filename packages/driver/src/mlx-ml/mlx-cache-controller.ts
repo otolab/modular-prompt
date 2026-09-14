@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { rmSync, existsSync, readFileSync } from 'node:fs';
 import { unlink, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { lock as lockFile } from 'proper-lockfile';
@@ -15,7 +15,12 @@ import { convertMessages, convertToolDefinitions } from './mlx-message-utils.js'
 import { Logger } from '@modular-prompt/utils';
 
 const logger = new Logger({ prefix: 'MLX', context: 'cache' });
-const CACHE_FILE_EXTENSION = '.safetensors.zip';
+const CACHE_FILE_EXTENSIONS = {
+  lm: '.safetensors.zip',
+  // mlx-vlm's exact_cache_v1 snapshot is a standalone safetensors file and
+  // must never be mistaken for an mlx-lm archive.
+  vlm: '.vlm.safetensors',
+} as const;
 
 interface CacheIndexEntry {
   key: string;
@@ -26,6 +31,10 @@ interface CacheIndexEntry {
   reasoningEffort?: string;
   createdAt: string;
   hint?: 'retain' | 'release';
+  /** Backend-specific cache format. Missing means the legacy LM format. */
+  backend?: 'lm' | 'vlm';
+  /** VLM APC snapshot path relative to cacheDir (handles use the absolute path). */
+  path?: string;
 }
 
 interface CacheIndex {
@@ -67,7 +76,7 @@ export class MlxCacheController implements PromptCacheController {
   private lastHandleToolsHash?: string;
   private lastHandleReasoningEffort?: string;
   private cacheIndex: CacheIndex = { version: 1, entries: [] };
-  /** Token counts returned by the backend, including VLM in-memory refs. */
+  /** Token counts returned by the backend, including VLM exact disk refs. */
   private cacheTokenCounts = new Map<string, number>();
   private stats = {
     totalQueries: 0,
@@ -81,7 +90,9 @@ export class MlxCacheController implements PromptCacheController {
   constructor(options?: MlxCacheControllerOptions) {
     this.formatterOptions = {};
     if (options?.cacheDir) {
-      this.cacheDir = options.cacheDir;
+      // Keep backend refs and relative index paths stable when callers pass a
+      // relative cacheDir (the Python process may have a different cwd).
+      this.cacheDir = resolvePath(options.cacheDir);
       this.managedDir = false;
     } else {
       this.cacheDir = '';
@@ -97,10 +108,6 @@ export class MlxCacheController implements PromptCacheController {
     this.modelKind = modelKind === 'vlm' ? 'vlm' : 'lm';
   }
 
-  private get memoryOnly(): boolean {
-    return this.modelKind === 'vlm';
-  }
-
   async bind(
     process: MlxProcess,
     formatterOptions: FormatterOptions,
@@ -112,15 +119,6 @@ export class MlxCacheController implements PromptCacheController {
     this.process = process;
     this.formatterOptions = formatterOptions;
     this.messageProcessor = messageProcessor;
-    if (this.memoryOnly) {
-      // The VLM backend uses this as an opaque per-process ref.  Do not create
-      // or inspect a filesystem path: the mlx-vlm 0.7.0 cache format is not
-      // an LM-compatible archive and APC/disk persistence is out of scope.
-      this.cacheDir = `mlx-vlm-memory://${randomBytes(6).toString('hex')}`;
-      this.cacheDirReady = true;
-      this.bound = true;
-      return;
-    }
     if (!this.cacheDir) {
       this.cacheDir = join(tmpdir(), `mlx-prompt-cache-${randomBytes(6).toString('hex')}`);
     }
@@ -137,10 +135,6 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private async ensureCacheDir(): Promise<void> {
-    if (this.memoryOnly) {
-      this.cacheDirReady = true;
-      return;
-    }
     if (this.cacheDirReady) return;
     await mkdir(this.cacheDir, { recursive: true, mode: 0o700 });
     this.cacheDirReady = true;
@@ -179,7 +173,7 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private async saveIndex(): Promise<void> {
-    if (this.managedDir || this.memoryOnly) return;
+    if (this.managedDir) return;
     try {
       await this.ensureCacheDir();
       const release = await lockFile(this.indexPath, { realpath: false });
@@ -343,7 +337,10 @@ export class MlxCacheController implements PromptCacheController {
     params: CachePrepareParams,
     fullTokens: number[],
   ): Promise<BaseCacheInfo | undefined> {
-    if (this.memoryOnly) return undefined;
+    // exact_cache_v1 VLM snapshots are intentionally not used for incremental
+    // prefill.  A VLM cache is still eligible for an exact disk hit in
+    // createCache(), but base_cache_path/trim_to_tokens remain Phase 3 work.
+    if (this.modelKind === 'vlm') return undefined;
     const newHashes = this.computeElementHashes(params);
     if (newHashes.length === 0) return undefined;
 
@@ -359,11 +356,12 @@ export class MlxCacheController implements PromptCacheController {
     const staleKeys: string[] = [];
 
     for (const entry of this.cacheIndex.entries) {
+      if ((entry.backend ?? 'lm') !== 'lm') continue;
       if (entry.hint === 'release') continue;
       if (entry.model !== params.model || entry.formatterOptionsHash !== fmtHash) continue;
       if ((entry.toolsHash ?? '') !== newToolsHash) continue;
       if ((entry.reasoningEffort ?? '') !== (params.reasoningEffort ?? '')) continue;
-      const path = this.generateCachePath(entry.key);
+      const path = entry.path ?? this.generateCachePath(entry.key);
       if (existsSync(path) && this.readMetaTokenCount(path) > 0) {
         candidates.push({ path, elementHashes: entry.elementHashes, label: entry.key.slice(0, 8) });
       } else {
@@ -387,7 +385,9 @@ export class MlxCacheController implements PromptCacheController {
     }
 
     if (staleKeys.length > 0) {
-      this.cacheIndex.entries = this.cacheIndex.entries.filter(e => !staleKeys.includes(e.key));
+      this.cacheIndex.entries = this.cacheIndex.entries.filter(
+        e => !(staleKeys.includes(e.key) && (e.backend ?? 'lm') === 'lm'),
+      );
       this.saveIndex().catch(() => {});
     }
 
@@ -468,9 +468,20 @@ export class MlxCacheController implements PromptCacheController {
     return bestInfo;
   }
 
-  private addToIndex(params: CachePrepareParams, cacheKey: string): void {
-    // avoid duplicates
-    if (this.cacheIndex.entries.some(e => e.key === cacheKey)) return;
+  private addToIndex(params: CachePrepareParams, cacheKey: string, cachePath: string): void {
+    // avoid duplicates while refreshing the actual backend path after a VLM
+    // prefill (the logical path is only the namespace seed).
+    const existing = this.cacheIndex.entries.find(
+      e => e.key === cacheKey && (e.backend ?? 'lm') === this.modelKind,
+    );
+    if (existing) {
+      existing.backend = this.modelKind;
+      if (this.modelKind === 'vlm') {
+        existing.path = this.toIndexCachePath(cachePath);
+      }
+      existing.hint = undefined;
+      return;
+    }
 
     this.cacheIndex.entries.push({
       key: cacheKey,
@@ -480,6 +491,8 @@ export class MlxCacheController implements PromptCacheController {
       toolsHash: this.computeToolsHash(params.tools),
       reasoningEffort: params.reasoningEffort,
       createdAt: new Date().toISOString(),
+      backend: this.modelKind,
+      path: this.modelKind === 'vlm' ? this.toIndexCachePath(cachePath) : undefined,
     });
   }
 
@@ -504,10 +517,37 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private generateCachePath(cacheKey: string): string {
-    if (this.memoryOnly) {
-      return `${this.cacheDir}/${cacheKey}`;
+    const extension = CACHE_FILE_EXTENSIONS[this.modelKind];
+    return join(this.cacheDir, `${cacheKey}${extension}`);
+  }
+
+  private getIndexedCachePath(cacheKey: string): string | undefined {
+    const indexedPath = this.cacheIndex.entries.find(
+      e => e.key === cacheKey && (e.backend ?? 'lm') === this.modelKind,
+    )?.path;
+    if (!indexedPath) return undefined;
+    return isAbsolute(indexedPath) ? indexedPath : join(this.cacheDir, indexedPath);
+  }
+
+  private getEntryCachePath(entry: CacheIndexEntry): string {
+    if (entry.path) {
+      return isAbsolute(entry.path) ? entry.path : join(this.cacheDir, entry.path);
     }
-    return join(this.cacheDir, `${cacheKey}${CACHE_FILE_EXTENSION}`);
+    return this.generateCachePath(entry.key);
+  }
+
+  private toIndexCachePath(cachePath: string): string {
+    if (this.modelKind !== 'vlm') {
+      return cachePath;
+    }
+    const absoluteCachePath = isAbsolute(cachePath) ? cachePath : resolvePath(cachePath);
+    const relativePath = relative(this.cacheDir, absoluteCachePath);
+    // Backend-created VLM paths are inside cacheDir. Keep an absolute path
+    // only for an incompatible/custom backend result that cannot be relocated.
+    if (relativePath === '..' || relativePath.startsWith(`..${sep}`)) {
+      return cachePath;
+    }
+    return relativePath;
   }
 
   recordQuery(): void {
@@ -520,9 +560,6 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   readCacheTokenCount(cachePath: string): number {
-    if (this.memoryOnly) {
-      return this.cacheTokenCounts.get(cachePath) ?? 0;
-    }
     return this.cacheTokenCounts.get(cachePath) ?? this.readMetaTokenCount(cachePath);
   }
 
@@ -587,13 +624,23 @@ export class MlxCacheController implements PromptCacheController {
       return MlxCacheController.EMPTY_HANDLE;
     }
 
-    const cachePath = this.generateCachePath(cacheKey);
+    // VLM prefill returns the actual APC snapshot path.  Reuse that path when
+    // a fixed-cache index has it; otherwise start with a deterministic logical
+    // path that the Python backend turns into a DiskBlockStore namespace.
+    const indexedPath = this.getIndexedCachePath(cacheKey);
+    const cachePath = indexedPath
+      && existsSync(indexedPath)
+      && existsSync(indexedPath + '.meta.json')
+      && this.readMetaTokenCount(indexedPath) > 0
+      ? indexedPath
+      : this.generateCachePath(cacheKey);
+    let effectiveCachePath = cachePath;
     const elementHashes = this.computeElementHashes(params);
     let supersededRef: string | undefined;
 
-    // Disk hit check (exact same cache already exists).  VLM refs are always
-    // process-local and therefore never take this path.
-    if (!this.memoryOnly && existsSync(cachePath) && existsSync(cachePath + '.meta.json') && this.readMetaTokenCount(cachePath) > 0) {
+    // Disk hit check (exact same cache already exists).  Both LM archives and
+    // VLM exact_cache_v1 snapshots use the same sidecar token-count contract.
+    if (existsSync(cachePath) && existsSync(cachePath + '.meta.json') && this.readMetaTokenCount(cachePath) > 0) {
       this.stats.diskHit++;
       this.cacheTokenCounts.set(cachePath, this.readMetaTokenCount(cachePath));
       logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
@@ -617,22 +664,22 @@ export class MlxCacheController implements PromptCacheController {
 
       // Tokenize to get full token IDs (for findBestBase + prefix computation)
       let fullTokens: number[] | null = null;
-      if (!this.memoryOnly) {
-        try {
-          const tokenResult = await this.process!.tokenize(
-            mlxMessages, mlxTools,
-            params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
-          );
-          if (!tokenResult.error && tokenResult.token_ids) {
-            fullTokens = tokenResult.token_ids;
-          }
-        } catch {
-          // tokenize failure — proceed without prefix matching
+      try {
+        const tokenResult = await this.process!.tokenize(
+          mlxMessages, mlxTools,
+          params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
+        );
+        if (!tokenResult.error && tokenResult.token_ids) {
+          fullTokens = tokenResult.token_ids;
         }
+      } catch {
+        // tokenize failure — proceed without prefix matching
       }
 
-      // Find best base cache
-      const base = !this.memoryOnly && fullTokens
+      // Find best base cache.  VLM exact snapshots intentionally do not
+      // participate in incremental prefill until a safe trim/replay protocol
+      // is implemented.
+      const base = this.modelKind === 'lm' && fullTokens
         ? await this.findBestBase(params, fullTokens)
         : undefined;
 
@@ -668,7 +715,7 @@ export class MlxCacheController implements PromptCacheController {
       // Compute prefix info if we have full tokens
       let prefixOffsets: number[] | undefined;
       let prefixHashes: string[] | undefined;
-      if (!this.memoryOnly && fullTokens) {
+      if (fullTokens) {
         const prefixInfo = await this.computePrefixInfo(params, fullTokens, mlxTools);
         if (prefixInfo.offsets.length > 0) {
           prefixOffsets = prefixInfo.offsets;
@@ -689,16 +736,23 @@ export class MlxCacheController implements PromptCacheController {
         const returnedTokenCount = typeof prefillResult?.token_count === 'number'
           ? prefillResult.token_count
           : undefined;
-        const tokenCount = returnedTokenCount ?? this.readMetaTokenCount(cachePath);
+        if (
+          this.modelKind === 'vlm'
+          && typeof prefillResult?.cache_path === 'string'
+          && prefillResult.cache_path.length > 0
+        ) {
+          effectiveCachePath = prefillResult.cache_path;
+        }
+        const tokenCount = returnedTokenCount ?? this.readMetaTokenCount(effectiveCachePath);
         if (tokenCount > 0) {
-          this.cacheTokenCounts.set(cachePath, tokenCount);
+          this.cacheTokenCounts.set(effectiveCachePath, tokenCount);
         }
       } catch (e) {
         logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
         return MlxCacheController.EMPTY_HANDLE;
       }
       const prefillMs = performance.now() - prefillStart;
-      const newTokens = this.readCacheTokenCount(cachePath);
+      const newTokens = this.readCacheTokenCount(effectiveCachePath);
       this.stats.prefillTokens += newTokens;
       if (base) {
         this.stats.incremental++;
@@ -711,16 +765,14 @@ export class MlxCacheController implements PromptCacheController {
         base ? '(incremental)' : '(fresh)');
 
       if (this.closed) {
-        if (!this.memoryOnly) {
-          await unlink(cachePath).catch(() => {});
-          await unlink(cachePath + '.meta.json').catch(() => {});
-        }
+        await unlink(effectiveCachePath).catch(() => {});
+        await unlink(effectiveCachePath + '.meta.json').catch(() => {});
         return MlxCacheController.EMPTY_HANDLE;
       }
     }
 
     const handle: CacheHandle = {
-      ref: cachePath,
+      ref: effectiveCachePath,
       includes: {
         instructions: (params.instructions?.length ?? 0) > 0,
         dataElementCount: params.data?.length ?? 0,
@@ -731,9 +783,7 @@ export class MlxCacheController implements PromptCacheController {
     this.cacheByHash.set(cacheKey, handle);
     this.updateLastCache(handle, elementHashes, params);
 
-    if (!this.memoryOnly) {
-      this.addToIndex(params, cacheKey);
-    }
+    this.addToIndex(params, cacheKey, effectiveCachePath);
     if (supersededRef) {
       this.release(supersededRef);
     }
@@ -745,7 +795,7 @@ export class MlxCacheController implements PromptCacheController {
   release(ref: string): void {
     logger.debug('release', ref);
     const entry = this.cacheIndex.entries.find(
-      e => this.generateCachePath(e.key) === ref,
+      e => this.getEntryCachePath(e) === ref,
     );
     if (entry) {
       entry.hint = 'release';
@@ -775,15 +825,12 @@ export class MlxCacheController implements PromptCacheController {
     this.cacheByHash.clear();
     this.cacheTokenCounts.clear();
     this.clearLastCache();
-    if (this.memoryOnly) {
-      // VLM cache objects live in the Python backend process and disappear
-      // with it; there is no filesystem resource to remove here.
-    } else if (this.managedDir && this.cacheDir) {
+    if (this.managedDir && this.cacheDir) {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     } else {
       const released = this.cacheIndex.entries.filter(e => e.hint === 'release');
       await Promise.allSettled(released.flatMap(entry => {
-        const path = this.generateCachePath(entry.key);
+        const path = this.getEntryCachePath(entry);
         return [unlink(path), unlink(path + '.meta.json')];
       }));
       this.cacheIndex.entries = this.cacheIndex.entries.filter(e => e.hint !== 'release');

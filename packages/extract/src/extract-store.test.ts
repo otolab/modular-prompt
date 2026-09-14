@@ -9,7 +9,7 @@ import {
   appendToExtractStore,
   mergeMaterials,
 } from './extract-store.js';
-import { writeManifest } from './cli/manifest.js';
+import { readManifest, writeManifest } from './cli/manifest.js';
 
 const { createRuntimeMock } = vi.hoisted(() => ({
   createRuntimeMock: vi.fn(),
@@ -54,6 +54,7 @@ describe('appendToExtractStore', () => {
       driver: new TestDriver({ responses: ['prepared'] }),
       cacheController: tracking.controller,
       model: 'test-model',
+      backend: 'auto',
       close: runtimeClose,
     }));
   });
@@ -89,6 +90,49 @@ describe('appendToExtractStore', () => {
     expect(runtimeClose).toHaveBeenCalledOnce();
     expect(await readFile(join(storeDir, 'manifest.json'), 'utf-8'))
       .toContain('2026-09-07T00:00:00.000Z');
+  });
+
+  it('passes the persisted backend through append and keeps it in the manifest', async () => {
+    const storeDir = join(tempDir, 'vlm-store');
+    await mkdir(storeDir, { recursive: true });
+    await writeManifest(storeDir, {
+      version: 1,
+      storename: 'vlm-store',
+      model: 'resolved-vlm-model',
+      backend: 'vlm',
+      materials: [{ id: '/docs/one.txt', title: 'one.txt', content: 'one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const runtimeArgs: Array<{ backend?: string; cacheDir?: string; model?: string }> = [];
+    createRuntimeMock.mockImplementationOnce(async (args: {
+      backend?: string;
+      cacheDir?: string;
+      model?: string;
+    }) => {
+      runtimeArgs.push(args);
+      return {
+        driver: new TestDriver({ responses: ['prepared'] }),
+        cacheController: tracking.controller,
+        model: 'resolved-vlm-model',
+        backend: 'vlm',
+        close: runtimeClose,
+      };
+    });
+
+    const result = await appendToExtractStore({
+      storeDir,
+      storename: 'vlm-store',
+      incomingMaterials: [{ id: '/docs/two.txt', title: 'two.txt', content: 'two' }],
+    });
+
+    expect(runtimeArgs).toEqual([expect.objectContaining({
+      model: 'resolved-vlm-model',
+      backend: 'vlm',
+      cacheDir: expect.stringContaining('.vlm-store.add-'),
+    })]);
+    expect(result.backend).toBe('vlm');
+    await expect(readManifest(storeDir)).resolves.toMatchObject({ backend: 'vlm' });
   });
 
   it('rejects an empty required cache handle and preserves the existing store', async () => {

@@ -160,6 +160,7 @@ export function entryToModelSpec(entry: ModelSpecEntry): ModelSpec {
   return {
     model: entry.model,
     provider: entry.provider as DriverProvider,
+    backend: entry.backend,
     capabilities: entry.capabilities ?? [],
     maxInputTokens: entry.maxInputTokens,
     maxOutputTokens: entry.maxOutputTokens,

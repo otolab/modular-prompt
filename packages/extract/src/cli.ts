@@ -50,7 +50,9 @@ Note:
   (MODULAR_PROMPT_HOME can override its location). No model is bundled.
   If no model is configured, specify -m <model-id-or-alias> or define models.default
   in the user models.yaml.
-  MLX backend is fixed to mlx-lm (backend: lm) for prompt cache support.
+  MLX backend follows models.yaml (backend: auto by default; lm/vlm may be
+  selected explicitly). Text-only LM/VLM prompt caches are persisted in the
+  store; image/vision feature caching is not supported.
 `);
 }
 

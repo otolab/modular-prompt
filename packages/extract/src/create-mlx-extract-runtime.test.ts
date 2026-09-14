@@ -63,8 +63,20 @@ describe('createMlxExtractRuntime', () => {
     vi.clearAllMocks();
   });
 
-  it('resolves the model through AIService and forces mlx-lm backend', async () => {
+  it('preserves a configured VLM backend for extract', async () => {
     const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    aiServiceFromMergedConfig.mockReturnValueOnce({
+      modelsConfig: {
+        models: {
+          default: {
+            provider: 'mlx',
+            model: 'resolved/vlm-model',
+            driverOptions: { backend: 'vlm' },
+          },
+        },
+      },
+      createDriver: aiServiceCreateDriver,
+    });
     const runtime = await createMlxExtractRuntime({
       model: 'default',
       cacheDir: '/tmp/extract-runtime-test',
@@ -73,19 +85,54 @@ describe('createMlxExtractRuntime', () => {
     expect(aiServiceFromMergedConfig).toHaveBeenCalled();
     expect(aiServiceCreateDriver).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'resolved/model',
-        backend: 'lm',
+        model: 'resolved/vlm-model',
+        backend: 'vlm',
         driverOptions: expect.objectContaining({
-          backend: 'lm',
+          backend: 'vlm',
           cacheController: expect.anything(),
         }),
       }),
     );
-    expect(runtime.model).toBe('resolved/model');
+    expect(runtime.model).toBe('resolved/vlm-model');
+    expect(runtime.backend).toBe('vlm');
     expect(mockDriver.getCapabilities).toHaveBeenCalledOnce();
 
     await runtime.close();
     expect(cacheControllerClose).toHaveBeenCalledOnce();
+  });
+
+  it('defaults extract MLX models to backend auto', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    const runtime = await createMlxExtractRuntime({ model: 'default' });
+
+    expect(aiServiceCreateDriver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: 'auto',
+        driverOptions: expect.objectContaining({
+          backend: 'auto',
+          cacheController: expect.anything(),
+        }),
+      }),
+    );
+    expect(runtime.backend).toBe('auto');
+
+    await runtime.close();
+  });
+
+  it('lets a persisted backend override a changed model configuration', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    const runtime = await createMlxExtractRuntime({ model: 'raw/vlm-model', backend: 'vlm' });
+
+    expect(aiServiceCreateDriver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'raw/vlm-model',
+        backend: 'vlm',
+        driverOptions: expect.objectContaining({ backend: 'vlm' }),
+      }),
+    );
+    expect(runtime.backend).toBe('vlm');
+
+    await runtime.close();
   });
 
   it('fails before driver creation when no model is configured', async () => {

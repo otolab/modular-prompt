@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 import os
+from pathlib import Path
 import sys
 from typing import Any, Iterator
 
@@ -10,6 +13,100 @@ from mlx_vlm import stream_generate as mlx_vlm_stream_generate
 
 from backends.base import ModelBackend
 from utils.vlm_utils import load_and_resize_images
+
+
+VLM_EXACT_CACHE_LAYOUT = "exact_cache_v1"
+
+
+def _vlm_cache_hash(cache_path: str) -> int:
+    """Derive a stable APC exact-cache key from the logical cache path.
+
+    The TypeScript controller owns the logical path.  The key is persisted in
+    the sidecar because mlx-vlm's DiskBlockStore names the actual safetensors
+    file from this value and the returned file path is different from the
+    logical path.
+    """
+    digest = hashlib.sha256(cache_path.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "little", signed=True)
+
+
+def _new_vlm_disk_store(cache_path: str, *, logical_path: bool) -> Any:
+    """Open the mlx-vlm 0.7.0 DiskBlockStore for a VLM cache.
+
+    A logical cache path is used as the store namespace.  Once the APC writer
+    has produced ``exact_*.safetensors``, the returned path is inside that
+    namespace and can be used to reconstruct the same store after restart.
+    """
+    from mlx_vlm.apc import DiskBlockStore
+
+    path = Path(cache_path)
+    if logical_path:
+        root = path.parent
+        namespace = path.name
+    else:
+        namespace_dir = path.parent
+        root = namespace_dir.parent
+        namespace = namespace_dir.name
+    return DiskBlockStore(root, namespace=namespace, num_workers=1)
+
+
+def _vlm_exact_cache_path(store: Any, cache_hash: int) -> Path:
+    """Return the exact snapshot path used by DiskBlockStore 0.7.0.
+
+    ``_exact_id_for`` is intentionally private in mlx-vlm.  Its layout is
+    stable in the pinned 0.7.0 API: SHA-256 of the unsigned little-endian
+    64-bit cache hash, truncated to 32 hex characters.
+    """
+    unsigned_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
+    exact_id = hashlib.sha256(unsigned_hash).hexdigest()[:32]
+    return store.dir / f"{store.EXACT_PREFIX}{exact_id}{store.SUFFIX}"
+
+
+def _vlm_exact_cache_filename(cache_hash: int) -> str:
+    """Return the pinned 0.7.0 exact snapshot filename for ``cache_hash``."""
+    unsigned_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
+    exact_id = hashlib.sha256(unsigned_hash).hexdigest()[:32]
+    return f"exact_{exact_id}.safetensors"
+
+
+def _read_vlm_cache_meta(cache_path: str) -> dict[str, Any] | None:
+    try:
+        with open(cache_path + ".meta.json") as f:
+            meta = json.load(f)
+        if not isinstance(meta, dict) or meta.get("layout") != VLM_EXACT_CACHE_LAYOUT:
+            return None
+        if meta.get("cache_hash") is None or meta.get("token_count") is None:
+            return None
+        cache_hash = int(meta["cache_hash"])
+        if Path(cache_path).name != _vlm_exact_cache_filename(cache_hash):
+            return None
+        return {
+            **meta,
+            "cache_hash": cache_hash,
+            "token_count": int(meta["token_count"]),
+        }
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, TypeError):
+        return None
+
+
+def _write_vlm_cache_meta(
+    cache_path: str,
+    token_count: int,
+    cache_hash: int,
+    prefix_offsets: list[int] | None = None,
+    prefix_hashes: list[str] | None = None,
+) -> None:
+    meta: dict[str, Any] = {
+        "backend": "mlx-vlm",
+        "layout": VLM_EXACT_CACHE_LAYOUT,
+        "cache_hash": int(cache_hash),
+        "token_count": int(token_count),
+    }
+    if prefix_offsets is not None and prefix_hashes is not None:
+        meta["prefix_offsets"] = prefix_offsets
+        meta["prefix_hashes"] = prefix_hashes
+    with open(cache_path + ".meta.json", "w") as f:
+        json.dump(meta, f)
 
 
 class MlxVlmBackend(ModelBackend):
@@ -21,9 +118,9 @@ class MlxVlmBackend(ModelBackend):
         self.drafter: Any | None = None
         self.drafter_kind: str | None = None
         self.draft_block_size: int | None = None
-        # Keep refs and cache objects in this backend process for Phase 1.5.
-        # mlx-vlm's APC/disk cache is intentionally not used here: LM/VLM
-        # cache formats remain backend-specific and Phase 2 is out of scope.
+        # ``mlx-vlm-memory://`` remains a compatibility fallback for callers
+        # that provide an explicit Phase 1 ref.  The controller's normal path
+        # is a DiskBlockStore-backed exact_cache_v1 snapshot.
         self._prompt_caches: dict[str, list[Any]] = {}
 
     def load(self, model_name: str) -> None:
@@ -122,7 +219,7 @@ class MlxVlmBackend(ModelBackend):
             if self.draft_block_size is not None:
                 draft_kwargs["draft_block_size"] = self.draft_block_size
 
-        # Image/vision cache is intentionally out of Phase 1.  A text-only
+        # Image/vision cache is intentionally out of Phase 2.  A text-only
         # prompt cache is safe to pass through the VLM API when no image is
         # present; images must use a cold VLM request.
         if prompt_cache is not None and processed_images is None:
@@ -178,25 +275,21 @@ class MlxVlmBackend(ModelBackend):
     ) -> dict:
         """Prefill a text-only VLM cache in the current backend process.
 
-        mlx-vlm owns a cache module separate from mlx-lm.  Its 0.7.0 API can
-        construct and consume prompt caches, but this backend does not use the
-        APC/disk helpers, so ``cache_path`` is an opaque in-process key for
-        this phase.
+        mlx-vlm owns a cache module separate from mlx-lm.  Its 0.7.0
+        ``DiskBlockStore.save_exact_cache`` API stores the whole prompt cache
+        as an ``exact_cache_v1`` snapshot.  This is deliberately not the
+        ``mlx-lm`` ``.safetensors.zip`` format.
         """
         if self.model is None or self.processor is None:
             raise RuntimeError("Model is not loaded")
         if not isinstance(prompt, str) or not prompt:
             raise ValueError("VLM cache_prefill requires a non-empty text prompt")
 
-        if (
-            base_cache_path is not None
-            or trim_to_tokens is not None
-            or prefix_offsets is not None
-            or prefix_hashes is not None
-        ):
+        is_memory_ref = cache_path.startswith("mlx-vlm-memory://")
+        if base_cache_path is not None or trim_to_tokens is not None:
             sys.stderr.write(
-                "VLM cache_prefill ignores base/trim/prefix arguments; "
-                "VLM Phase 1 caches are backend-local and fresh-prefilled.\n"
+                "VLM cache_prefill ignores base/trim arguments; "
+                "VLM incremental prefill is not implemented in Phase 2.\n"
             )
 
         from mlx_vlm.models.cache import make_prompt_cache
@@ -206,7 +299,8 @@ class MlxVlmBackend(ModelBackend):
             raise RuntimeError("VLM model does not expose language_model")
 
         prompt_cache = make_prompt_cache(language_model)
-        token_count = len(self.tokenize_prompt(prompt))
+        full_tokens = self.tokenize_prompt(prompt)
+        token_count = len(full_tokens)
         for _ in mlx_vlm_stream_generate(
             self.model,
             self.processor,
@@ -219,26 +313,95 @@ class MlxVlmBackend(ModelBackend):
         ):
             break
 
-        self._prompt_caches[cache_path] = prompt_cache
+        if is_memory_ref:
+            self._prompt_caches[cache_path] = prompt_cache
+            if os.getenv("MLX_DEBUG"):
+                sys.stderr.write(
+                    f"VLM cache created in memory: {cache_path} ({token_count} tokens)\n"
+                )
+            return {"cache_path": cache_path, "token_count": token_count}
+
+        cache_hash = _vlm_cache_hash(cache_path)
+        store = None
+        actual_path: Path
+        try:
+            store = _new_vlm_disk_store(cache_path, logical_path=True)
+            actual_path = _vlm_exact_cache_path(store, cache_hash)
+            # DiskBlockStore writes asynchronously.  Clone and evaluate on the
+            # producer thread before handing the snapshot to its writer, as
+            # required by mlx-vlm's APC implementation.
+            detached_cache = self._clone_prompt_cache(prompt_cache)
+            store.save_exact_cache(cache_hash, full_tokens, 0, detached_cache)
+            store.close()
+            store = None
+            if not actual_path.is_file():
+                raise FileNotFoundError(
+                    f"mlx-vlm exact cache writer did not create {actual_path}"
+                )
+            _write_vlm_cache_meta(
+                str(actual_path),
+                token_count,
+                cache_hash,
+                prefix_offsets,
+                prefix_hashes,
+            )
+        finally:
+            if store is not None:
+                store.close()
+
         if os.getenv("MLX_DEBUG"):
             sys.stderr.write(
-                f"VLM cache created in memory: {cache_path} ({token_count} tokens)\n"
+                f"VLM cache created on disk: {actual_path} ({token_count} tokens)\n"
             )
-        return {
-            "cache_path": cache_path,
-            "token_count": token_count,
-        }
+        return {"cache_path": str(actual_path), "token_count": token_count}
 
     def load_cache_from_file(self, cache_path: str) -> list[Any] | None:
-        prompt_cache = self._prompt_caches.get(cache_path)
-        if prompt_cache is None:
-            sys.stderr.write(f"VLM cache ref not found in this process: {cache_path}\n")
+        if cache_path.startswith("mlx-vlm-memory://"):
+            prompt_cache = self._prompt_caches.get(cache_path)
+            if prompt_cache is None:
+                sys.stderr.write(
+                    f"VLM cache ref not found in this process: {cache_path}\n"
+                )
+                return None
+            try:
+                return self._clone_prompt_cache(prompt_cache)
+            except Exception as e:
+                sys.stderr.write(f"Failed to clone VLM cache: {e}\n")
+                return None
+
+        meta = _read_vlm_cache_meta(cache_path)
+        if meta is None:
+            sys.stderr.write(f"VLM cache metadata not found or invalid: {cache_path}\n")
             return None
+
+        store = None
         try:
-            return self._clone_prompt_cache(prompt_cache)
+            store = _new_vlm_disk_store(cache_path, logical_path=False)
+            expected_path = _vlm_exact_cache_path(store, meta["cache_hash"])
+            requested_path = Path(cache_path).resolve()
+            if requested_path != expected_path.resolve():
+                sys.stderr.write(
+                    f"VLM exact cache hash does not match snapshot path: {cache_path}\n"
+                )
+                return None
+            if not expected_path.is_file():
+                sys.stderr.write(f"VLM exact cache snapshot missing: {cache_path}\n")
+                return None
+            loaded = store.load_exact_cache(meta["cache_hash"])
+            if loaded is None:
+                sys.stderr.write(f"VLM exact cache not found: {cache_path}\n")
+                return None
+            token_ids, extra_hash, prompt_cache = loaded
+            if extra_hash != 0 or len(token_ids) != meta["token_count"]:
+                sys.stderr.write(f"VLM exact cache metadata mismatch: {cache_path}\n")
+                return None
+            return prompt_cache
         except Exception as e:
-            sys.stderr.write(f"Failed to clone VLM cache: {e}\n")
+            sys.stderr.write(f"Failed to load VLM cache: {e}\n")
             return None
+        finally:
+            if store is not None:
+                store.close()
 
     def supports_vision(self) -> bool:
         return True
