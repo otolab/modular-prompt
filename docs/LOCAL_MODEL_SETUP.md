@@ -35,7 +35,7 @@ Apple Silicon Mac専用の高速ローカルLLM実行環境。
 
 - **ハードウェア**: Apple Silicon Mac (M1/M2/M3/M4)
 - **OS**: macOS
-- **Python**: 3.11以上
+- **Python**: 3.13（`modular-prompt-runtime setup mlx` が venv を作成。手動構成では 3.11 以上でも可）
 - **uv**: Pythonパッケージマネージャー（自動インストールされます）
 
 ### 初回セットアップ

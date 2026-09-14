@@ -12,6 +12,6 @@
 - モデル固有の最適化の発見
 
 **参照**:
-- [実験ディレクトリ](../../../experiments/agentic-workflow-model-comparison/)
+- [実験ディレクトリ](../../experiments/agentic-workflow-model-comparison/)
 - テストケース: `test-cases/meal-planning.json`
 - 実行スクリプト: `packages/process/scripts/test-agentic-workflow.ts`

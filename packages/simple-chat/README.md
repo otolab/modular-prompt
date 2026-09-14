@@ -40,14 +40,16 @@ modular-prompt-runtime setup mlx
 ### 状態確認
 
 ```bash
-# simple-chat CLI
+# simple-chat CLI（MLX ランタイム + ~/.modular-prompt/models.yaml の状態）
 simple-chat --check
 
 # driver の runtime CLI
 modular-prompt-runtime setup --status
 ```
 
-詳細は [@modular-prompt/driver README](../driver/README.md) および [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
+`--check` は `MODULAR_PROMPT_HOME`（既定 `~/.modular-prompt`）、MLX venv の有無、`models.yaml` のパス・alias 一覧、マージ後の effective default を表示します。
+
+詳細は [@modular-prompt/driver README](https://github.com/otolab/modular-prompt/blob/main/packages/driver/README.md) および [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
 ## 使用方法
 
@@ -128,9 +130,24 @@ simple-chat は **model 先行**でモデルを選びます。provider / MLX bac
 
 ### models.yaml との統合
 
-マージ優先（下ほど高）: **同梱 `BUNDLED_MODELS_CONFIG`** → **`~/.modular-prompt/models.yaml`**（`MODULAR_PROMPT_HOME` で変更可）→ **profile `modelsConfig` overlay**
+マシン共通のモデル定義は **`~/.modular-prompt/models.yaml`**（単一ファイル。`models/` ディレクトリは非対応）に置きます。`MODULAR_PROMPT_HOME` でホームディレクトリを変更できます。
+
+マージ優先（下ほど高）: **同梱 `BUNDLED_MODELS_CONFIG`** → **`~/.modular-prompt/models.yaml`** → **profile `modelsConfig` overlay**
 
 デフォルトの同梱 model は `LiquidAI/LFM2.5-1.2B-JP-MLX-4bit`（`models.default` alias）です。
+
+```yaml
+# ~/.modular-prompt/models.yaml の例
+models:
+  default:
+    provider: mlx
+    model: mlx-community/your-preferred-model
+  local-chat:
+    provider: mlx
+    model: mlx-community/your-preferred-model
+```
+
+`workflow.models.default.ref: local-chat` で alias を参照できます。**CLI `-m` / `profile.model` が最優先**で、上記を上書きします。
 
 simple-chat は **デフォルトで `merge` モード**です。マシン共通の alias 定義（`local-chat` 等）を user yaml で共有しつつ、プロファイル overlay で上書きできます。
 
@@ -140,7 +157,7 @@ simple-chat は **デフォルトで `merge` モード**です。マシン共通
 > **#341 との方針**  
 > Issue #341 では user yaml の無視（`override` 固定）も検討されましたが、simple-chat では **マシン共通 alias の再利用**を優先し `merge` をデフォルトにしています。user yaml を使わない場合は profile で `modelsConfig.mode: override` を指定してください。
 
-ローカル試行や統合テスト専用のモデルは `~/.modular-prompt/models.testing.yaml` に置けます。Vitest / `NODE_ENV=test` では自動マージされ、CLI では `MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"` のように profile を明示します。セットアップ手順は [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
+ローカル試行や統合テスト専用のモデルは `~/.modular-prompt/models.testing.yaml` に置けます。Vitest / `NODE_ENV=test` では自動マージされ、CLI では `MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"` のように profile を明示します。セットアップ手順は [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
 ### 内部構成（リファレンス実装）
 
@@ -312,4 +329,4 @@ options:
 3. **CLI override の分離**: `ModelOverrides` で profile を書き換えず model / provider / backend を上書き
 4. **型安全なコンテキスト**: `ChatContext` による型定義と `compile` によるプロンプト生成
 
-詳細は[プロンプトモジュール仕様書](../../docs/PROMPT_MODULE_SPEC.md)の実装例セクションを参照してください。
+詳細は[プロンプトモジュール仕様書](https://github.com/otolab/modular-prompt/blob/main/docs/PROMPT_MODULE_SPEC.md)の実装例セクションを参照してください。

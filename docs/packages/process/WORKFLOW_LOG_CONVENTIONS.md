@@ -1,7 +1,7 @@
 # ワークフローログ規約
 
 ワークフロー実装者向けの Logger 使用規約。
-Logger の仕様詳細については [UTILITIES.md](../../../docs/UTILITIES.md) を参照してください。
+Logger の仕様詳細については [UTILITIES.md](./UTILITIES.md) を参照してください。
 
 ## 概要
 
@@ -203,5 +203,5 @@ export async function agenticProcess(
 
 ## 関連ドキュメント
 
-- [UTILITIES.md](../../../docs/UTILITIES.md) - Logger の詳細仕様
+- [UTILITIES.md](./UTILITIES.md) - Logger の詳細仕様
 - [agentic-workflow/DESIGN.md](../src/workflows/agentic-workflow/DESIGN.md) - Agentic Workflow v2 の設計文書（階層化されたログの実例）
