@@ -9,7 +9,8 @@
     "simple-chat": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs"
   ],
   "scripts": {
     "build": "tsc -b --force",
@@ -20,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "start": "node dist/cli.js",
-    "prepack": "pnpm run clean && pnpm build"
+    "prepack": "pnpm run clean && pnpm build && pnpm run copy-docs",
+    "copy-docs": "node ../../scripts/copy-package-docs.mjs simple-chat"
   },
   "dependencies": {
     "@modular-prompt/core": "workspace:*",

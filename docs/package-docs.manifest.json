@@ -1,0 +1,33 @@
+{
+  "$comment": "npm publish 時に packages/<name>/docs/ にコピーするドキュメント定義。paths は docs/ ルートからの相対パス。",
+  "version": 1,
+  "packages": {
+    "simple-chat": {
+      "include": [
+        "LOCAL_MODEL_SETUP.md",
+        "DRIVER_API.md"
+      ]
+    },
+    "extract": {
+      "include": [
+        "LOCAL_MODEL_SETUP.md",
+        "CACHE_DESIGN.md",
+        "PROMPT_MODULE_SPEC.md",
+        "packages/extract/API.md"
+      ]
+    },
+    "driver": {
+      "include": [
+        "DRIVER_API.md",
+        "LOCAL_MODEL_SETUP.md",
+        "packages/driver/mlx-api-selection.md"
+      ]
+    },
+    "process": {
+      "include": [
+        "UTILITIES.md",
+        "packages/process/WORKFLOW_LOG_CONVENTIONS.md"
+      ]
+    }
+  }
+}

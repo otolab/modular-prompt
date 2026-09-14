@@ -52,7 +52,7 @@ if (result.logEntries) {
 }
 ```
 
-詳細は [Driver APIリファレンス](../../docs/DRIVER_API.md) を参照してください。
+詳細は [Driver APIリファレンス](./docs/DRIVER_API.md) を参照してください。
 
 ## 利用可能なドライバー
 
@@ -158,7 +158,7 @@ models:
 MODULAR_PROMPT_MODELS_PROFILE=testing modular-prompt-extract create meeting -m default docs/notes.txt
 ```
 
-ライブラリからは `resolveModelsConfig({ profile: 'testing' })` または `AIService.fromModelsConfig({ profile: 'testing' })` を使用できます。統合テストはこの設定から MLX/API ドライバーを導出し、設定が無い場合は従来の `test-drivers.yaml` にフォールバックします。サンプルは [`models.testing.yaml.example`](./test/integration/models.testing.yaml.example) を参照してください。
+ライブラリからは `resolveModelsConfig({ profile: 'testing' })` または `AIService.fromModelsConfig({ profile: 'testing' })` を使用できます。統合テストはこの設定から MLX/API ドライバーを導出し、設定が無い場合は従来の `test-drivers.yaml` にフォールバックします。サンプルは [models.testing.yaml.example](https://github.com/otolab/modular-prompt/blob/main/packages/driver/test/integration/models.testing.yaml.example) または同梱 [LOCAL_MODEL_SETUP.md](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
 
 ```typescript
@@ -186,7 +186,7 @@ const final = await result;
 - キャンセル前の部分応答は `result.content` に残ります
 - 他ドライバーは `signal` を無視します（未実装）
 
-詳細は [Driver APIリファレンス](../../docs/DRIVER_API.md#推論キャンセルabortsignal) を参照。
+詳細は [Driver APIリファレンス](./docs/DRIVER_API.md#推論キャンセルabortsignal) を参照。
 
 ## トークン使用量（usage）
 
@@ -349,7 +349,7 @@ uv --project . run python __main__.py \
 
 前提条件: Python 3.10以上、CUDA対応GPU、Linux。
 
-詳細は [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
+詳細は [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
 ## Skills（Claude Code向け）
 

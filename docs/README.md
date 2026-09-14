@@ -36,13 +36,20 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 - **[MLX - Qwen系モデル](./models/MLX_QWEN.md)** - Qwen系モデルのtool call時のcontent挙動
 - **[MLX - Tool Call Parserアーキテクチャ](./models/MLX_TOOL_CALL_PARSER.md)** - MLXドライバーのツール呼び出しパーサーの設計と実装
 
-## 抽出パッケージ
+## パッケージ別ドキュメント
 
-### 文書・対話ログからの情報抽出
+npm 公開パッケージ向けの詳細仕様・補足資料。正本は `docs/packages/` に集約し、publish 時に各 `packages/*/docs/` にコピーする（[ドキュメント戦略](./DOCUMENT_STRATEGY.md) の「npm 同梱ドキュメント」）。
 
-- **[Extract パッケージ](../packages/extract/README.md)** - `@modular-prompt/extract` セッション API
+### Simple Chat（`@modular-prompt/simple-chat`）
+
+- **[パッケージ README](../packages/simple-chat/README.md)** - CLI・プロファイル・MLX 初回セットアップ
+- 同梱予定の共有ドキュメント: [LOCAL_MODEL_SETUP.md](./LOCAL_MODEL_SETUP.md), [DRIVER_API.md](./DRIVER_API.md)
+
+### Extract（`@modular-prompt/extract`）
+
+- **[パッケージ README](../packages/extract/README.md)** - セッション API の利用ガイド
   - KV キャッシュを活用した同一 corpus への繰り返し抽出
-  - [API 仕様](../packages/extract/API.md)
+  - [API 仕様](./packages/extract/API.md)
   - [サンプル](../packages/extract/examples/)
 
 ## プロセスモジュール
@@ -53,7 +60,7 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
   - 標準セクションとContextフィールドの使い方
   - 実装フロー（Context定義、モジュール定義、ワークフロー関数）
   - 典型的なフィールド構造と責任分担
-- **[ワークフローログ規約](../packages/process/docs/WORKFLOW_LOG_CONVENTIONS.md)** - ワークフロー実装者向けLogger使用規約
+- **[ワークフローログ規約](./packages/process/WORKFLOW_LOG_CONVENTIONS.md)** - ワークフロー実装者向けLogger使用規約
   - context 命名規則
   - メッセージ prefix 規則
   - ログレベルの使い分け
@@ -92,6 +99,7 @@ Moduler Promptのドキュメント集へようこそ。このディレクトリ
 ### ドキュメント管理
 
 - **[ドキュメント戦略](./DOCUMENT_STRATEGY.md)** - ドキュメント分類・配置ルール・ライフサイクル管理
+- **[package-docs.manifest.json](./package-docs.manifest.json)** - npm 同梱ドキュメントのコピー定義
 
 ---
 
