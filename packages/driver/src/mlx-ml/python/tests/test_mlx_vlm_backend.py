@@ -1,4 +1,5 @@
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -90,10 +91,10 @@ def test_stream_generate_does_not_pass_cache_with_images(monkeypatch):
     assert calls["kwargs"]["image"] == ["image.png"]
 
 
-def test_cache_prefill_stores_backend_local_cache_and_loads_a_copy(monkeypatch):
+def test_cache_prefill_clone_load_and_generate_with_token_ids(monkeypatch):
     backend = _backend()
     created = []
-    calls = {}
+    calls = []
 
     def fake_make_prompt_cache(language_model):
         assert language_model is backend.model.language_model
@@ -102,8 +103,7 @@ def test_cache_prefill_stores_backend_local_cache_and_loads_a_copy(monkeypatch):
         return cache
 
     def fake_stream_generate(model, processor, prompt, **kwargs):
-        calls["prompt"] = prompt
-        calls["kwargs"] = kwargs
+        calls.append((prompt, kwargs))
         kwargs["prompt_cache"][0].offset = len(prompt)
         yield SimpleNamespace(text="prefill")
 
@@ -115,15 +115,35 @@ def test_cache_prefill_stores_backend_local_cache_and_loads_a_copy(monkeypatch):
     result = backend.cache_prefill("memory-ref", "prompt")
 
     assert result == {"cache_path": "memory-ref", "token_count": len("prompt")}
-    assert calls["prompt"] == "prompt"
-    assert calls["kwargs"]["image"] is None
-    assert calls["kwargs"]["prompt_cache"] is created[0]
-    assert calls["kwargs"]["max_tokens"] == 0
+    assert calls[0][0] == "prompt"
+    assert calls[0][1]["image"] is None
+    assert calls[0][1]["prompt_cache"] is created[0]
+    assert calls[0][1]["max_tokens"] == 0
 
     loaded = backend.load_cache_from_file("memory-ref")
     assert loaded is not created[0]
     assert loaded[0] is not created[0][0]
     assert loaded[0].offset == len("prompt")
+
+    # The list prompt is the uncached suffix.  Stub the MLX conversion so the
+    # cache-hit path tests only the VLM dispatch arguments, not Metal runtime.
+    fake_mlx_core = ModuleType("mlx.core")
+    fake_mlx_core.array = lambda value: value
+    monkeypatch.setitem(sys.modules, "mlx.core", fake_mlx_core)
+
+    generated = list(
+        backend.stream_generate(
+            [101, 102],
+            {"max_tokens": 1},
+            prompt_cache=loaded,
+        )
+    )
+
+    assert generated[0].text == "prefill"
+    assert calls[1][0] == [101, 102]
+    assert calls[1][1]["input_ids"] == [[101, 102]]
+    assert calls[1][1]["prompt_cache"] is loaded
+    assert created[0][0].offset == len("prompt")
 
 
 def test_cache_prefill_rejects_empty_prompt():
