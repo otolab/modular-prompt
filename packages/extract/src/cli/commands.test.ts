@@ -106,6 +106,88 @@ describe('cli store commands', () => {
     });
   });
 
+  it('reuses the manifest backend across create close, add staging, and extract restart', async () => {
+    const firstFile = join(tempDir, 'first.txt');
+    const secondFile = join(tempDir, 'second.txt');
+    await writeFile(firstFile, 'first VLM corpus', 'utf-8');
+    await writeFile(secondFile, 'second VLM corpus', 'utf-8');
+
+    const createClose = vi.fn().mockResolvedValue(undefined);
+    createRuntimeMock.mockImplementationOnce(async () => ({
+      driver: {},
+      cacheController: {},
+      model: 'resolved-vlm-model',
+      backend: 'vlm',
+      close: createClose,
+    }));
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'restartable-vlm',
+      model: 'vlm-alias',
+      files: [firstFile],
+    });
+    const storeDir = join(tempDir, 'restartable-vlm');
+    await expect(readManifest(storeDir)).resolves.toMatchObject({
+      model: 'resolved-vlm-model',
+      backend: 'vlm',
+    });
+    expect(createClose).toHaveBeenCalledOnce();
+
+    createRuntimeMock.mockReset();
+    const addClose = vi.fn().mockResolvedValue(undefined);
+    let addRuntimeArgs: unknown;
+    createRuntimeMock.mockImplementationOnce(async (args: unknown) => {
+      addRuntimeArgs = args;
+      return {
+        driver: {},
+        cacheController: {},
+        model: 'resolved-vlm-model',
+        backend: 'vlm',
+        close: addClose,
+      };
+    });
+
+    await runAddCommand({
+      cacheDir: tempDir,
+      storename: 'restartable-vlm',
+      files: [secondFile],
+    });
+    expect(addRuntimeArgs).toEqual(expect.objectContaining({
+      model: 'resolved-vlm-model',
+      backend: 'vlm',
+      cacheDir: expect.stringContaining('.restartable-vlm.add-'),
+    }));
+    expect(addClose).toHaveBeenCalledOnce();
+    await expect(readManifest(storeDir)).resolves.toMatchObject({ backend: 'vlm' });
+
+    createRuntimeMock.mockReset();
+    const extractClose = vi.fn().mockResolvedValue(undefined);
+    let extractRuntimeArgs: unknown;
+    createRuntimeMock.mockImplementationOnce(async (args: unknown) => {
+      extractRuntimeArgs = args;
+      return {
+        driver: {},
+        cacheController: {},
+        model: 'resolved-vlm-model',
+        backend: 'vlm',
+        close: extractClose,
+      };
+    });
+
+    await expect(runExtractCommand({
+      cacheDir: tempDir,
+      storename: 'restartable-vlm',
+      query: 'Classify the VLM corpus',
+    })).resolves.toBe('mock extraction');
+    expect(extractRuntimeArgs).toEqual({
+      model: 'resolved-vlm-model',
+      backend: 'vlm',
+      cacheDir: storeDir,
+    });
+    expect(extractClose).toHaveBeenCalledOnce();
+  });
+
   it('keeps multiple creates and extracts isolated by storename', async () => {
     const meetingFile = join(tempDir, 'meeting.txt');
     const contractFile = join(tempDir, 'contract.txt');
