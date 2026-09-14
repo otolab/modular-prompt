@@ -69,6 +69,32 @@ describe('MlxCacheController', () => {
   });
 
   describe('prepare', () => {
+    it('uses an in-memory ref and backend token count for VLM caches', async () => {
+      const vlmController = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+      vlmController.setModelKind('vlm');
+      await vlmController.bind(
+        mockProcess as unknown as import('./process/index.js').MlxProcess,
+        {},
+      );
+      mockProcess.cachePrefill.mockResolvedValueOnce({
+        cache_path: 'mlx-vlm-memory://ignored',
+        token_count: 123,
+      });
+
+      const handle = await vlmController.prepare({
+        model: 'test-model',
+        instructions: [{ type: 'text', content: 'Be helpful' }],
+      });
+
+      expect(handle.ref).toMatch(/^mlx-vlm-memory:\/\//);
+      expect(vlmController.readCacheTokenCount(handle.ref)).toBe(123);
+      expect(vlmController.getStats().cacheGrowthTokens).toBe(123);
+      expect(mockProcess.tokenize).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
+
+      await vlmController.close();
+    });
+
     it('should create cache with instructions', async () => {
       const handle = await controller.prepare({
         model: 'test-model',

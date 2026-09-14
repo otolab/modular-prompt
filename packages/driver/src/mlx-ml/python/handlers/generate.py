@@ -6,7 +6,6 @@ import re
 import sys
 
 from backends.base import ModelBackend
-from mlx_lm.models.cache import trim_prompt_cache
 from handlers.cancel import poll_cancel
 
 
@@ -29,6 +28,7 @@ def _stream_to_stdout(
     images: list | None = None,
     primer: str | None = None,
     prompt_cache: list | None = None,
+    cache_loaded: bool | None = None,
 ) -> None:
     if primer is not None:
         print(primer, end="", flush=True)
@@ -46,6 +46,8 @@ def _stream_to_stdout(
             meta["prompt_tokens"] = last_response.prompt_tokens
         if hasattr(last_response, "generation_tokens"):
             meta["generation_tokens"] = last_response.generation_tokens
+    if cache_loaded is not None:
+        meta["cache_loaded"] = cache_loaded
 
     if meta:
         print(f"\x1e__META__:{json.dumps(meta)}", end="\0", flush=True)
@@ -84,16 +86,21 @@ def handle_generate(
         else:
             sys.stderr.write(f"--- prompt\n{prompt}\n")
 
-    # VLM 経路では KV キャッシュを使わない（旧 chat ハンドラと同様）
+    # Images are intentionally excluded from Phase 1.  Text-only VLM caches
+    # are loaded through the backend-specific cache implementation.
     prompt_cache = None
     cache_tokens = 0
+    cache_loaded = None
     if cache_path and not images:
         prompt_cache = backend.load_cache_from_file(cache_path)
+        cache_loaded = prompt_cache is not None
+    elif cache_path:
+        cache_loaded = False
     if prompt_cache is not None:
         if cache_trim_tokens is not None:
             current_offset = backend.get_cache_offset(prompt_cache)
             if current_offset > cache_trim_tokens:
-                trim_prompt_cache(prompt_cache, current_offset - cache_trim_tokens)
+                backend.trim_cache(prompt_cache, current_offset - cache_trim_tokens)
                 sys.stderr.write(
                     f"KV cache trimmed: {current_offset} → {cache_trim_tokens} tokens\n"
                 )
@@ -101,9 +108,18 @@ def handle_generate(
             else:
                 cache_tokens = current_offset
         else:
-            meta_count = _read_cache_token_count(cache_path) if cache_path else None
+            meta_count = (
+                _read_cache_token_count(cache_path)
+                if cache_path and backend.model_kind != "vlm"
+                else None
+            )
             if meta_count is not None:
                 cache_tokens = meta_count
+            elif backend.model_kind == "vlm":
+                # mlx-vlm 0.6.17 has no mlx-lm-compatible cache archive.  Its
+                # backend keeps the cache in memory, so the cache object itself
+                # is the source of the token count.
+                cache_tokens = backend.get_cache_offset(prompt_cache)
             else:
                 sys.stderr.write(
                     f"WARNING: Cache file exists but no .meta.json found at {cache_path}. "
@@ -111,6 +127,7 @@ def handle_generate(
                 )
                 prompt_cache = None
                 cache_tokens = 0
+                cache_loaded = False
         if prompt_cache is not None:
             sys.stderr.write(
                 f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
@@ -122,11 +139,7 @@ def handle_generate(
 
     effective_prompt = prompt
     if prompt_cache is not None and cache_tokens > 0 and isinstance(prompt, str):
-        tokenizer = backend.get_tokenizer()
-        add_special = tokenizer.bos_token is None or not prompt.startswith(
-            tokenizer.bos_token
-        )
-        full_tokens = tokenizer.encode(prompt, add_special_tokens=add_special)
+        full_tokens = backend.tokenize_prompt(prompt)
 
         if cache_tokens < len(full_tokens):
             effective_prompt = full_tokens[cache_tokens:]
@@ -140,6 +153,7 @@ def handle_generate(
                 f"ignoring prefill state\n"
             )
             prompt_cache = None
+            cache_loaded = False
 
     _stream_to_stdout(
         backend,
@@ -148,4 +162,5 @@ def handle_generate(
         images=images,
         primer=primer,
         prompt_cache=prompt_cache,
+        cache_loaded=cache_loaded,
     )

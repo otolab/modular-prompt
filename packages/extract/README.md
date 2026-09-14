@@ -110,7 +110,7 @@ models:
 
 モデルが設定されていない構成では、`-m <model-id-or-alias>` を指定するか、user yaml に `models.default` を定義してください。
 
-**MLX バックエンドは mlx-lm（`backend: 'lm'`）に固定**している。`auto` で VLM が選ばれるとプロンプトキャッシュが無効になるため。
+**MLX バックエンドは mlx-lm（`backend: 'lm'`）に固定**している。extract の Phase 1 では、ディスク／増分キャッシュを使う LM 経路だけを対象にするため。
 
 ### ライブラリ API
 

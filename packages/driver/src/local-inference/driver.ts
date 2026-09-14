@@ -192,10 +192,17 @@ export class LocalInferenceDriver implements AIDriver {
     const trustRemoteCode = samplingOptions.trustRemoteCode;
 
     const externalHandle = queryOptions?.cacheHandle;
-    if (externalHandle?.ref) {
+    // Cache implementations do not carry vision features.  Keep image
+    // requests on the cold path, including externally supplied handles.
+    if (externalHandle?.ref && images.length === 0) {
       cachePath = externalHandle.ref;
       cacheTrimTokens = externalHandle.trimTokens;
-    } else if (this.cacheSupport && queryOptions?.cache !== false && trustRemoteCode === undefined) {
+    } else if (
+      this.cacheSupport &&
+      images.length === 0 &&
+      queryOptions?.cache !== false &&
+      trustRemoteCode === undefined
+    ) {
       const prefix = extractCacheablePrefix(augmentedPrompt);
       const hasCacheableContent = prefix.instructions.length > 0 || prefix.data.length > 0;
 
@@ -363,8 +370,12 @@ export class LocalInferenceDriver implements AIDriver {
           throw error;
         }
 
+        // Python reports the actual cache load result.  A stale/unknown VLM
+        // ref falls back to cold generation, so it must not count as a read
+        // even though prepare() previously returned a token count.
+        const actualCacheTokensUsed = meta.cache_loaded === false ? 0 : cacheTokensUsed;
         if (cache && meta.prompt_tokens != null) {
-          cache.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
+          cache.recordPromptTokens(meta.prompt_tokens, actualCacheTokensUsed);
         }
 
         if (meta.generation_tokens != null && firstChunkTime > 0) {
@@ -409,7 +420,7 @@ export class LocalInferenceDriver implements AIDriver {
           usage: buildQueryUsage({
             promptTokens: meta.prompt_tokens,
             completionTokens: meta.generation_tokens,
-            cacheReadTokens: cacheTokensUsed,
+            cacheReadTokens: actualCacheTokensUsed,
             cacheWriteTokens,
           }),
           ...this.queryLogger.collect(),

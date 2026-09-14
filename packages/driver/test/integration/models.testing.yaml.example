@@ -8,8 +8,8 @@
 # No API keys are stored here. Put provider credentials in the environment or
 # in the drivers section of your private models.testing.yaml.
 #
-# Keep models.default as a text-only LM: MLX VLM models disable prompt caching,
-# while mlx-cache.integration.test.ts requires a cache-capable LM.
+# Keep models.default as a text-only LM: the cache integration suite exercises
+# the LM disk/incremental paths. VLM Phase 1 cache is in-memory and text-only.
 
 models:
   default:

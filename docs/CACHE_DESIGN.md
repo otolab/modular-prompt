@@ -112,8 +112,11 @@ export interface CacheHandle {
 **ref**
 
 キャッシュの一意な参照。
-- MlxCacheController: ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
+- MlxCacheController (LM): ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
+- MlxCacheController (VLM): Python プロセス内の opaque ref（例: `mlx-vlm-memory://abc123/def456`）
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
+
+VLM の `mlx-vlm-memory://` ref は、作成元と同じ Python プロセス内でのみ有効です。Python process の `close()` または restart 後は無効になり、unknown ref や cache clone failure は cache miss として cold generate にフォールバックします。ref / handle を別 process へ持ち越すことはできず、ディスクへ永続化されません。
 
 **trimTokens**
 
@@ -179,15 +182,17 @@ incremental prefillで置き換えられた元キャッシュのref。
 
 ### MlxCacheController
 
-Apple Siliconに最適化されたMLXモデル用のKVキャッシュファイル管理。
+Apple Siliconに最適化されたMLXモデル用のKVキャッシュ管理。
 
 **特徴**:
-- `.safetensors.zip`形式でKVキャッシュをファイル保存（zip内エントリは`prompt_cache.safetensors`）
-- 保存時はsafetensorsの出力ストリームをzipエントリへ直接渡し、非圧縮ファイルを作成しない
-- 既存の非圧縮`.safetensors`キャッシュは読み込まない
+- LM は `.safetensors.zip`形式でKVキャッシュをファイル保存（zip内エントリは`prompt_cache.safetensors`）
+- LM の保存時はsafetensorsの出力ストリームをzipエントリへ直接渡し、非圧縮ファイルを作成しない
+- LM は既存の非圧縮`.safetensors`キャッシュを読み込まない
 - incremental prefillサポート（既存キャッシュをベースに差分のみprefill）
 - トークンレベルのプレフィックス照合（prefix_hashes）
 - 固定キャッシュディレクトリモードとmanaged一時ディレクトリモード
+- VLM は text-only に限り、cache object を Python プロセス内で保持（Phase 1）
+- VLM の画像 cache、ディスク永続化、LM cache との相互利用は対象外
 
 **キャッシュディレクトリモード**:
 
@@ -353,10 +358,12 @@ usage?: {
 |---|---|
 | `promptTokens` | Python ストリーム終端 meta の `prompt_tokens` |
 | `completionTokens` | Python ストリーム終端 meta の `generation_tokens` |
-| `cacheReadTokens` | クエリで使用した KV キャッシュのトークン数（`cacheTrimTokens` または `.meta.json` の `token_count`） |
+| `cacheReadTokens` | クエリで使用した KV キャッシュのトークン数（LM は `cacheTrimTokens` または `.meta.json`、VLM は in-memory cache の token count） |
 | `cacheWriteTokens` | 同一 `streamQuery` 内の `prepare()` で新規作成した prefill トークン数（`getStats().cacheGrowthTokens` の差分） |
 
 `promptTokens` はキャッシュ分を差し引いた値ではありません。キャッシュヒット分は `cacheReadTokens` で別途報告します。
+
+VLM の cache load が失敗した場合、Python stream meta の `cache_loaded: false` を受けて、そのリクエストの `cacheReadTokens` は 0 になります。prefill 自体が完了していれば `cacheWriteTokens` は実際に作成した prefill 分を示します。
 
 ### AbortSignal とキャッシュ
 

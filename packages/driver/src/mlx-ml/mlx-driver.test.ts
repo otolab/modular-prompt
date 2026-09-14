@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { Readable } from 'node:stream';
 import { MlxDriver } from './mlx-driver.js';
+import { MlxCacheController } from './mlx-cache-controller.js';
 import { convertMessages } from './mlx-message-utils.js';
 import type { ChatMessage } from '../formatter/types.js';
+
+const META_MARKER = '\x1e__META__:';
 
 // Mock the MlxProcess
 vi.mock('./process/index.js', () => ({
@@ -52,6 +56,8 @@ vi.mock('./process/index.js', () => ({
     }),
     chat: vi.fn(),
     render: vi.fn(),
+    tokenize: vi.fn(),
+    cachePrefill: vi.fn(),
     completion: vi.fn(),
     generate: vi.fn(),
     exit: vi.fn()
@@ -100,6 +106,122 @@ describe('MlxDriver', () => {
       consoleSpy.mockRestore();
     });
 
+  });
+
+  describe('VLM prompt cache', () => {
+    it('keeps VLM cache in memory and reports read/write usage', async () => {
+      const cacheController = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+      const driver = new MlxDriver({
+        model: 'test-vlm',
+        cacheController,
+      });
+      const process = (driver as unknown as {
+        process: {
+          getCapabilities: ReturnType<typeof vi.fn>;
+          render: ReturnType<typeof vi.fn>;
+          generate: ReturnType<typeof vi.fn>;
+          cachePrefill: ReturnType<typeof vi.fn>;
+        };
+      }).process;
+      process.getCapabilities.mockResolvedValueOnce({
+        methods: ['render', 'generate', 'cache_prefill'],
+        model_kind: 'vlm',
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          vocab_size: 32000,
+          model_max_length: 4096,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant'],
+            preview: null,
+            constraints: {},
+          },
+        },
+      });
+      process.render.mockResolvedValue({ formatted_prompt: 'rendered', error: null });
+      process.cachePrefill.mockResolvedValue({
+        cache_path: 'mlx-vlm-memory://backend-ref',
+        token_count: 3,
+      });
+      process.generate.mockResolvedValue(
+        Readable.from([`ok${META_MARKER}{"cache_loaded":true}`]),
+      );
+
+      const result = await driver.query({
+        instructions: [{ type: 'text', content: 'system prompt' }],
+        data: [],
+        output: [],
+      }, { cache: true });
+
+      expect(result.usage?.cacheReadTokens).toBe(3);
+      expect(result.usage?.cacheWriteTokens).toBe(3);
+      expect(process.cachePrefill).toHaveBeenCalledOnce();
+      expect(process.generate).toHaveBeenCalledWith(
+        'rendered',
+        expect.any(Object),
+        undefined,
+        undefined,
+        expect.stringMatching(/^mlx-vlm-memory:\/\//),
+        undefined,
+      );
+
+      await driver.close();
+    });
+
+    it('does not report a cache read when VLM cache loading fails', async () => {
+      const cacheController = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+      const driver = new MlxDriver({
+        model: 'test-vlm',
+        cacheController,
+      });
+      const process = (driver as unknown as {
+        process: {
+          getCapabilities: ReturnType<typeof vi.fn>;
+          render: ReturnType<typeof vi.fn>;
+          generate: ReturnType<typeof vi.fn>;
+          cachePrefill: ReturnType<typeof vi.fn>;
+        };
+      }).process;
+      process.getCapabilities.mockResolvedValueOnce({
+        methods: ['render', 'generate', 'cache_prefill'],
+        model_kind: 'vlm',
+        special_tokens: {},
+        features: {
+          apply_chat_template: true,
+          vocab_size: 32000,
+          model_max_length: 4096,
+          chat_template: {
+            supported_roles: ['system', 'user', 'assistant'],
+            preview: null,
+            constraints: {},
+          },
+        },
+      });
+      process.render.mockResolvedValue({ formatted_prompt: 'rendered', error: null });
+      process.cachePrefill.mockResolvedValue({
+        cache_path: 'mlx-vlm-memory://backend-ref',
+        token_count: 3,
+      });
+      process.generate.mockResolvedValue(
+        Readable.from([`cold${META_MARKER}{"prompt_tokens":4,"generation_tokens":1,"cache_loaded":false}`]),
+      );
+
+      const result = await driver.query({
+        instructions: [{ type: 'text', content: 'system prompt' }],
+        data: [],
+        output: [],
+      }, { cache: true });
+
+      // buildQueryUsage omits zero-valued cache fields; absence represents a
+      // zero cache read and, importantly, the prefill count is not retained.
+      expect(result.usage?.cacheReadTokens ?? 0).toBe(0);
+      expect(result.usage).not.toHaveProperty('cacheReadTokens');
+      // Prefill did write the backend cache even though this request could
+      // not load it; only the read side is zeroed for this cold generation.
+      expect(result.usage?.cacheWriteTokens).toBe(3);
+
+      await driver.close();
+    });
   });
 
   describe('hasNativeToolSupport', () => {

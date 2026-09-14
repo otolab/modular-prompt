@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     capabilities = get_capabilities(backend.get_tokenizer())
     capabilities["model_kind"] = model_kind
-    if model_kind == "lm":
+    if model_kind in {"lm", "vlm"} and "cache_prefill" not in capabilities["methods"]:
         capabilities["methods"].append("cache_prefill")
 
     server = Server(backend, capabilities)

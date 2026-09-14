@@ -139,4 +139,42 @@ describe('LocalInferenceDriver', () => {
     const generateOptions = vi.mocked(mockProcess.generate).mock.calls[0]?.[1];
     expect(generateOptions).not.toHaveProperty('trustRemoteCode');
   });
+
+  it('does not prepare or use a cache for VLM image requests', async () => {
+    vi.mocked(mockProcess.getCapabilities).mockResolvedValue({
+      ...mockCapabilities,
+      model_kind: 'vlm',
+    });
+    const cache = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      shouldDisableForVlm: vi.fn().mockReturnValue(false),
+      recordQuery: vi.fn(),
+      getGrowthBefore: vi.fn().mockReturnValue(0),
+      getWriteTokensSince: vi.fn().mockReturnValue(0),
+      prepare: vi.fn(),
+      readTokenCount: vi.fn().mockReturnValue(0),
+      recordPromptTokens: vi.fn(),
+      logStats: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const driver = new LocalInferenceDriver({
+      model: 'test-vlm',
+      process: mockProcess,
+      adapters: createMockAdapters({ extractImagePaths: () => ['image.png'] }),
+      cache,
+      loggerPrefix: 'TEST',
+    });
+
+    await driver.query(prompt);
+
+    expect(cache.prepare).not.toHaveBeenCalled();
+    expect(mockProcess.generate).toHaveBeenCalledWith(
+      'rendered-prompt',
+      expect.any(Object),
+      expect.arrayContaining(['image.png']),
+      768,
+      undefined,
+      undefined,
+    );
+  });
 });

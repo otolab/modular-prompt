@@ -42,7 +42,6 @@ export interface MlxDriverConfig {
  */
 export class MlxDriver extends LocalInferenceDriver {
   private cacheControllerRaw?: PromptCacheController;
-  private cacheDisabledForVlm = false;
   private readonly cacheBindingState = { bound: false };
 
   constructor(config: MlxDriverConfig) {
@@ -73,10 +72,7 @@ export class MlxDriver extends LocalInferenceDriver {
           runtimeInfo,
           ctx,
           () => {
-            this.queryLogger.log.info(
-              'VLM models do not support prompt caching — cacheController disabled',
-            );
-            this.cacheDisabledForVlm = true;
+            this.queryLogger.log.info('MLX cache is disabled for this model');
             this.disableCacheSupport();
           },
         );
@@ -151,14 +147,10 @@ export class MlxDriver extends LocalInferenceDriver {
 
   override async close(): Promise<void> {
     this.logCacheStats();
-    if (this.cacheDisabledForVlm) {
-      await this.cacheControllerRaw?.close();
-    }
     await super.close();
   }
 
   private logCacheStats(): void {
-    if (this.cacheDisabledForVlm) return;
     if (!(this.cacheControllerRaw instanceof MlxCacheController)) return;
     const s = this.cacheControllerRaw.getStats();
     if (s.totalQueries === 0) return;
