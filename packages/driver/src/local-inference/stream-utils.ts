@@ -3,6 +3,8 @@ import { Readable } from 'stream';
 export interface StreamMeta {
   prompt_tokens?: number;
   generation_tokens?: number;
+  /** Whether the requested prompt cache was actually loaded for this stream. */
+  cache_loaded?: boolean;
 }
 
 export const META_MARKER = '\x1e__META__:';

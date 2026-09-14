@@ -28,6 +28,7 @@ def _stream_to_stdout(
     images: list | None = None,
     primer: str | None = None,
     prompt_cache: list | None = None,
+    cache_loaded: bool | None = None,
 ) -> None:
     if primer is not None:
         print(primer, end="", flush=True)
@@ -45,6 +46,8 @@ def _stream_to_stdout(
             meta["prompt_tokens"] = last_response.prompt_tokens
         if hasattr(last_response, "generation_tokens"):
             meta["generation_tokens"] = last_response.generation_tokens
+    if cache_loaded is not None:
+        meta["cache_loaded"] = cache_loaded
 
     if meta:
         print(f"\x1e__META__:{json.dumps(meta)}", end="\0", flush=True)
@@ -87,8 +90,12 @@ def handle_generate(
     # are loaded through the backend-specific cache implementation.
     prompt_cache = None
     cache_tokens = 0
+    cache_loaded = None
     if cache_path and not images:
         prompt_cache = backend.load_cache_from_file(cache_path)
+        cache_loaded = prompt_cache is not None
+    elif cache_path:
+        cache_loaded = False
     if prompt_cache is not None:
         if cache_trim_tokens is not None:
             current_offset = backend.get_cache_offset(prompt_cache)
@@ -120,6 +127,7 @@ def handle_generate(
                 )
                 prompt_cache = None
                 cache_tokens = 0
+                cache_loaded = False
         if prompt_cache is not None:
             sys.stderr.write(
                 f"KV cache loaded: {len(prompt_cache)} layers, {cache_tokens} cached tokens\n"
@@ -145,6 +153,7 @@ def handle_generate(
                 f"ignoring prefill state\n"
             )
             prompt_cache = None
+            cache_loaded = False
 
     _stream_to_stdout(
         backend,
@@ -153,4 +162,5 @@ def handle_generate(
         images=images,
         primer=primer,
         prompt_cache=prompt_cache,
+        cache_loaded=cache_loaded,
     )

@@ -370,8 +370,12 @@ export class LocalInferenceDriver implements AIDriver {
           throw error;
         }
 
+        // Python reports the actual cache load result.  A stale/unknown VLM
+        // ref falls back to cold generation, so it must not count as a read
+        // even though prepare() previously returned a token count.
+        const actualCacheTokensUsed = meta.cache_loaded === false ? 0 : cacheTokensUsed;
         if (cache && meta.prompt_tokens != null) {
-          cache.recordPromptTokens(meta.prompt_tokens, cacheTokensUsed);
+          cache.recordPromptTokens(meta.prompt_tokens, actualCacheTokensUsed);
         }
 
         if (meta.generation_tokens != null && firstChunkTime > 0) {
@@ -416,7 +420,7 @@ export class LocalInferenceDriver implements AIDriver {
           usage: buildQueryUsage({
             promptTokens: meta.prompt_tokens,
             completionTokens: meta.generation_tokens,
-            cacheReadTokens: cacheTokensUsed,
+            cacheReadTokens: actualCacheTokensUsed,
             cacheWriteTokens,
           }),
           ...this.queryLogger.collect(),

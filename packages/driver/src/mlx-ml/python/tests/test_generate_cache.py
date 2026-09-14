@@ -41,6 +41,19 @@ def test_text_only_vlm_generate_loads_cache_without_sidecar(capsys):
     assert "ok" in capsys.readouterr().out
 
 
+def test_vlm_generate_reports_cache_load_failure(capsys):
+    backend = _Backend()
+    backend.cache = None
+
+    handle_generate(backend, "rendered prompt", cache_path="memory-ref")
+
+    output = capsys.readouterr().out
+    assert '"cache_loaded": false' in output
+    generate_call = next(call for call in backend.calls if call[0] == "generate")
+    assert generate_call[1] == "rendered prompt"
+    assert generate_call[3] is None
+
+
 def test_vlm_generate_keeps_images_on_cold_path():
     backend = _Backend()
 
