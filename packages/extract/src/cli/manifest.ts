@@ -11,6 +11,8 @@ export interface ExtractCacheManifest {
   model: string;
   /** MLX backend selected when the store was prepared. Missing means `auto` for legacy stores. */
   backend?: MlxBackendMode;
+  /** VLM image resize limit used to prepare the persisted cache. */
+  maxImageSize?: number;
   materials: MaterialInput[];
   createdAt: string;
   updatedAt?: string;
@@ -41,6 +43,10 @@ export async function readManifest(cacheDir: string): Promise<ExtractCacheManife
     || !parsed.model
     || !Array.isArray(parsed.materials)
     || (parsed.backend !== undefined && !isMlxBackend(parsed.backend))
+    || (parsed.maxImageSize !== undefined
+      && (typeof parsed.maxImageSize !== 'number'
+        || !Number.isFinite(parsed.maxImageSize)
+        || parsed.maxImageSize <= 0))
     || (parsed.updatedAt !== undefined && typeof parsed.updatedAt !== 'string')
   ) {
     throw new Error(`Invalid manifest: ${manifestPath(cacheDir)}`);

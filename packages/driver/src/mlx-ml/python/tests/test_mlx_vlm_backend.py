@@ -70,10 +70,13 @@ def test_stream_generate_passes_text_cache_to_mlx_vlm(monkeypatch):
     assert calls["kwargs"]["image"] is None
 
 
-def test_stream_generate_does_not_pass_cache_with_images(monkeypatch):
+def test_stream_generate_passes_prompt_and_vision_caches_with_images(monkeypatch):
     backend = _backend()
     prompt_cache = [_Cache()]
     calls = {}
+
+    class _VisionCache:
+        pass
 
     def fake_stream_generate(*args, **kwargs):
         calls["kwargs"] = kwargs
@@ -81,6 +84,13 @@ def test_stream_generate_does_not_pass_cache_with_images(monkeypatch):
 
     monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
     monkeypatch.setattr(vlm_module, "load_and_resize_images", lambda images, size: images)
+    monkeypatch.setattr(vlm_module, "VisionFeatureCache", _VisionCache)
+    monkeypatch.setattr(
+        vlm_module,
+        "mlx_vlm_prepare_inputs",
+        lambda processor, **kwargs: {"input_ids": [[1, 2, 3, 4]]},
+    )
+    monkeypatch.setattr(vlm_module, "mlx_vlm_should_add_special_tokens", lambda *_: False)
 
     list(
         backend.stream_generate(
@@ -91,7 +101,8 @@ def test_stream_generate_does_not_pass_cache_with_images(monkeypatch):
         )
     )
 
-    assert "prompt_cache" not in calls["kwargs"]
+    assert calls["kwargs"]["prompt_cache"] is prompt_cache
+    assert isinstance(calls["kwargs"]["vision_cache"], _VisionCache)
     assert calls["kwargs"]["image"] == ["image.png"]
 
 
@@ -200,6 +211,100 @@ def test_cache_prefill_rejects_empty_prompt():
 
     with pytest.raises(ValueError, match="non-empty text prompt"):
         backend.cache_prefill("memory-ref", "")
+
+
+def test_image_cache_prefill_persists_extra_hash_and_rejects_another_image(monkeypatch, tmp_path):
+    backend = _backend()
+    image_a = SimpleNamespace(mode="RGB", size=(2, 2), tobytes=lambda: b"image-a")
+    image_b = SimpleNamespace(mode="RGB", size=(2, 2), tobytes=lambda: b"image-b")
+    image_map = {"image-a.png": image_a, "image-b.png": image_b}
+    monkeypatch.setattr(
+        vlm_module,
+        "load_and_resize_images",
+        lambda paths, size: [image_map[path] for path in paths],
+    )
+    monkeypatch.setattr(
+        vlm_module,
+        "mlx_vlm_prepare_inputs",
+        lambda processor, **kwargs: {"input_ids": [[1, 2, 3, 4]]},
+    )
+    monkeypatch.setattr(vlm_module, "mlx_vlm_should_add_special_tokens", lambda *_: False)
+
+    class _VisionCache:
+        pass
+
+    monkeypatch.setattr(vlm_module, "VisionFeatureCache", _VisionCache)
+    calls = []
+
+    def fake_stream_generate(model, processor, prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        kwargs["prompt_cache"][0].offset = len(prompt)
+        yield SimpleNamespace(text="prefill")
+
+    from mlx_vlm.models import cache as vlm_cache
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+            self.dir.mkdir(parents=True, exist_ok=True)
+
+        def save_exact_cache(self, cache_hash, token_ids, extra_hash, prompt_cache):
+            raw_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
+            exact_id = hashlib.sha256(raw_hash).hexdigest()[:32]
+            path = self.dir / f"exact_{exact_id}.safetensors"
+            type(self).saved = (tuple(token_ids), int(extra_hash), deepcopy(prompt_cache))
+            path.touch()
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            return type(self).saved
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vlm_cache, "make_prompt_cache", lambda model: [_Cache()])
+    monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
+
+    logical_path = str(tmp_path / "cache.vlm-vision.safetensors")
+    result = backend.cache_prefill(
+        logical_path,
+        "prompt",
+        images=["image-a.png"],
+        max_image_size=512,
+    )
+
+    actual_path = Path(result["cache_path"])
+    meta = json.loads(Path(str(actual_path) + ".meta.json").read_text())
+    assert meta["layout"] == "vision_cache_v1"
+    assert result["token_count"] == 4
+    assert meta["extra_hash"] != 0
+    assert meta["image_count"] == 1
+    assert meta["image_refs"] == ["image-a.png"]
+    assert meta["max_image_size"] == 512
+    assert calls[0][1]["image"] == [image_a]
+    assert isinstance(calls[0][1]["vision_cache"], _VisionCache)
+
+    assert backend.load_cache_from_file(
+        str(actual_path), images=["image-a.png"], max_image_size=512
+    ) is not None
+    monkeypatch.setattr(
+        vlm_module,
+        "mlx_vlm_prepare_inputs",
+        lambda processor, **kwargs: {"input_ids": [[9, 8, 7, 6]]},
+    )
+    assert backend.load_cache_from_file(
+        str(actual_path),
+        images=["image-a.png"],
+        max_image_size=512,
+        prompt="prompt",
+    ) is None
+    assert backend.load_cache_from_file(
+        str(actual_path), images=["image-b.png"], max_image_size=512
+    ) is None
 
 
 def test_load_cache_rejects_sidecar_hash_for_another_snapshot(monkeypatch, tmp_path):

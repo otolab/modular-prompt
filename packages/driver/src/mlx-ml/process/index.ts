@@ -119,6 +119,8 @@ export class MlxProcess {
     prefixHashes?: string[],
     tools?: MlxToolDefinition[],
     reasoningEffort?: 'low' | 'medium' | 'high',
+    images?: string[],
+    maxImageSize?: number,
   ): Promise<MlxCachePrefillResult> {
     return this.client.cachePrefill(
       cachePath,
@@ -129,6 +131,8 @@ export class MlxProcess {
       prefixHashes,
       tools,
       reasoningEffort,
+      images,
+      maxImageSize,
     );
   }
 

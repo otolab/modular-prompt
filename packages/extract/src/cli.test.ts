@@ -86,6 +86,7 @@ describe('cli/manifest', () => {
     const manifest = {
       version: 1 as const,
       model: 'test-model',
+      maxImageSize: 512,
       materials: [{ title: 'doc', content: 'body' }],
       createdAt: '2026-01-01T00:00:00.000Z',
     };
@@ -123,6 +124,22 @@ describe('cli/manifest', () => {
         version: 1,
         model: 'test-model',
         backend: 'unknown',
+        materials: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+      'utf-8',
+    );
+
+    await expect(readManifest(tempDir)).rejects.toThrow(/Invalid manifest/);
+  });
+
+  it('rejects an invalid persisted image resize limit', async () => {
+    await writeFile(
+      manifestPath(tempDir),
+      JSON.stringify({
+        version: 1,
+        model: 'test-model',
+        maxImageSize: 0,
         materials: [],
         createdAt: '2026-01-01T00:00:00.000Z',
       }),

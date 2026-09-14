@@ -16,14 +16,14 @@ class _Backend:
         self.calls = []
         self.cache = [_Cache()]
 
-    def load_cache_from_file(self, cache_path):
-        self.calls.append(("load", cache_path))
+    def load_cache_from_file(self, cache_path, images=None, max_image_size=768, prompt=None):
+        self.calls.append(("load", cache_path, images, max_image_size, prompt))
         return self.cache
 
     def get_cache_offset(self, prompt_cache):
         return prompt_cache[0].offset
 
-    def tokenize_prompt(self, prompt):
+    def tokenize_prompt(self, prompt, images=None, max_image_size=768):
         return [10, 11, 12, 13]
 
     def stream_generate(self, prompt, options, images=None, prompt_cache=None):
@@ -84,7 +84,7 @@ def test_vlm_file_cache_load_failure_uses_cold_path(capsys, tmp_path, snapshot_s
     assert generate_call[3] is None
 
 
-def test_vlm_generate_keeps_images_on_cold_path():
+def test_vlm_generate_loads_image_cache_with_image_identity():
     backend = _Backend()
 
     handle_generate(
@@ -94,8 +94,12 @@ def test_vlm_generate_keeps_images_on_cold_path():
         cache_path="mlx-vlm-memory://memory-ref",
     )
 
-    assert not any(call[0] == "load" for call in backend.calls)
+    load_call = next(call for call in backend.calls if call[0] == "load")
+    assert load_call[1] == "mlx-vlm-memory://memory-ref"
+    assert load_call[2] == ["image.png"]
+    assert load_call[3] == 768
+    assert load_call[4] == "rendered prompt"
     generate_call = next(call for call in backend.calls if call[0] == "generate")
-    assert generate_call[1] == "rendered prompt"
+    assert generate_call[1] == [12, 13]
     assert generate_call[2] == ["image.png"]
-    assert generate_call[3] is None
+    assert generate_call[3] is backend.cache

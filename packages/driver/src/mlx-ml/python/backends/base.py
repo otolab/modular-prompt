@@ -52,18 +52,28 @@ class ModelBackend(ABC):
         trim_to_tokens: int | None = None,
         prefix_offsets: list[int] | None = None,
         prefix_hashes: list[str] | None = None,
+        images: list | None = None,
+        max_image_size: int = 768,
     ) -> dict:
         """Build a KV cache from a prompt prefix."""
         raise NotImplementedError(
             f"{type(self).__name__} does not support prompt caching"
         )
 
-    def tokenize_prompt(self, prompt: str) -> list[int]:
+    def tokenize_prompt(
+        self,
+        prompt: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+    ) -> list[int]:
         """Tokenize a rendered prompt using this backend's prompt rules.
 
         A VLM backend returns a processor from ``get_tokenizer()``.  Keeping
         this operation on the backend prevents shared handlers from assuming
-        that the returned object is a plain tokenizer.
+        that the returned object is a plain tokenizer.  ``images`` and
+        ``max_image_size`` let multimodal backends reproduce the same image
+        placeholder expansion as their generation path; text-only backends
+        ignore them.
         """
         tokenizer = self.get_tokenizer()
         tokenizer = getattr(tokenizer, "tokenizer", tokenizer)
@@ -94,8 +104,18 @@ class ModelBackend(ABC):
                     if callable(child_trim):
                         child_trim(tokens)
 
-    def load_cache_from_file(self, cache_path: str) -> list | None:
-        """Load a prompt cache from file, or None."""
+    def load_cache_from_file(
+        self,
+        cache_path: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+        prompt: str | list[int] | None = None,
+    ) -> list | None:
+        """Load a prompt cache from file, or None.
+
+        ``prompt`` is optional so backends that persist prompt identities can
+        validate the loaded cache against the current request.
+        """
         return None
 
     def get_cache_offset(self, prompt_cache: list) -> int:

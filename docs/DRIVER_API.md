@@ -96,11 +96,10 @@ interface ChatMessage {
 }
 
 interface Attachment {
-  type: 'image';
-  source: {
-    type: 'url' | 'base64';
-    data: string;
-  };
+  type: 'text' | 'image_url' | 'file';
+  text?: string;
+  image_url?: { url: string };  // local path, URL, or supported data source
+  file?: { path: string; mime_type: string };
 }
 ```
 

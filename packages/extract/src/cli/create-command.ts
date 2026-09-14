@@ -50,6 +50,9 @@ export async function runCreateCommand(options: CreateCommandOptions): Promise<s
       storename: options.storename,
       model: prepared.model,
       backend: prepared.backend,
+      ...(prepared.maxImageSize !== undefined
+        ? { maxImageSize: prepared.maxImageSize }
+        : {}),
       materials,
       createdAt,
       updatedAt: createdAt,

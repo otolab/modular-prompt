@@ -20,6 +20,9 @@ const CACHE_FILE_EXTENSIONS = {
   // mlx-vlm's exact_cache_v1 snapshot is a standalone safetensors file and
   // must never be mistaken for an mlx-lm archive.
   vlm: '.vlm.safetensors',
+  // Image-bearing VLM snapshots have a separate namespace and sidecar
+  // layout.  They are intentionally incompatible with text-only VLM refs.
+  vlmVision: '.vlm-vision.safetensors',
 } as const;
 
 interface CacheIndexEntry {
@@ -200,6 +203,31 @@ export class MlxCacheController implements PromptCacheController {
     return createHash('sha256').update(JSON.stringify(sorted)).digest('hex');
   }
 
+  private computeImageCacheIdentity(
+    images?: string[],
+    maxImageSize?: number,
+  ): Record<string, unknown> | undefined {
+    if (!images || images.length === 0) return undefined;
+
+    return {
+      layout: 'vision_cache_v1',
+      maxImageSize: maxImageSize ?? 768,
+      images: images.map((image) => {
+        let contentHash: string | undefined;
+        try {
+          // Include the source bytes in the controller key when the source is
+          // a local file.  The Python sidecar remains the authoritative
+          // normalized-image/APC extra_hash check at load time.
+          contentHash = createHash('sha256').update(readFileSync(image)).digest('hex');
+        } catch {
+          // URLs and unresolved paths are still distinguished by their ref;
+          // mlx-vlm will reject an unreadable path during prefill/load.
+        }
+        return { ref: image, contentHash };
+      }),
+    };
+  }
+
   private updateLastCache(handle: CacheHandle, elementHashes: string[], params: CachePrepareParams): void {
     this.lastHandle = handle;
     this.lastElementHashes = elementHashes;
@@ -300,7 +328,7 @@ export class MlxCacheController implements PromptCacheController {
       };
 
       const chatMessages = formatPromptAsMessages(partialPrompt, this.formatterOptions);
-      let mlxMessages = convertMessages(chatMessages);
+      let mlxMessages = convertMessages(chatMessages, this.modelKind === 'vlm');
       if (this.messageProcessor) {
         mlxMessages = this.messageProcessor(mlxMessages);
       }
@@ -513,11 +541,20 @@ export class MlxCacheController implements PromptCacheController {
     if (params.reasoningEffort) {
       payload.reasoningEffort = params.reasoningEffort;
     }
+    const imageIdentity = this.computeImageCacheIdentity(
+      params.images,
+      params.maxImageSize,
+    );
+    if (imageIdentity) {
+      payload.imageCache = imageIdentity;
+    }
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }
 
-  private generateCachePath(cacheKey: string): string {
-    const extension = CACHE_FILE_EXTENSIONS[this.modelKind];
+  private generateCachePath(cacheKey: string, vision = false): string {
+    const extension = vision
+      ? CACHE_FILE_EXTENSIONS.vlmVision
+      : CACHE_FILE_EXTENSIONS[this.modelKind];
     return join(this.cacheDir, `${cacheKey}${extension}`);
   }
 
@@ -624,6 +661,8 @@ export class MlxCacheController implements PromptCacheController {
       return MlxCacheController.EMPTY_HANDLE;
     }
 
+    const visionCache = this.modelKind === 'vlm' && (params.images?.length ?? 0) > 0;
+
     // VLM prefill returns the actual APC snapshot path.  Reuse that path when
     // a fixed-cache index has it; otherwise start with a deterministic logical
     // path that the Python backend turns into a DiskBlockStore namespace.
@@ -633,7 +672,7 @@ export class MlxCacheController implements PromptCacheController {
       && existsSync(indexedPath + '.meta.json')
       && this.readMetaTokenCount(indexedPath) > 0
       ? indexedPath
-      : this.generateCachePath(cacheKey);
+      : this.generateCachePath(cacheKey, visionCache);
     let effectiveCachePath = cachePath;
     const elementHashes = this.computeElementHashes(params);
     let supersededRef: string | undefined;
@@ -653,7 +692,7 @@ export class MlxCacheController implements PromptCacheController {
       };
 
       const chatMessages = formatPromptAsMessages(prefillPrompt, this.formatterOptions);
-      const preMergeMessages = convertMessages(chatMessages);
+      const preMergeMessages = convertMessages(chatMessages, this.modelKind === 'vlm');
       let mlxMessages = preMergeMessages;
       if (this.messageProcessor) {
         mlxMessages = this.messageProcessor(mlxMessages);
@@ -662,18 +701,24 @@ export class MlxCacheController implements PromptCacheController {
       const hasTools = params.tools && params.tools.length > 0;
       const mlxTools = hasTools ? convertToolDefinitions(params.tools!) : undefined;
 
-      // Tokenize to get full token IDs (for findBestBase + prefix computation)
+      // Tokenize to get full token IDs (for findBestBase + prefix computation).
+      // Image-bearing VLM prompts are deliberately excluded: the shared
+      // tokenize protocol carries messages but not image sources, so it
+      // cannot reproduce mlx-vlm's dynamic image-token expansion.  The VLM
+      // backend computes the authoritative image-aware IDs during prefill.
       let fullTokens: number[] | null = null;
-      try {
-        const tokenResult = await this.process!.tokenize(
-          mlxMessages, mlxTools,
-          params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
-        );
-        if (!tokenResult.error && tokenResult.token_ids) {
-          fullTokens = tokenResult.token_ids;
+      if (!visionCache) {
+        try {
+          const tokenResult = await this.process!.tokenize(
+            mlxMessages, mlxTools,
+            params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
+          );
+          if (!tokenResult.error && tokenResult.token_ids) {
+            fullTokens = tokenResult.token_ids;
+          }
+        } catch {
+          // tokenize failure — proceed without prefix matching
         }
-      } catch {
-        // tokenize failure — proceed without prefix matching
       }
 
       // Find best base cache.  VLM exact snapshots intentionally do not
@@ -732,6 +777,8 @@ export class MlxCacheController implements PromptCacheController {
           prefixOffsets, prefixHashes,
           mlxTools,
           params.reasoningEffort,
+          params.images,
+          params.maxImageSize,
         );
         const returnedTokenCount = typeof prefillResult?.token_count === 'number'
           ? prefillResult.token_count

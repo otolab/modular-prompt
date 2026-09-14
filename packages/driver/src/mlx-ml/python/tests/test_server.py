@@ -117,3 +117,20 @@ class TestServerDispatch:
             mock_generate.assert_called_once()
         captured = capsys.readouterr()
         assert captured.out == '' or captured.out.endswith('\0')
+
+    def test_cache_prefill_dispatch_passes_image_cache_inputs(self, capsys):
+        server = self._make_server()
+        with patch('server.handle_cache_prefill') as mock_prefill:
+            server._dispatch({
+                "method": "cache_prefill",
+                "cache_path": "/tmp/cache.vlm-vision.safetensors",
+                "messages": [{"role": "user", "content": "inspect"}],
+                "images": ["/tmp/photo.png"],
+                "maxImageSize": 512,
+            })
+            mock_prefill.assert_called_once()
+            kwargs = mock_prefill.call_args.kwargs
+            assert kwargs["images"] == ["/tmp/photo.png"]
+            assert kwargs["max_image_size"] == 512
+        captured = capsys.readouterr()
+        assert captured.out == '' or captured.out.endswith('\0')

@@ -52,6 +52,10 @@ export interface CachePrepareParams {
   data?: Element[];
   tools?: ToolDefinition[];
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** VLM image sources belonging to the cacheable prefix. */
+  images?: string[];
+  /** Maximum image edge used for VLM preprocessing. */
+  maxImageSize?: number;
 }
 ```
 
@@ -113,12 +117,12 @@ export interface CacheHandle {
 
 キャッシュの一意な参照。
 - MlxCacheController (LM): ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
-- MlxCacheController (VLM): `mlx-vlm` exact snapshot のファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.vlm.safetensors/exact_<hash>.safetensors`）
+- MlxCacheController (VLM): `mlx-vlm` exact snapshot のファイルパス（text-only の例: `/tmp/mlx-prompt-cache-abc123/def456.vlm.safetensors/exact_<hash>.safetensors`、画像ありは `.vlm-vision.safetensors` namespace）
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
 
-#### mlx-vlm 0.7.0（Phase 2）
+#### mlx-vlm 0.7.0（Phase 2–3）
 
-VLM の通常の ref はディスク上の `exact_cache_v1` snapshot です。作成元 Python process の終了・再起動後も、固定 `cacheDir` の `cache-index.json` に記録された実体（`cacheDir` 相対 path）からロードできます。相対 path にすることで、extract の staging directory を rename しても index を再利用できます。`mlx-vlm-memory://` は Phase 1 互換の明示 ref に限った process-local fallback であり、MlxCacheController や extract の主経路では使用しません。
+VLM の text-only ref はディスク上の `exact_cache_v1` snapshot です。作成元 Python process の終了・再起動後も、固定 `cacheDir` の `cache-index.json` に記録された実体（`cacheDir` 相対 path）からロードできます。相対 path にすることで、extract の staging directory を rename しても index を再利用できます。`mlx-vlm-memory://` は Phase 1 互換の明示 ref に限った process-local fallback であり、MlxCacheController や extract の主経路では使用しません。
 
 - `make_prompt_cache(model.language_model, max_kv_size=None)` で空の prompt cache を生成
 - `stream_generate(..., prompt_cache=cache)` で prefill / cached suffix generation に cache を渡す
@@ -130,11 +134,28 @@ VLM の通常の ref はディスク上の `exact_cache_v1` snapshot です。�
 - `close()` — writer queue を drain して保存完了を確定
 - `load_exact_cache(cache_hash)` — `exact_<hash>.safetensors` を復元
 
-`APCManager.store_exact_cache()` / `lookup_exact_cache()` も調査しましたが、これは APC のメモリ LRU・prefix lookup と連動する API です。Phase 2 は TypeScript controller が完全一致キーを管理し、VLM incremental prefill を行わないため、backend では直接 `DiskBlockStore.save_exact_cache` / `load_exact_cache` を採用しています。保存形式の metadata は `layout: exact_cache_v1`、`cache_hash`、`extra_hash`、`token_ids`、cache entry 数などです。
+`APCManager.store_exact_cache()` / `lookup_exact_cache()` も調査しましたが、これは APC のメモリ LRU・prefix lookup と連動する API です。Phase 2–3 は TypeScript controller が完全一致キーを管理し、VLM incremental prefill を行わないため、backend では直接 `DiskBlockStore.save_exact_cache` / `load_exact_cache` を採用しています。保存形式の metadata は `layout: exact_cache_v1`、`cache_hash`、`extra_hash`、`token_ids`、cache entry 数などです。
 
-VLM の論理 path が `/cache/<key>.vlm.safetensors` の場合、実体は `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors`、sidecar は実体 path に `.meta.json` を付けた `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors.meta.json` です。sidecar には LM と同じ `token_count`、`prefix_offsets`、`prefix_hashes` を保存し、さらに backend 固有の `layout` / `cache_hash` を持ちます。load 時は sidecar の `cache_hash` から導出した exact snapshot path と実際の ref を照合し、mismatched sidecar、snapshot 不在、破損 snapshot は cache load failure として cold path に落とします。`.vlm.safetensors` は APC namespace directory の名前であり、実体の拡張子は `.safetensors` です。
+VLM の text-only 論理 path が `/cache/<key>.vlm.safetensors` の場合、実体は `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors`、sidecar は実体 path に `.meta.json` を付けた `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors.meta.json` です。sidecar には LM と同じ `token_count`、`prefix_offsets`、`prefix_hashes` を保存し、さらに backend 固有の `layout: exact_cache_v1` / `cache_hash` を持ちます。load 時は sidecar の `cache_hash` から導出した exact snapshot path と実際の ref を照合し、mismatched sidecar、snapshot 不在、破損 snapshot は cache load failure として cold path に落とします。`.vlm.safetensors` は APC namespace directory の名前であり、実体の拡張子は `.safetensors` です。
 
-LM の `.safetensors.zip`（zip 内 `prompt_cache.safetensors`）と VLM の `exact_cache_v1` は別形式で、相互に読み込みません。画像あり VLM は vision feature cache を持たないため、常に cold path です。
+LM の `.safetensors.zip`（zip 内 `prompt_cache.safetensors`）と VLM の snapshot は別形式で、相互に読み込みません。
+
+##### 画像あり VLM（Phase 3）
+
+画像を含む cacheable prefix は、text-only VLM とは別の `/cache/<key>.vlm-vision.safetensors/` namespace に保存します。実体の snapshot codec は mlx-vlm 0.7.0 の `DiskBlockStore.save_exact_cache()` ですが、modular-prompt の `vision_cache_v1` sidecar と namespace を含む保存契約は text-only の `exact_cache_v1` と非互換です。LM の `.safetensors.zip` とも非互換です。text-only ref を画像付き query に、画像付き ref を text-only query に渡した場合は load を拒否して cold path に戻します。
+
+画像付き snapshot の sidecar には次を保存します（token IDs 本体は DiskBlockStore の exact snapshot metadata に保存します）。
+
+- `layout: vision_cache_v1`、`backend: mlx-vlm`、`cache_hash`、`token_count`
+- APC exact snapshot に渡した `extra_hash` と表示用の `image_hash`
+- `image_count`、`image_refs`、`max_image_size`
+- `vision_feature_cache_version: mlx-vlm-0.7.0`
+
+`MlxVlmBackend` は mlx-vlm 0.7.0 の `VisionFeatureCache` を process-local に保持し、`stream_generate(..., vision_cache=...)` を通じて upstream が `cached_image_features` をモデルへ渡す経路を使います。永続化するのは prompt/KV exact snapshot と sidecar の同一性情報であり、opaque な MLX の projected feature tensor 自体は保存しません。プロセス再起動後は画像を再処理して feature cache を再構築します。
+
+画像同一性は、`load_and_resize_images()` 後の正規化済み PIL payload（mode、幅・高さ、bytes）を hash して `extra_hash` にします。mlx-vlm dispatch 前の pixel tensor は backend から直接取得できないため、prefill と load が同じ modular-prompt 側の正規化入力を検証できる設計にしています。これにより、同一 token 列でも画像が異なる場合は別の `extra_hash` / controller key になり、resize 条件が異なる場合も cache miss になります。load 時は sidecar の layout、hash、画像数、resize 条件、feature cache version、exact snapshot の token 数と `extra_hash` を検証し、さらに保存済み token IDs が現行 prompt の prefix と一致することを確認します。失敗時は `cache_loaded: false` の cold path です。
+
+画像付き VLM は新規 prompt の fresh prefill と exact load に限定します。`base_cache_path`、`trim_to_tokens`、VLM incremental prefill / prefix reuse は本 Phase でも対象外です。
 
 依存関係では 0.7.0 が `mlx>=0.32.2`、`mlx-audio>=0.4.8`、`jinja2>=3.1.0` を要求するため、lock file は `mlx-audio==0.5.3` として解決しています。`mlx`、`mlx-lm`、`transformers` の既存 pin / override は維持しています。
 
@@ -211,8 +232,8 @@ Apple Siliconに最適化されたMLXモデル用のKVキャッシュ管理。
 - incremental prefillサポート（既存キャッシュをベースに差分のみprefill）
 - トークンレベルのプレフィックス照合（prefix_hashes）
 - 固定キャッシュディレクトリモードとmanaged一時ディレクトリモード
-- VLM は text-only に限り、`mlx-vlm==0.7.0` の `exact_cache_v1` を専用 namespace へ保存
-- VLM の画像 feature cache、incremental prefill、LM cache との相互利用は対象外
+- VLM は text-only の `exact_cache_v1` と画像付きの `vision_cache_v1` を専用 namespace へ保存
+- VLM の画像 feature tensor は process-local、incremental prefill と LM cache との相互利用は対象外
 
 **キャッシュディレクトリモード**:
 
@@ -317,7 +338,7 @@ try {
 
 MlxCacheControllerは、既存キャッシュをベースに差分のみをprefillする「incremental prefill」をサポートします。
 
-ただしこれは LM (`.safetensors.zip`) のみです。VLM (`exact_cache_v1`) は Phase 2 では完全一致の disk hit / fresh prefill に限定し、`findBestBase()`、`base_cache_path`、`trim_to_tokens`、prefix reuse は no-op とします。
+ただしこれは LM (`.safetensors.zip`) のみです。VLM の text-only (`exact_cache_v1`) と画像付き (`vision_cache_v1`) は Phase 2–3 でも完全一致の disk hit / fresh prefill に限定し、`findBestBase()`、`base_cache_path`、`trim_to_tokens`、prefix reuse は no-op とします。
 
 ### フロー
 

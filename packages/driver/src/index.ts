@@ -40,6 +40,8 @@ export {
   type PromptPartition
 } from './cache-utils.js';
 
+export { extractImagePaths } from './content-utils.js';
+
 // Query Logger
 export { QueryLogger } from './query-logger.js';
 

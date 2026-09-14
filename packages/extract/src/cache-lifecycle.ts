@@ -1,5 +1,11 @@
 import type { PromptModule } from '@modular-prompt/core';
-import type { AIDriver, CacheHandle, PromptCacheController } from '@modular-prompt/driver';
+import {
+  extractImagePaths,
+  type AIDriver,
+  type CacheHandle,
+  type PromptCacheController,
+} from '@modular-prompt/driver';
+import type { Element } from '@modular-prompt/core';
 import { partitionPrompt } from '@modular-prompt/driver';
 import type { ExtractCorpus, ExtractRequest } from './types.js';
 import { compileExtractPrompt } from './compile-extract-prompt.js';
@@ -12,6 +18,24 @@ export interface CacheLifecycleState {
 export interface PrepareSessionCacheOptions {
   /** Reject an empty cache handle instead of falling back to an uncached query. */
   required?: boolean;
+  /** Image resize limit used by a VLM cache prefill. */
+  maxImageSize?: number;
+}
+
+function extractImagesFromElements(elements: readonly Element[]): string[] {
+  return elements.flatMap((element) => {
+    switch (element.type) {
+      case 'text':
+        return [];
+      case 'message':
+        return element.role === 'tool' ? [] : extractImagePaths(element.content);
+      case 'material':
+      case 'chunk':
+        return extractImagePaths(element.content);
+      default:
+        return [];
+    }
+  });
 }
 
 export async function ensureCacheControllerReady(
@@ -57,6 +81,11 @@ export async function prepareSessionCache<TContext>(
     data: cacheable.data,
     tools: request.options?.tools,
     reasoningEffort: request.options?.reasoningEffort,
+    images: extractImagesFromElements([
+      ...cacheable.instructions,
+      ...cacheable.data,
+    ]),
+    maxImageSize: options.maxImageSize,
   });
 
   if (!newHandle.ref) {

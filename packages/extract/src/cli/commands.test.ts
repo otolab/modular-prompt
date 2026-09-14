@@ -89,6 +89,7 @@ describe('cli store commands', () => {
       storename: 'vlm-store',
       model: 'resolved-vlm-model',
       backend: 'vlm',
+      maxImageSize: 512,
       materials: [{ title: 'doc', content: 'VLM corpus' }],
       createdAt: '2026-01-01T00:00:00.000Z',
     });
@@ -103,6 +104,7 @@ describe('cli store commands', () => {
       model: 'resolved-vlm-model',
       backend: 'vlm',
       cacheDir: storeDir,
+      maxImageSize: 512,
     });
   });
 

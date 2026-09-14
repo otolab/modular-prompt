@@ -41,6 +41,7 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
     model: manifest.model,
     cacheDir: storeDir,
     ...(manifest.backend ? { backend: manifest.backend } : {}),
+    ...(manifest.maxImageSize !== undefined ? { maxImageSize: manifest.maxImageSize } : {}),
   });
 
   try {
@@ -48,6 +49,7 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
       driver: runtime.driver,
       cacheController: runtime.cacheController,
       model: runtime.model,
+      maxImageSize: runtime.maxImageSize,
       corpus: { materials: manifest.materials },
     });
 

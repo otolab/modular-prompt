@@ -51,8 +51,9 @@ Note:
   If no model is configured, specify -m <model-id-or-alias> or define models.default
   in the user models.yaml.
   MLX backend follows models.yaml (backend: auto by default; lm/vlm may be
-  selected explicitly). Text-only LM/VLM prompt caches are persisted in the
-  store; image/vision feature caching is not supported.
+  selected explicitly). Text-only LM/VLM prompt caches and image-bearing VLM
+  caches are persisted in separate store namespaces; VLM incremental prefill
+  is not supported.
 `);
 }
 

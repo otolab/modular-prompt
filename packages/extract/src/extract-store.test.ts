@@ -100,15 +100,17 @@ describe('appendToExtractStore', () => {
       storename: 'vlm-store',
       model: 'resolved-vlm-model',
       backend: 'vlm',
+      maxImageSize: 512,
       materials: [{ id: '/docs/one.txt', title: 'one.txt', content: 'one' }],
       createdAt: '2026-01-01T00:00:00.000Z',
     });
 
-    const runtimeArgs: Array<{ backend?: string; cacheDir?: string; model?: string }> = [];
+    const runtimeArgs: Array<{ backend?: string; cacheDir?: string; model?: string; maxImageSize?: number }> = [];
     createRuntimeMock.mockImplementationOnce(async (args: {
       backend?: string;
       cacheDir?: string;
       model?: string;
+      maxImageSize?: number;
     }) => {
       runtimeArgs.push(args);
       return {
@@ -130,6 +132,7 @@ describe('appendToExtractStore', () => {
       model: 'resolved-vlm-model',
       backend: 'vlm',
       cacheDir: expect.stringContaining('.vlm-store.add-'),
+      maxImageSize: 512,
     })]);
     expect(result.backend).toBe('vlm');
     await expect(readManifest(storeDir)).resolves.toMatchObject({ backend: 'vlm' });

@@ -22,6 +22,8 @@ export interface PrepareExtractCacheOptions {
   model?: string;
   /** Persisted/configured MLX backend. Missing preserves the `auto` fallback. */
   backend?: MlxBackendMode;
+  /** VLM image resize limit; omitted uses the model configuration or 768. */
+  maxImageSize?: number;
   /** Corpus to prefill into the cache. */
   materials: readonly MaterialInput[];
 }
@@ -29,6 +31,8 @@ export interface PrepareExtractCacheOptions {
 export interface PreparedExtractCache {
   model: string;
   backend: MlxBackendMode;
+  /** VLM image resize limit used during preparation, when available. */
+  maxImageSize?: number;
 }
 
 async function closeRuntimePreservingError(
@@ -57,6 +61,7 @@ export async function prepareExtractCache(
     model: options.model,
     backend: options.backend,
     cacheDir: options.cacheDir,
+    maxImageSize: options.maxImageSize,
   });
   let operationError: unknown;
 
@@ -65,6 +70,7 @@ export async function prepareExtractCache(
       driver: runtime.driver,
       cacheController: runtime.cacheController,
       model: runtime.model,
+      maxImageSize: runtime.maxImageSize,
       corpus: { materials: options.materials },
       cachePreparation: 'required',
     });
@@ -77,6 +83,7 @@ export async function prepareExtractCache(
     return {
       model: runtime.model,
       backend: runtime.backend ?? 'auto',
+      maxImageSize: runtime.maxImageSize,
     };
   } catch (error: unknown) {
     operationError = error;
@@ -238,6 +245,9 @@ export async function appendToExtractStore(
       cacheDir: stagingDir,
       model: previousManifest.model,
       backend: previousManifest.backend,
+      ...(previousManifest.maxImageSize !== undefined
+        ? { maxImageSize: previousManifest.maxImageSize }
+        : {}),
       materials,
     });
     const nextManifest: ExtractCacheManifest = {
@@ -245,6 +255,9 @@ export async function appendToExtractStore(
       model: prepared.model,
       backend: prepared.backend,
       materials,
+      ...(prepared.maxImageSize !== undefined
+        ? { maxImageSize: prepared.maxImageSize }
+        : {}),
       updatedAt: (options.now ?? (() => new Date().toISOString()))(),
     };
     await writeManifest(stagingDir, nextManifest);

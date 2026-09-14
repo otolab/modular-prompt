@@ -86,16 +86,17 @@ def handle_generate(
         else:
             sys.stderr.write(f"--- prompt\n{prompt}\n")
 
-    # Images are intentionally excluded from Phase 2.  Text-only VLM caches
-    # use the backend-specific exact_cache_v1 disk implementation.
     prompt_cache = None
     cache_tokens = 0
     cache_loaded = None
-    if cache_path and not images:
-        prompt_cache = backend.load_cache_from_file(cache_path)
+    if cache_path:
+        prompt_cache = backend.load_cache_from_file(
+            cache_path,
+            images=images,
+            max_image_size=max_image_size,
+            prompt=prompt,
+        )
         cache_loaded = prompt_cache is not None
-    elif cache_path:
-        cache_loaded = False
     if prompt_cache is not None:
         if cache_trim_tokens is not None:
             current_offset = backend.get_cache_offset(prompt_cache)
@@ -142,7 +143,11 @@ def handle_generate(
 
     effective_prompt = prompt
     if prompt_cache is not None and cache_tokens > 0 and isinstance(prompt, str):
-        full_tokens = backend.tokenize_prompt(prompt)
+        full_tokens = backend.tokenize_prompt(
+            prompt,
+            images=images,
+            max_image_size=max_image_size,
+        )
 
         if cache_tokens < len(full_tokens):
             effective_prompt = full_tokens[cache_tokens:]
