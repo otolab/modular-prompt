@@ -150,7 +150,7 @@ function createMlxExtractRuntime(
 
 `MlxExtractRuntime.close()` は `driver.close()` + `cacheController.close()` を行う。
 
-`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、**mlx-lm バックエンド（`backend: 'lm'`）に固定**する。extract の Phase 1 では、ディスク／増分キャッシュを使う LM 経路だけを対象にするため。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。
+`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、models.yaml の MLX backend 指定を保持する。backend 未指定時は `auto` としてモデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` の場合も、画像なしの text-only exact KV cache を固定 cacheDir に永続化できる。VLM の画像 feature cache と incremental prefill は対象外。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。
 
 `createDriver(model, { cacheController })` は runtime 内部で使用する低レベル helper で、戻り値は `{ driver, spec }`。`spec.model` は alias 解決後の生 model ID である。
 

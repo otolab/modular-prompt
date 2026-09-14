@@ -69,15 +69,15 @@ describe('MlxCacheController', () => {
   });
 
   describe('prepare', () => {
-    it('uses an in-memory ref and backend token count for VLM caches', async () => {
-      const vlmController = new MlxCacheController({ cacheDir: '/ignored-for-vlm' });
+    it('uses a disk ref and backend token count for VLM caches', async () => {
+      const vlmController = new MlxCacheController({ cacheDir: '/fixed-vlm-cache' });
       vlmController.setModelKind('vlm');
       await vlmController.bind(
         mockProcess as unknown as import('./process/index.js').MlxProcess,
         {},
       );
       mockProcess.cachePrefill.mockResolvedValueOnce({
-        cache_path: 'mlx-vlm-memory://ignored',
+        cache_path: '/fixed-vlm-cache/cache.vlm.safetensors/exact_0123456789abcdef.safetensors',
         token_count: 123,
       });
 
@@ -86,13 +86,78 @@ describe('MlxCacheController', () => {
         instructions: [{ type: 'text', content: 'Be helpful' }],
       });
 
-      expect(handle.ref).toMatch(/^mlx-vlm-memory:\/\//);
+      expect(handle.ref).toContain('.vlm.safetensors/exact_');
+      expect(handle.ref).toContain('exact_0123456789abcdef.safetensors');
       expect(vlmController.readCacheTokenCount(handle.ref)).toBe(123);
       expect(vlmController.getStats().cacheGrowthTokens).toBe(123);
-      expect(mockProcess.tokenize).not.toHaveBeenCalled();
-      expect(mkdir).not.toHaveBeenCalled();
+      expect(mockProcess.tokenize).toHaveBeenCalled();
+      expect(mkdir).toHaveBeenCalledTimes(1);
+      const indexWrite = vi.mocked(writeFile).mock.calls.find(([path]) =>
+        String(path).endsWith('cache-index.json'),
+      );
+      expect(indexWrite?.[1]).toContain('exact_0123456789abcdef.safetensors');
+      expect(indexWrite?.[1]).not.toContain('/fixed-vlm-cache/cache.vlm.safetensors');
 
       await vlmController.close();
+    });
+
+    it('reuses an indexed VLM file after a controller restart', async () => {
+      const cacheDir = '/fixed-vlm-cache';
+      const actualPath = `${cacheDir}/cache.vlm.safetensors/exact_0123456789abcdef.safetensors`;
+      const params = {
+        model: 'test-vlm',
+        instructions: [{ type: 'text' as const, content: 'Be helpful' }],
+      };
+      const first = new MlxCacheController({ cacheDir });
+      first.setModelKind('vlm');
+      await first.bind(
+        mockProcess as unknown as import('./process/index.js').MlxProcess,
+        {},
+      );
+      mockProcess.cachePrefill.mockResolvedValueOnce({
+        cache_path: actualPath,
+        token_count: 123,
+      });
+      const firstHandle = await first.prepare(params);
+      expect(firstHandle.ref).toBe(actualPath);
+
+      const indexPath = `${cacheDir}/cache-index.json`;
+      const indexWrite = vi.mocked(writeFile).mock.calls.find(([path]) =>
+        String(path) === indexPath,
+      );
+      expect(indexWrite).toBeDefined();
+      const indexJson = String(indexWrite![1]);
+      expect(indexJson).toContain('cache.vlm.safetensors/exact_0123456789abcdef.safetensors');
+      expect(indexJson).not.toContain(cacheDir);
+      await first.close();
+
+      mockProcess.cachePrefill.mockClear();
+      mockProcess.tokenize.mockClear();
+      vi.mocked(existsSync).mockImplementation((path: string | URL) => {
+        const value = String(path);
+        return value === indexPath
+          || value === actualPath
+          || value === actualPath + '.meta.json';
+      });
+      vi.mocked(readFile).mockResolvedValue(indexJson);
+      vi.mocked(readFileSync).mockImplementation((path: string | URL | number) => {
+        return String(path) === actualPath + '.meta.json'
+          ? JSON.stringify({ token_count: 123 })
+          : '';
+      });
+
+      const second = new MlxCacheController({ cacheDir });
+      second.setModelKind('vlm');
+      await second.bind(
+        mockProcess as unknown as import('./process/index.js').MlxProcess,
+        {},
+      );
+      const secondHandle = await second.prepare({ ...params, readOnly: true });
+
+      expect(secondHandle.ref).toBe(actualPath);
+      expect(mockProcess.cachePrefill).not.toHaveBeenCalled();
+      expect(mockProcess.tokenize).not.toHaveBeenCalled();
+      await second.close();
     });
 
     it('should create cache with instructions', async () => {

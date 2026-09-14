@@ -1,4 +1,8 @@
 import sys
+from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -91,7 +95,7 @@ def test_stream_generate_does_not_pass_cache_with_images(monkeypatch):
     assert calls["kwargs"]["image"] == ["image.png"]
 
 
-def test_cache_prefill_clone_load_and_generate_with_token_ids(monkeypatch):
+def test_cache_prefill_save_load_and_generate_with_token_ids(monkeypatch, tmp_path):
     backend = _backend()
     created = []
     calls = []
@@ -108,19 +112,62 @@ def test_cache_prefill_clone_load_and_generate_with_token_ids(monkeypatch):
         yield SimpleNamespace(text="prefill")
 
     from mlx_vlm.models import cache as vlm_cache
+    from mlx_vlm import apc as vlm_apc
+
+    class _DiskBlockStore:
+        SUFFIX = ".safetensors"
+        EXACT_PREFIX = "exact_"
+        saved = {}
+
+        def __init__(self, root, namespace="default", num_workers=1):
+            self.dir = Path(root) / namespace
+            self.dir.mkdir(parents=True, exist_ok=True)
+
+        def save_exact_cache(self, cache_hash, token_ids, extra_hash, prompt_cache):
+            raw_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
+            exact_id = hashlib.sha256(raw_hash).hexdigest()[:32]
+            path = self.dir / f"exact_{exact_id}.safetensors"
+            self.saved[(str(self.dir), int(cache_hash))] = (
+                tuple(token_ids),
+                int(extra_hash),
+                deepcopy(prompt_cache),
+            )
+            path.touch()
+
+        def load_exact_cache(self, cache_hash, **kwargs):
+            return self.saved.get((str(self.dir), int(cache_hash)))
+
+        def close(self):
+            pass
 
     monkeypatch.setattr(vlm_cache, "make_prompt_cache", fake_make_prompt_cache)
     monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
+    monkeypatch.setattr(vlm_apc, "DiskBlockStore", _DiskBlockStore)
 
-    result = backend.cache_prefill("memory-ref", "prompt")
+    logical_path = str(tmp_path / "cache.vlm.safetensors")
+    result = backend.cache_prefill(
+        logical_path,
+        "prompt",
+        prefix_offsets=[len("prompt")],
+        prefix_hashes=["prompt-hash"],
+    )
 
-    assert result == {"cache_path": "memory-ref", "token_count": len("prompt")}
+    actual_path = Path(result["cache_path"])
+    assert actual_path.parent == Path(logical_path)
+    assert actual_path.name.startswith("exact_")
+    assert result["token_count"] == len("prompt")
+    assert actual_path.is_file()
+    meta = json.loads(Path(str(actual_path) + ".meta.json").read_text())
+    assert meta["layout"] == "exact_cache_v1"
+    assert meta["token_count"] == len("prompt")
+    assert meta["prefix_offsets"] == [len("prompt")]
+    assert meta["prefix_hashes"] == ["prompt-hash"]
     assert calls[0][0] == "prompt"
     assert calls[0][1]["image"] is None
     assert calls[0][1]["prompt_cache"] is created[0]
     assert calls[0][1]["max_tokens"] == 0
 
-    loaded = backend.load_cache_from_file("memory-ref")
+    loaded = backend.load_cache_from_file(str(actual_path))
     assert loaded is not created[0]
     assert loaded[0] is not created[0][0]
     assert loaded[0].offset == len("prompt")

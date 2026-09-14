@@ -86,8 +86,8 @@ def handle_generate(
         else:
             sys.stderr.write(f"--- prompt\n{prompt}\n")
 
-    # Images are intentionally excluded from Phase 1.5.  Text-only VLM caches
-    # are loaded through the backend-specific cache implementation.
+    # Images are intentionally excluded from Phase 2.  Text-only VLM caches
+    # use the backend-specific exact_cache_v1 disk implementation.
     prompt_cache = None
     cache_tokens = 0
     cache_loaded = None
@@ -110,15 +110,18 @@ def handle_generate(
         else:
             meta_count = (
                 _read_cache_token_count(cache_path)
-                if cache_path and backend.model_kind != "vlm"
+                if cache_path
                 else None
             )
             if meta_count is not None:
                 cache_tokens = meta_count
-            elif backend.model_kind == "vlm":
-                # This backend keeps the mlx-vlm cache in memory, so the cache
-                # object itself is the source of the token count.  The
-                # mlx-vlm 0.7.0 APC/disk helpers are intentionally out of scope.
+            elif (
+                backend.model_kind == "vlm"
+                and cache_path is not None
+                and cache_path.startswith("mlx-vlm-memory://")
+            ):
+                # Keep the Phase 1 in-process ref as a compatibility fallback.
+                # Persistent VLM refs always have the sidecar above.
                 cache_tokens = backend.get_cache_offset(prompt_cache)
             else:
                 sys.stderr.write(

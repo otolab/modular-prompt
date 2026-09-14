@@ -137,7 +137,7 @@ simple-chat では profile の `modelsConfig` に inline の `models` / `drivers
 ローカル統合テストや手元試行で使うモデルは、通常設定と分けて
 `~/.modular-prompt/models.testing.yaml` に置けます。`MODULAR_PROMPT_HOME` を設定している場合は、そのディレクトリ配下を使用します。プロジェクト配下の設定ファイルは暗黙探索しません。
 
-`models.default` には cache 対応の text-only LM または text-only cache を使う MLX VLM を指定できます。MLX VLM の Phase 1.5 cache は同一 Python プロセス内のテキスト専用で、画像を含むリクエスト、ディスク永続化、LM cache との相互利用には対応していません。
+`models.default` には cache 対応の text-only LM または text-only cache を使う MLX VLM を指定できます。MLX VLM の cache は `backend: vlm`（または `auto`）で起動した画像なしリクエストに対して、`mlx-vlm==0.7.0` の `exact_cache_v1` としてディスクへ保存されます。画像を含むリクエストは cache 対象外で、LM の `.safetensors.zip` とは相互利用できません。
 
 ```yaml
 models:
@@ -262,7 +262,7 @@ modular-prompt-runtime setup mlx
 VLM（Vision Language Model）対応モデルを画像なしのテキストのみで使用する場合は、`textOnly`オプションを使用します。
 
 ```typescript
-import { MlxDriver } from '@modular-prompt/driver';
+import { MlxDriver, MlxCacheController } from '@modular-prompt/driver';
 
 const driver = new MlxDriver({
   model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
@@ -280,6 +280,21 @@ await driver.close();
 ```
 
 `textOnly: true`を指定すると、VLM対応モデルを`mlx-lm`（高速起動）で起動し、画像処理なしのテキストのみで使用できます。
+
+`textOnly: true` は互換性のために VLM モデルを LM backend として起動する指定です。VLM backend 自体を使用して text-only cache を永続化する場合は、`backend: 'vlm'`（省略時の `auto` でも可）を指定し、cache controller を共有します。
+
+```typescript
+const cacheController = new MlxCacheController({
+  cacheDir: '/path/to/cache',
+});
+const driver = new MlxDriver({
+  model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
+  backend: 'vlm',
+  cacheController,
+});
+```
+
+VLM cache は `cacheDir/<key>.vlm.safetensors/exact_<hash>.safetensors` に保存され、同じ場所の `.meta.json` に `token_count`、`prefix_offsets`、`prefix_hashes` を記録します。VLM の incremental prefill、画像 feature cache、LM archive との互換性は提供しません。
 
 #### 特殊トークンの確認
 

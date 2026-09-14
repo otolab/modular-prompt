@@ -45,6 +45,24 @@ describe('extract model resolution', () => {
       .toBe('user/default-model');
   });
 
+  it('preserves a top-level MLX backend from models.yaml', () => {
+    writeFileSync(
+      getUserModelsConfigPath(),
+      `models:
+  default:
+    provider: mlx
+    model: user/vlm-model
+    backend: vlm
+`,
+    );
+
+    expect(resolveModelSpec('default', resolveMergedModels())).toMatchObject({
+      provider: 'mlx',
+      model: 'user/vlm-model',
+      backend: 'vlm',
+    });
+  });
+
   it('accepts a raw HF model ID and infers the MLX provider', () => {
     expect(resolveModelSpec('mlx-community/example-4bit', {})).toEqual({
       model: 'mlx-community/example-4bit',

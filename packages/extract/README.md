@@ -110,7 +110,16 @@ models:
 
 モデルが設定されていない構成では、`-m <model-id-or-alias>` を指定するか、user yaml に `models.default` を定義してください。
 
-**MLX バックエンドは mlx-lm（`backend: 'lm'`）に固定**している。extract の Phase 1 では、ディスク／増分キャッシュを使う LM 経路だけを対象にするため。
+**MLX バックエンドは models.yaml の指定に従う**。未指定時は `auto` で、モデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` を指定した VLM 判定モデルも、画像なしの text-only exact KV cache をディスクへ保存して extract session 間で再利用できる。VLM の画像 feature cache と incremental prefill は対象外。
+
+```yaml
+models:
+  default:
+    provider: mlx
+    model: mlx-community/Your-VLM-4bit
+    driverOptions:
+      backend: vlm  # 省略時は auto
+```
 
 ### ライブラリ API
 
@@ -158,13 +167,13 @@ try {
 |-----------|-------------|
 | `session.close()`（デフォルト） | handle を `release` マーク → 次の `runtime.close()` で **KV ファイル削除** |
 | `session.close({ releaseCache: false })` | release しない → **KV ファイルは disk に残る**（CLI はこちら） |
-| `runtime.close()`（固定 cacheDir） | `release` 済みエントリの `.safetensors.zip` を削除 |
+| `runtime.close()`（固定 cacheDir） | `release` 済みエントリの LM/VLM cache files を削除 |
 | `runtime.close()`（一時 cacheDir） | **ディレクトリごと削除** |
 | `add <storename> files...` | 既存 store を staging にコピーし、必須 cache prepare（空 handle は失敗）と manifest 更新が成功した後に入れ替え |
 | `clean <storename> [-d <container>]` | 1 store の manifest + KV キャッシュを再帰削除 |
 | `clean --all [-d <container>]` | コンテナ内の全 store を再帰削除 |
 
-`create` 直後に store 内へ `manifest.json` だけ残って `.safetensors.zip` が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
+`create` 直後に store 内へ `manifest.json` だけ残って cache file が無い場合、以前のバージョンでは `session.close()` が release していたのが原因。CLI は `releaseCache: false` で修正済み。
 
 ### 意図
 
@@ -332,7 +341,7 @@ modular-prompt-extract clean --all [-d <cache-dir>]
 
 `add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` は manifest に保存された ID で再開します。いずれも **mlx-lm バックエンド固定**（キャッシュ互換のため）。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID を store 内の `manifest.json` に保存し、`extract` は manifest に保存された ID で再開します。backend はモデル設定の `backend`（`auto` / `lm` / `vlm`）に従います。VLM は text-only cache のみを使用し、画像入力では cache を読みません。
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 

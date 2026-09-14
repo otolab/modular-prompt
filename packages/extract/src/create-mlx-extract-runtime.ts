@@ -14,8 +14,9 @@ export interface MlxExtractRuntimeOptions {
 
 /**
  * MLX driver + cache controller bundle for extract sessions.
- * Always uses mlx-lm backend (`backend: 'lm'`) — extract remains LM-only in
- * Phase 1 even though text-only VLM prompt caching is supported by the driver.
+ * Preserves the configured MLX backend and defaults to `auto`, so text-only
+ * VLM classification models can use the same disk-backed cache path as LM
+ * models.  Image/vision feature caching remains unsupported.
  * Lifecycle (close) is owned by the caller — not by ExtractSession.
  */
 export interface MlxExtractRuntime {

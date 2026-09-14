@@ -113,20 +113,28 @@ export interface CacheHandle {
 
 キャッシュの一意な参照。
 - MlxCacheController (LM): ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
-- MlxCacheController (VLM): Python プロセス内の opaque ref（例: `mlx-vlm-memory://abc123/def456`）
+- MlxCacheController (VLM): `mlx-vlm` exact snapshot のファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.vlm.safetensors/exact_<hash>.safetensors`）
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
 
-VLM の `mlx-vlm-memory://` ref は、作成元と同じ Python プロセス内でのみ有効です。Python process の `close()` または restart 後は無効になり、unknown ref や cache clone failure は cache miss として cold generate にフォールバックします。ref / handle を別 process へ持ち越すことはできず、ディスクへ永続化されません。
+#### mlx-vlm 0.7.0（Phase 2）
 
-#### mlx-vlm 0.6.17 → 0.7.0（Phase 1.5）
-
-Phase 1.5 では `mlx-vlm==0.7.0` を固定し、Phase 1 の text-only VLM prompt cache 経路を同じインメモリ方式で利用します。今回のバックエンドが呼び出すキャッシュ API のシグネチャは 0.6.17 から変わっていません。
+VLM の通常の ref はディスク上の `exact_cache_v1` snapshot です。作成元 Python process の終了・再起動後も、固定 `cacheDir` の `cache-index.json` に記録された実体（`cacheDir` 相対 path）からロードできます。相対 path にすることで、extract の staging directory を rename しても index を再利用できます。`mlx-vlm-memory://` は Phase 1 互換の明示 ref に限った process-local fallback であり、MlxCacheController や extract の主経路では使用しません。
 
 - `make_prompt_cache(model.language_model, max_kv_size=None)` で空の prompt cache を生成
 - `stream_generate(..., prompt_cache=cache)` で prefill / cached suffix generation に cache を渡す
 - `apc_adapters.clone_cache_entry(entry, *, min_capacity_tokens, eval_targets)` で generation 前に cache entry を複製
 
-0.7.0 では APC coordinator、cache の snapshot / reserve 対応、cache adapter の対応型が拡張されました。`stream_generate` の APC 経路も内部実装が更新されていますが、このバックエンドは `apc_manager` を渡さず、直接の `prompt_cache` と clone adapter だけを使います。そのため、VLM の APC・ディスク永続化・画像 feature cache はこのフェーズの経路には入りません。
+ディスク保存には 0.7.0 の `DiskBlockStore` を使います。論理 cache path を専用 namespace として `DiskBlockStore(root, namespace, num_workers=1)` を開き、prefill 後に次を呼びます。
+
+- `save_exact_cache(cache_hash, token_ids, extra_hash, prompt_cache)` — cache 全体を非同期 snapshot として保存
+- `close()` — writer queue を drain して保存完了を確定
+- `load_exact_cache(cache_hash)` — `exact_<hash>.safetensors` を復元
+
+`APCManager.store_exact_cache()` / `lookup_exact_cache()` も調査しましたが、これは APC のメモリ LRU・prefix lookup と連動する API です。Phase 2 は TypeScript controller が完全一致キーを管理し、VLM incremental prefill を行わないため、backend では直接 `DiskBlockStore.save_exact_cache` / `load_exact_cache` を採用しています。保存形式の metadata は `layout: exact_cache_v1`、`cache_hash`、`extra_hash`、`token_ids`、cache entry 数などです。
+
+VLM の論理 path が `/cache/<key>.vlm.safetensors` の場合、実体は `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors`、sidecar は実体 path に `.meta.json` を付けた `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors.meta.json` です。sidecar には LM と同じ `token_count`、`prefix_offsets`、`prefix_hashes` を保存し、さらに backend 固有の `layout` / `cache_hash` を持ちます。`.vlm.safetensors` は APC namespace directory の名前であり、実体の拡張子は `.safetensors` です。
+
+LM の `.safetensors.zip`（zip 内 `prompt_cache.safetensors`）と VLM の `exact_cache_v1` は別形式で、相互に読み込みません。画像あり VLM は vision feature cache を持たないため、常に cold path です。
 
 依存関係では 0.7.0 が `mlx>=0.32.2`、`mlx-audio>=0.4.8`、`jinja2>=3.1.0` を要求するため、lock file は `mlx-audio==0.5.3` として解決しています。`mlx`、`mlx-lm`、`transformers` の既存 pin / override は維持しています。
 
@@ -203,8 +211,8 @@ Apple Siliconに最適化されたMLXモデル用のKVキャッシュ管理。
 - incremental prefillサポート（既存キャッシュをベースに差分のみprefill）
 - トークンレベルのプレフィックス照合（prefix_hashes）
 - 固定キャッシュディレクトリモードとmanaged一時ディレクトリモード
-- VLM は text-only に限り、cache object を Python プロセス内で保持（Phase 1.5）
-- VLM の画像 cache、ディスク永続化、LM cache との相互利用は対象外
+- VLM は text-only に限り、`mlx-vlm==0.7.0` の `exact_cache_v1` を専用 namespace へ保存
+- VLM の画像 feature cache、incremental prefill、LM cache との相互利用は対象外
 
 **キャッシュディレクトリモード**:
 
@@ -227,6 +235,10 @@ interface CacheIndexEntry {
   reasoningEffort?: string;
   createdAt: string;
   hint?: 'retain' | 'release';
+  /** キャッシュ形式の backend（省略時は旧 LM エントリ） */
+  backend?: 'lm' | 'vlm';
+  /** VLM APC snapshot の cacheDir 相対 path（LM では省略） */
+  path?: string;
 }
 ```
 
@@ -305,6 +317,8 @@ try {
 
 MlxCacheControllerは、既存キャッシュをベースに差分のみをprefillする「incremental prefill」をサポートします。
 
+ただしこれは LM (`.safetensors.zip`) のみです。VLM (`exact_cache_v1`) は Phase 2 では完全一致の disk hit / fresh prefill に限定し、`findBestBase()`、`base_cache_path`、`trim_to_tokens`、prefix reuse は no-op とします。
+
 ### フロー
 
 1. **新しいprepare()呼び出し**
@@ -370,12 +384,12 @@ usage?: {
 |---|---|
 | `promptTokens` | Python ストリーム終端 meta の `prompt_tokens` |
 | `completionTokens` | Python ストリーム終端 meta の `generation_tokens` |
-| `cacheReadTokens` | クエリで使用した KV キャッシュのトークン数（LM は `cacheTrimTokens` または `.meta.json`、VLM は in-memory cache の token count） |
+| `cacheReadTokens` | クエリで使用した KV キャッシュのトークン数（LM/VLM とも `.meta.json`。VLM の exact snapshot は `token_count` を使用） |
 | `cacheWriteTokens` | 同一 `streamQuery` 内の `prepare()` で新規作成した prefill トークン数（`getStats().cacheGrowthTokens` の差分） |
 
 `promptTokens` はキャッシュ分を差し引いた値ではありません。キャッシュヒット分は `cacheReadTokens` で別途報告します。
 
-VLM の cache load が失敗した場合、Python stream meta の `cache_loaded: false` を受けて、そのリクエストの `cacheReadTokens` は 0 になります。prefill 自体が完了していれば `cacheWriteTokens` は実際に作成した prefill 分を示します。
+VLM の cache load が失敗した場合、Python stream meta の `cache_loaded: false` を受けて、そのリクエストの `cacheReadTokens` は 0（フィールド省略）になります。prefill 自体が完了していれば `cacheWriteTokens` は実際に作成した prefill 分を示します。これは process restart 後の disk load 失敗にも適用されます。
 
 ### AbortSignal とキャッシュ
 
