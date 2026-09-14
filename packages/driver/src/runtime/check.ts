@@ -1,9 +1,8 @@
 import type { RuntimeProfile } from './paths.js';
 import { getVenvPath, isRuntimeReady } from './paths.js';
 import {
-  SETUP_MLX_MONOREPO,
-  SETUP_PYTORCH_MONOREPO,
   SETUP_MLX_CLI,
+  SETUP_PYTORCH_CLI,
 } from './setup-commands.js';
 
 export class RuntimeNotReadyError extends Error {
@@ -13,9 +12,9 @@ export class RuntimeNotReadyError extends Error {
   constructor(profile: RuntimeProfile) {
     const setupCommand =
       profile === 'mlx'
-        ? SETUP_MLX_MONOREPO
+        ? SETUP_MLX_CLI
         : profile === 'pytorch'
-          ? SETUP_PYTORCH_MONOREPO
+          ? SETUP_PYTORCH_CLI
           : SETUP_MLX_CLI.replace(' setup mlx', ` setup ${profile}`);
     super(
       `${profile} runtime is not set up at ${getVenvPath(profile)}. ` +

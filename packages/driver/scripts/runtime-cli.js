@@ -171,7 +171,11 @@ function setupPytorch() {
     console.log('\n✅ PyTorch runtime setup completed (cpu-minimal).');
     console.log(`   Home: ${getModularPromptHome()}`);
     console.log('   You can now use PyTorchDriver from @modular-prompt/driver');
-    console.log('   For CUDA / custom environments, see docs/LOCAL_MODEL_SETUP.md');
+    const localModelSetupDoc = join(packageRoot, 'docs', 'LOCAL_MODEL_SETUP.md');
+    const docHint = existsSync(localModelSetupDoc)
+      ? localModelSetupDoc
+      : './docs/LOCAL_MODEL_SETUP.md in @modular-prompt/driver';
+    console.log(`   For CUDA / custom environments, see ${docHint}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('❌ Failed to setup PyTorch runtime:', message);

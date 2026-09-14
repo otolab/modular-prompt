@@ -133,7 +133,7 @@ npm run lint
 - `@modular-prompt/extract` - 文書・対話ログからの情報抽出セッション API
   - KV キャッシュを活用した同一 corpus への繰り返し抽出（`cue` / `inputs` の差し替え）
   - 最小入力型（`MaterialInput` 等）から Element への正規化
-  - 詳細は [packages/extract/README.md](./packages/extract/README.md) を参照
+  - 詳細は [packages/extract/README.md](./packages/extract/README.md) および [docs/packages/extract/API.md](./docs/packages/extract/API.md) を参照
 
 ### 実験パッケージ
 - `@modular-prompt/experiment` - プロンプト比較・評価フレームワーク
