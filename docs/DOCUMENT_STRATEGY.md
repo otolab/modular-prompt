@@ -25,7 +25,34 @@
 | APIリファレンス | インターフェース・型の詳細 | DRIVER_API.md |
 | テスト指針 | テスト方針と品質基準 | TESTING_STRATEGY.md |
 
-**配置ルール**: `docs/` 直下にフラットに配置する。サブディレクトリは原則使わない。
+**配置ルール**: フレームワーク共通の文書は `docs/` 直下（または `docs/models/` 等の例外サブディレクトリ）に配置する。
+
+### npm 同梱ドキュメント（docs/packages/ + packages/*/docs/）
+
+公開 npm パッケージ向けの補足資料は、**正本を `docs/` に集約**し、publish 時に `packages/<name>/docs/` へコピーする。
+
+| 種別 | 正本の配置 | コピー先 | 例 |
+|------|-----------|---------|-----|
+| パッケージ固有 | `docs/packages/<name>/` | `packages/<name>/docs/`（ファイル名はプレフィックス除去） | `docs/packages/extract/API.md` |
+| 共有（複数パッケージ） | `docs/` 直下 | 各パッケージの `docs/` 直下 | `LOCAL_MODEL_SETUP.md` |
+
+**対象パッケージ**（2026-03 時点）: `simple-chat`, `extract`, `driver`, `process`
+
+**マニフェスト**: [package-docs.manifest.json](./package-docs.manifest.json) に、パッケージごとの `include` 一覧を定義する。
+
+**生成コマンド**:
+
+```bash
+# 全対象パッケージ
+pnpm run copy-docs
+
+# 単一パッケージ
+node scripts/copy-package-docs.mjs simple-chat
+```
+
+`packages/*/docs/` は生成物であり、`.gitignore` 対象。編集は `docs/` 側のみ行う。各パッケージの `prepack` / `prepublishOnly` で `copy-docs` を実行する。
+
+**README 内リンク**: 公開パッケージ利用者が読む README からは `./docs/<file>.md` を参照する（monorepo 内でも `pnpm run copy-docs` 後に解決する）。リポジトリ内の `../../docs/` 形式の相対リンクは npm パッケージページでは破損するため、段階的に `./docs/` へ置き換える（#340）。
 
 ### プロセスドキュメント（prompts/）
 
@@ -43,7 +70,7 @@
 
 各パッケージのエントリーポイント。パッケージの目的・基本的な使い方を簡潔に記述する。
 
-**配置ルール**: 各パッケージのルートに `README.md` として配置する。
+**配置ルール**: 各パッケージのルートに `README.md` として配置する。詳細仕様・補足資料は `docs/packages/<name>/` に置き、npm 同梱時は `packages/<name>/docs/` にコピーする（上記「npm 同梱ドキュメント」）。
 
 ### プロジェクトルートドキュメント
 

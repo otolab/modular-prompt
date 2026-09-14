@@ -90,6 +90,7 @@ venv/
 # Generated files during prepack
 packages/*/GUIDE.md
 packages/*/skills/
+packages/*/docs/
 
 # Integration test driver configs (contain API keys)
 **/test-drivers.yaml

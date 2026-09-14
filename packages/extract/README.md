@@ -95,9 +95,19 @@ modular-prompt-extract extract meeting --dry-run '登場人物を列挙'
 ```
 
 `-d` 省略時のデフォルトは `~/.modular-prompt/extract-cache` で、create/add/extract/list/clean 共通の **store コンテナ**を指定します。`MODULAR_PROMPT_HOME` を設定している場合は、その値の下の `extract-cache` が使用されます。`-m` には models.yaml の alias（例: `default`）または生の HF model ID を指定できます。create/add/extract/clean では `<storename>` が必須（`clean --all` を除く）で、コンテナ配下の `<storename>/` が利用されます。
-`-m` を省略した場合は、`~/.modular-prompt/models.yaml`（`MODULAR_PROMPT_HOME` で変更可）の `models.default` が明示されている場合だけ、そのモデルを使用します。同梱モデル、`models` の先頭エントリへの fallback、`MLX_MODEL` による default 差し替えはありません。モデル未設定時は MLX を起動せず、`-m <model-id-or-alias>` を指定するか user yaml に `models.default` を定義するようエラーを表示します。
 
-ローカルテスト用のモデルは `~/.modular-prompt/models.testing.yaml` に分けて置き、手元の extract 実行では `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定できます。設定ファイルのサンプルと統合テストの convention alias は [ローカルモデルセットアップガイド](../../docs/LOCAL_MODEL_SETUP.md) を参照してください。
+### models.yaml 連携
+
+マシン共通のモデル定義は **`~/.modular-prompt/models.yaml`**（単一ファイル。`models/` ディレクトリは非対応）に置きます。`MODULAR_PROMPT_HOME` でホームディレクトリを変更できます。
+
+| 順位 | ソース | 説明 |
+|------|--------|------|
+| 1 | CLI `-m` | 最優先。alias または生の HF model ID |
+| 2 | user yaml の `models.default` | `-m` 省略時のみ使用。同梱 fallback や先頭エントリ自動選択はなし |
+
+`-m` を省略した場合は、`models.default` が user yaml に明示されているときだけそのモデルを使います。未設定時は MLX を起動せず、`-m` 指定または `models.default` 定義を案内するエラーを返します。create は解決後の生 model ID を store の `manifest.json` に保存し、以降の add/extract はその ID を使います。
+
+ローカルテスト用のモデルは `~/.modular-prompt/models.testing.yaml` に分けて置き、手元の extract 実行では `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定できます。設定ファイルのサンプルと統合テストの convention alias は [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
 たとえば `~/.modular-prompt/models.yaml` に次を置くと、`create meeting -m default` と `create meeting` の両方でこのモデルが選ばれます。
 
@@ -184,7 +194,7 @@ try {
 
 `cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。モデル設定がない場合はエラーになります。指定する場合は alias または生の HF model ID を使えます。キャッシュ非対応モードは提供しない。
 
-詳細は [プロンプトキャッシュ設計](../../docs/CACHE_DESIGN.md) および [API 仕様](./API.md) を参照。
+詳細は [プロンプトキャッシュ設計](./docs/CACHE_DESIGN.md) および [API 仕様](./docs/API.md) を参照。
 
 ## サンプル
 
@@ -307,7 +317,7 @@ console.log(result.structured); // schema に沿った JSON
 
 型: `ExtractCorpus`, `ExtractRequest`, `ExtractResult`, `ExtractSession`, `MaterialInput`, `MessageInput`, `ChunkInput` など。
 
-完全な API リファレンスは [API.md](./API.md) を参照。
+完全な API リファレンスは [API.md](./docs/API.md) を参照。
 
 ## CLI（`modular-prompt-extract`）
 
@@ -368,8 +378,8 @@ MLX 統合テストは macOS + MLX 設定がある環境でのみ実行される
 
 ## 関連ドキュメント
 
-- [API 仕様](./API.md)
-- [プロンプトモジュール仕様](../../docs/PROMPT_MODULE_SPEC.md)
-- [プロンプトキャッシュ設計](../../docs/CACHE_DESIGN.md)
-- [ローカルモデルセットアップ](../../docs/LOCAL_MODEL_SETUP.md)
+- [API 仕様](./docs/API.md)
+- [プロンプトモジュール仕様](./docs/PROMPT_MODULE_SPEC.md)
+- [プロンプトキャッシュ設計](./docs/CACHE_DESIGN.md)
+- [ローカルモデルセットアップ](./docs/LOCAL_MODEL_SETUP.md)
 - 親 Issue: [#330](https://github.com/otolab/modular-prompt/issues/330)

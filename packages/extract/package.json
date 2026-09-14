@@ -14,7 +14,8 @@
   "files": [
     "bin",
     "dist",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "scripts": {
     "build": "tsc -b --force",
@@ -25,7 +26,8 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run clean && pnpm build"
+    "prepublishOnly": "pnpm run clean && pnpm build && pnpm run copy-docs",
+    "copy-docs": "node ../../scripts/copy-package-docs.mjs extract"
   },
   "dependencies": {
     "@modular-prompt/core": "workspace:*",
