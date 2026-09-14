@@ -21,8 +21,9 @@ class MlxVlmBackend(ModelBackend):
         self.drafter: Any | None = None
         self.drafter_kind: str | None = None
         self.draft_block_size: int | None = None
-        # mlx-vlm 0.6.17 does not expose the mlx-lm cache archive helpers.
-        # Keep refs and cache objects in this backend process for Phase 1.
+        # Keep refs and cache objects in this backend process for Phase 1.5.
+        # mlx-vlm's APC/disk cache is intentionally not used here: LM/VLM
+        # cache formats remain backend-specific and Phase 2 is out of scope.
         self._prompt_caches: dict[str, list[Any]] = {}
 
     def load(self, model_name: str) -> None:
@@ -69,9 +70,9 @@ class MlxVlmBackend(ModelBackend):
     def _clone_prompt_cache(prompt_cache: list[Any]) -> list[Any]:
         """Detach a cache before generation mutates it.
 
-        mlx-vlm's APC adapters already provide a model-cache-aware clone for
-        the cache classes shipped in 0.6.17.  The deepcopy fallback keeps this
-        backend usable with compatible custom cache objects.
+        mlx-vlm's APC adapters provide a model-cache-aware clone for the cache
+        classes shipped in 0.7.0.  The deepcopy fallback keeps this backend
+        usable with compatible custom cache objects.
         """
         try:
             from mlx_vlm.apc_adapters import clone_cache_entry
@@ -177,10 +178,10 @@ class MlxVlmBackend(ModelBackend):
     ) -> dict:
         """Prefill a text-only VLM cache in the current backend process.
 
-        mlx-vlm owns a cache module separate from mlx-lm.  Its 0.6.17 API can
-        construct and consume prompt caches, but does not provide the LM
-        archive save/load helpers, so ``cache_path`` is an opaque in-process
-        key for this phase.
+        mlx-vlm owns a cache module separate from mlx-lm.  Its 0.7.0 API can
+        construct and consume prompt caches, but this backend does not use the
+        APC/disk helpers, so ``cache_path`` is an opaque in-process key for
+        this phase.
         """
         if self.model is None or self.processor is None:
             raise RuntimeError("Model is not loaded")

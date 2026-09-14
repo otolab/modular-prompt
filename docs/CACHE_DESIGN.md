@@ -118,6 +118,18 @@ export interface CacheHandle {
 
 VLM の `mlx-vlm-memory://` ref は、作成元と同じ Python プロセス内でのみ有効です。Python process の `close()` または restart 後は無効になり、unknown ref や cache clone failure は cache miss として cold generate にフォールバックします。ref / handle を別 process へ持ち越すことはできず、ディスクへ永続化されません。
 
+#### mlx-vlm 0.6.17 → 0.7.0（Phase 1.5）
+
+Phase 1.5 では `mlx-vlm==0.7.0` を固定し、Phase 1 の text-only VLM prompt cache 経路を同じインメモリ方式で利用します。今回のバックエンドが呼び出すキャッシュ API のシグネチャは 0.6.17 から変わっていません。
+
+- `make_prompt_cache(model.language_model, max_kv_size=None)` で空の prompt cache を生成
+- `stream_generate(..., prompt_cache=cache)` で prefill / cached suffix generation に cache を渡す
+- `apc_adapters.clone_cache_entry(entry, *, min_capacity_tokens, eval_targets)` で generation 前に cache entry を複製
+
+0.7.0 では APC coordinator、cache の snapshot / reserve 対応、cache adapter の対応型が拡張されました。`stream_generate` の APC 経路も内部実装が更新されていますが、このバックエンドは `apc_manager` を渡さず、直接の `prompt_cache` と clone adapter だけを使います。そのため、VLM の APC・ディスク永続化・画像 feature cache はこのフェーズの経路には入りません。
+
+依存関係では 0.7.0 が `mlx>=0.32.2`、`mlx-audio>=0.4.8`、`jinja2>=3.1.0` を要求するため、lock file は `mlx-audio==0.5.3` として解決しています。`mlx`、`mlx-lm`、`transformers` の既存 pin / override は維持しています。
+
 **trimTokens**
 
 KVキャッシュを指定トークン数にトリムして読み込む（incremental prefill用）。
@@ -191,7 +203,7 @@ Apple Siliconに最適化されたMLXモデル用のKVキャッシュ管理。
 - incremental prefillサポート（既存キャッシュをベースに差分のみprefill）
 - トークンレベルのプレフィックス照合（prefix_hashes）
 - 固定キャッシュディレクトリモードとmanaged一時ディレクトリモード
-- VLM は text-only に限り、cache object を Python プロセス内で保持（Phase 1）
+- VLM は text-only に限り、cache object を Python プロセス内で保持（Phase 1.5）
 - VLM の画像 cache、ディスク永続化、LM cache との相互利用は対象外
 
 **キャッシュディレクトリモード**:
