@@ -56,6 +56,7 @@ export class MlxCacheController implements PromptCacheController {
   private cacheDirReady = false;
   private closed = false;
   private bound = false;
+  private modelKind: 'lm' | 'vlm' = 'lm';
   private cleanupHandler?: () => void;
   private messageProcessor?: (messages: MlxMessage[]) => MlxMessage[];
   private formatterOptions: FormatterOptions;
@@ -66,6 +67,8 @@ export class MlxCacheController implements PromptCacheController {
   private lastHandleToolsHash?: string;
   private lastHandleReasoningEffort?: string;
   private cacheIndex: CacheIndex = { version: 1, entries: [] };
+  /** Token counts returned by the backend, including VLM in-memory refs. */
+  private cacheTokenCounts = new Map<string, number>();
   private stats = {
     totalQueries: 0,
     memoryHit: 0, diskHit: 0, incremental: 0, fresh: 0,
@@ -86,6 +89,18 @@ export class MlxCacheController implements PromptCacheController {
     }
   }
 
+  /** Select backend-local storage before the controller is bound. */
+  setModelKind(modelKind?: 'lm' | 'vlm'): void {
+    if (this.bound) {
+      throw new Error('MlxCacheController model kind must be set before bind');
+    }
+    this.modelKind = modelKind === 'vlm' ? 'vlm' : 'lm';
+  }
+
+  private get memoryOnly(): boolean {
+    return this.modelKind === 'vlm';
+  }
+
   async bind(
     process: MlxProcess,
     formatterOptions: FormatterOptions,
@@ -97,6 +112,15 @@ export class MlxCacheController implements PromptCacheController {
     this.process = process;
     this.formatterOptions = formatterOptions;
     this.messageProcessor = messageProcessor;
+    if (this.memoryOnly) {
+      // The VLM backend uses this as an opaque per-process ref.  Do not create
+      // or inspect a filesystem path: mlx-vlm 0.6.17 has no LM-compatible
+      // cache archive format.
+      this.cacheDir = `mlx-vlm-memory://${randomBytes(6).toString('hex')}`;
+      this.cacheDirReady = true;
+      this.bound = true;
+      return;
+    }
     if (!this.cacheDir) {
       this.cacheDir = join(tmpdir(), `mlx-prompt-cache-${randomBytes(6).toString('hex')}`);
     }
@@ -113,6 +137,10 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private async ensureCacheDir(): Promise<void> {
+    if (this.memoryOnly) {
+      this.cacheDirReady = true;
+      return;
+    }
     if (this.cacheDirReady) return;
     await mkdir(this.cacheDir, { recursive: true, mode: 0o700 });
     this.cacheDirReady = true;
@@ -151,7 +179,7 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private async saveIndex(): Promise<void> {
-    if (this.managedDir) return;
+    if (this.managedDir || this.memoryOnly) return;
     try {
       await this.ensureCacheDir();
       const release = await lockFile(this.indexPath, { realpath: false });
@@ -315,6 +343,7 @@ export class MlxCacheController implements PromptCacheController {
     params: CachePrepareParams,
     fullTokens: number[],
   ): Promise<BaseCacheInfo | undefined> {
+    if (this.memoryOnly) return undefined;
     const newHashes = this.computeElementHashes(params);
     if (newHashes.length === 0) return undefined;
 
@@ -475,6 +504,9 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   private generateCachePath(cacheKey: string): string {
+    if (this.memoryOnly) {
+      return `${this.cacheDir}/${cacheKey}`;
+    }
     return join(this.cacheDir, `${cacheKey}${CACHE_FILE_EXTENSION}`);
   }
 
@@ -488,7 +520,10 @@ export class MlxCacheController implements PromptCacheController {
   }
 
   readCacheTokenCount(cachePath: string): number {
-    return this.readMetaTokenCount(cachePath);
+    if (this.memoryOnly) {
+      return this.cacheTokenCounts.get(cachePath) ?? 0;
+    }
+    return this.cacheTokenCounts.get(cachePath) ?? this.readMetaTokenCount(cachePath);
   }
 
   getStats() {
@@ -556,9 +591,11 @@ export class MlxCacheController implements PromptCacheController {
     const elementHashes = this.computeElementHashes(params);
     let supersededRef: string | undefined;
 
-    // Disk hit check (exact same cache already exists)
-    if (existsSync(cachePath) && existsSync(cachePath + '.meta.json') && this.readMetaTokenCount(cachePath) > 0) {
+    // Disk hit check (exact same cache already exists).  VLM refs are always
+    // process-local and therefore never take this path.
+    if (!this.memoryOnly && existsSync(cachePath) && existsSync(cachePath + '.meta.json') && this.readMetaTokenCount(cachePath) > 0) {
       this.stats.diskHit++;
+      this.cacheTokenCounts.set(cachePath, this.readMetaTokenCount(cachePath));
       logger.verbose('reusing existing cache file', cacheKey.slice(0, 12));
     } else {
       // Build messages early (needed for tokenize + findBestBase)
@@ -580,20 +617,22 @@ export class MlxCacheController implements PromptCacheController {
 
       // Tokenize to get full token IDs (for findBestBase + prefix computation)
       let fullTokens: number[] | null = null;
-      try {
-        const tokenResult = await this.process!.tokenize(
-          mlxMessages, mlxTools,
-          params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
-        );
-        if (!tokenResult.error && tokenResult.token_ids) {
-          fullTokens = tokenResult.token_ids;
+      if (!this.memoryOnly) {
+        try {
+          const tokenResult = await this.process!.tokenize(
+            mlxMessages, mlxTools,
+            params.reasoningEffort as 'low' | 'medium' | 'high' | undefined,
+          );
+          if (!tokenResult.error && tokenResult.token_ids) {
+            fullTokens = tokenResult.token_ids;
+          }
+        } catch {
+          // tokenize failure — proceed without prefix matching
         }
-      } catch {
-        // tokenize failure — proceed without prefix matching
       }
 
       // Find best base cache
-      const base = fullTokens
+      const base = !this.memoryOnly && fullTokens
         ? await this.findBestBase(params, fullTokens)
         : undefined;
 
@@ -629,7 +668,7 @@ export class MlxCacheController implements PromptCacheController {
       // Compute prefix info if we have full tokens
       let prefixOffsets: number[] | undefined;
       let prefixHashes: string[] | undefined;
-      if (fullTokens) {
+      if (!this.memoryOnly && fullTokens) {
         const prefixInfo = await this.computePrefixInfo(params, fullTokens, mlxTools);
         if (prefixInfo.offsets.length > 0) {
           prefixOffsets = prefixInfo.offsets;
@@ -640,19 +679,26 @@ export class MlxCacheController implements PromptCacheController {
       logger.debug('prefill', cachePath);
       const prefillStart = performance.now();
       try {
-        await this.process!.cachePrefill(
+        const prefillResult = await this.process!.cachePrefill(
           cachePath, mlxMessages,
           base?.path, base?.trimTokens,
           prefixOffsets, prefixHashes,
           mlxTools,
           params.reasoningEffort,
         );
+        const returnedTokenCount = typeof prefillResult?.token_count === 'number'
+          ? prefillResult.token_count
+          : undefined;
+        const tokenCount = returnedTokenCount ?? this.readMetaTokenCount(cachePath);
+        if (tokenCount > 0) {
+          this.cacheTokenCounts.set(cachePath, tokenCount);
+        }
       } catch (e) {
         logger.verbose('prefill failed, skipping cache:', e instanceof Error ? e.message : String(e));
         return MlxCacheController.EMPTY_HANDLE;
       }
       const prefillMs = performance.now() - prefillStart;
-      const newTokens = this.readMetaTokenCount(cachePath);
+      const newTokens = this.readCacheTokenCount(cachePath);
       this.stats.prefillTokens += newTokens;
       if (base) {
         this.stats.incremental++;
@@ -665,8 +711,10 @@ export class MlxCacheController implements PromptCacheController {
         base ? '(incremental)' : '(fresh)');
 
       if (this.closed) {
-        await unlink(cachePath).catch(() => {});
-        await unlink(cachePath + '.meta.json').catch(() => {});
+        if (!this.memoryOnly) {
+          await unlink(cachePath).catch(() => {});
+          await unlink(cachePath + '.meta.json').catch(() => {});
+        }
         return MlxCacheController.EMPTY_HANDLE;
       }
     }
@@ -683,7 +731,9 @@ export class MlxCacheController implements PromptCacheController {
     this.cacheByHash.set(cacheKey, handle);
     this.updateLastCache(handle, elementHashes, params);
 
-    this.addToIndex(params, cacheKey);
+    if (!this.memoryOnly) {
+      this.addToIndex(params, cacheKey);
+    }
     if (supersededRef) {
       this.release(supersededRef);
     }
@@ -723,8 +773,12 @@ export class MlxCacheController implements PromptCacheController {
     ]);
     this.inflightRequests.clear();
     this.cacheByHash.clear();
+    this.cacheTokenCounts.clear();
     this.clearLastCache();
-    if (this.managedDir && this.cacheDir) {
+    if (this.memoryOnly) {
+      // VLM cache objects live in the Python backend process and disappear
+      // with it; there is no filesystem resource to remove here.
+    } else if (this.managedDir && this.cacheDir) {
       await rm(this.cacheDir, { recursive: true, force: true }).catch(() => {});
     } else {
       const released = this.cacheIndex.entries.filter(e => e.hint === 'release');

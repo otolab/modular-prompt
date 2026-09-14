@@ -50,10 +50,7 @@ def handle_tokenize(
             prompt = generate_merged_prompt(messages, capabilities)
 
         # トークン化
-        add_special = tokenizer.bos_token is None or not prompt.startswith(
-            tokenizer.bos_token or ""
-        )
-        token_ids = tokenizer.encode(prompt, add_special_tokens=add_special)
+        token_ids = backend.tokenize_prompt(prompt)
 
         result["token_ids"] = token_ids
         result["token_count"] = len(token_ids)

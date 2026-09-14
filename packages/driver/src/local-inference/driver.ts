@@ -192,10 +192,17 @@ export class LocalInferenceDriver implements AIDriver {
     const trustRemoteCode = samplingOptions.trustRemoteCode;
 
     const externalHandle = queryOptions?.cacheHandle;
-    if (externalHandle?.ref) {
+    // Cache implementations do not carry vision features.  Keep image
+    // requests on the cold path, including externally supplied handles.
+    if (externalHandle?.ref && images.length === 0) {
       cachePath = externalHandle.ref;
       cacheTrimTokens = externalHandle.trimTokens;
-    } else if (this.cacheSupport && queryOptions?.cache !== false && trustRemoteCode === undefined) {
+    } else if (
+      this.cacheSupport &&
+      images.length === 0 &&
+      queryOptions?.cache !== false &&
+      trustRemoteCode === undefined
+    ) {
       const prefix = extractCacheablePrefix(augmentedPrompt);
       const hasCacheableContent = prefix.instructions.length > 0 || prefix.data.length > 0;
 

@@ -22,6 +22,7 @@ export function createMlxCacheSupport(
 
   const mlxCache = controller;
   return {
+    setModelKind: (modelKind) => mlxCache.setModelKind(modelKind),
     async bind(process, formatterOptions, preprocess) {
       await mlxCache.bind(
         process as Parameters<MlxCacheController['bind']>[0],
@@ -29,7 +30,9 @@ export function createMlxCacheSupport(
         preprocess,
       );
     },
-    shouldDisableForVlm: (modelKind) => modelKind === 'vlm',
+    // VLM uses its own in-process cache implementation.  LM/VLM cache
+    // objects are intentionally never shared.
+    shouldDisableForVlm: () => false,
     recordQuery: () => mlxCache.recordQuery?.(),
     getGrowthBefore: () => mlxCache.getStats().cacheGrowthTokens,
     getWriteTokensSince: (growthBefore) =>
@@ -55,13 +58,14 @@ export function bindMlxCacheOnCapabilitiesLoaded(
     formatterOptions: FormatterOptions;
     modelProcessor: { applyChatSpecificProcessing(messages: InferenceMessage[]): InferenceMessage[] };
   },
-  onVlmDisabled: () => void,
+  onVlmDisabled?: () => void,
 ): Promise<void> {
   if (cacheBound.bound) {
     return Promise.resolve();
   }
+  cache.setModelKind?.(runtimeInfo.model_kind);
   if (cache.shouldDisableForVlm(runtimeInfo.model_kind)) {
-    onVlmDisabled();
+    onVlmDisabled?.();
     return Promise.resolve();
   }
   return cache

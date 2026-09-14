@@ -137,7 +137,7 @@ simple-chat では profile の `modelsConfig` に inline の `models` / `drivers
 ローカル統合テストや手元試行で使うモデルは、通常設定と分けて
 `~/.modular-prompt/models.testing.yaml` に置けます。`MODULAR_PROMPT_HOME` を設定している場合は、そのディレクトリ配下を使用します。プロジェクト配下の設定ファイルは暗黙探索しません。
 
-`models.default` には cache 対応の text-only LM を指定してください。MLX VLM は prompt caching が無効になるため、cache 統合テストには使用できません。
+`models.default` には cache 対応の text-only LM または text-only cache を使う MLX VLM を指定できます。MLX VLM の Phase 1 cache は同一 Python プロセス内のテキスト専用で、画像を含むリクエスト、ディスク永続化、LM cache との相互利用には対応していません。
 
 ```yaml
 models:

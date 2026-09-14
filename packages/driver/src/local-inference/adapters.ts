@@ -80,6 +80,8 @@ export interface LocalInferenceCacheSupport {
     formatterOptions: FormatterOptions,
     preprocess: (messages: InferenceMessage[]) => InferenceMessage[],
   ): Promise<void>;
+  /** Configure backend-specific cache storage before bind() is called. */
+  setModelKind?(modelKind?: 'lm' | 'vlm'): void;
   shouldDisableForVlm(modelKind?: 'lm' | 'vlm'): boolean;
   recordQuery(): void;
   getGrowthBefore(): number;

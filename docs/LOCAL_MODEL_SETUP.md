@@ -109,7 +109,7 @@ MODULAR_PROMPT_MODELS_PROFILE=testing simple-chat -m default "こんにちは"
 
 マージ順は **base → `models.yaml` → `models.testing.yaml` → overlay** で、testing 側の同名 alias が通常設定を上書きします。認証情報は example に記載せず、環境変数またはローカルの `drivers` 設定で管理してください。
 
-`models.testing.yaml.example` の `models.default` は MLX cache 統合テスト向けの text-only LM で、`driverOptions.backend: lm` を明示しています。VLM は通常の推論には使用できますが、MLX の prompt caching が無効になるため cache 統合テストには指定しないでください。
+`models.testing.yaml.example` の `models.default` は MLX cache 統合テスト向けの text-only LM で、`driverOptions.backend: lm` を明示しています。MLX VLM もテキストのみの prompt cache（同一 Python プロセス内）を利用できますが、画像を含むリクエスト、ディスク永続化、LM cache との相互利用には対応していません。
 
 ### テスト用モデルのダウンロード
 

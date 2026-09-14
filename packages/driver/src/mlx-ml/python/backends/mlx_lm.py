@@ -83,7 +83,14 @@ class MlxLmBackend(ModelBackend):
         add_special = self.tokenizer.bos_token is None or not prompt.startswith(
             self.tokenizer.bos_token
         )
-        return self.tokenizer.encode(prompt, add_special_tokens=add_special)
+        return list(self.tokenizer.encode(prompt, add_special_tokens=add_special))
+
+    def tokenize_prompt(self, prompt: str) -> list[int]:
+        return self._tokenize_prompt(prompt)
+
+    def trim_cache(self, prompt_cache: list, tokens: int) -> None:
+        if tokens > 0:
+            trim_prompt_cache(prompt_cache, tokens)
 
     @staticmethod
     def _write_cache_meta(
