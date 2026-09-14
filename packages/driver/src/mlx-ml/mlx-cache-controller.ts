@@ -114,8 +114,8 @@ export class MlxCacheController implements PromptCacheController {
     this.messageProcessor = messageProcessor;
     if (this.memoryOnly) {
       // The VLM backend uses this as an opaque per-process ref.  Do not create
-      // or inspect a filesystem path: mlx-vlm 0.6.17 has no LM-compatible
-      // cache archive format.
+      // or inspect a filesystem path: the mlx-vlm 0.7.0 cache format is not
+      // an LM-compatible archive and APC/disk persistence is out of scope.
       this.cacheDir = `mlx-vlm-memory://${randomBytes(6).toString('hex')}`;
       this.cacheDirReady = true;
       this.bound = true;

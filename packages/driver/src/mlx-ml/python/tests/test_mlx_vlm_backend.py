@@ -141,7 +141,9 @@ def test_cache_prefill_clone_load_and_generate_with_token_ids(monkeypatch):
 
     assert generated[0].text == "prefill"
     assert calls[1][0] == [101, 102]
-    assert calls[1][1]["input_ids"] == [[101, 102]]
+    input_ids = calls[1][1]["input_ids"]
+    input_ids_value = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
+    assert input_ids_value == [[101, 102]]
     assert calls[1][1]["prompt_cache"] is loaded
     assert created[0][0].offset == len("prompt")
 
