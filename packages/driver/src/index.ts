@@ -157,7 +157,7 @@ export {
   hasMessageElement,
 } from './local-inference/index.js';
 
-// Python runtime (MLX venv under ~/.modular-prompt)
+// Python runtimes under ~/.modular-prompt
 export {
   MODULAR_PROMPT_DIR,
   RUNTIME_PROFILES,
@@ -167,7 +167,10 @@ export {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchRuntimePythonDir,
   getPytorchPythonDir,
+  getPytorchTemplateDir,
+  PYTORCH_DEFAULT_VARIANT,
   resolvePackageRoot,
   resolvePackageRootFromProcessModule,
   readManifest,
@@ -179,6 +182,8 @@ export {
   SETUP_PYTORCH_MONOREPO,
   SETUP_MLX_CLI,
   SETUP_PYTORCH_CLI,
+  SYNC_PYTORCH_MONOREPO,
+  SYNC_PYTORCH_CLI,
   type RuntimeProfile,
   type RuntimeManifest,
 } from './runtime/index.js';

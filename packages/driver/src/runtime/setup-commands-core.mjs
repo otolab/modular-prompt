@@ -12,3 +12,7 @@ export const SETUP_PYTORCH_MONOREPO = 'pnpm run setup-pytorch';
 /** @modular-prompt/driver を npm インストールした環境向け */
 export const SETUP_MLX_CLI = 'modular-prompt-runtime setup mlx';
 export const SETUP_PYTORCH_CLI = 'modular-prompt-runtime setup pytorch';
+
+/** PyTorch runtime のコード・依存を再同期するコマンド */
+export const SYNC_PYTORCH_MONOREPO = 'pnpm run sync-pytorch';
+export const SYNC_PYTORCH_CLI = 'modular-prompt-runtime sync pytorch';

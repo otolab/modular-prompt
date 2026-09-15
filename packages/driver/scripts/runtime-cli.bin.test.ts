@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -50,6 +58,14 @@ describe('runtime CLI bin', () => {
     const { bin } = JSON.parse(packedPackageJson) as { bin: Record<string, string> };
 
     expect(bin['modular-prompt-runtime']).toBe('./scripts/runtime-cli.js');
+
+    const archiveEntries = execFileSync(
+      'tar',
+      ['-tzf', join(temporaryDirectory, tarballName)],
+      { encoding: 'utf8' },
+    );
+    expect(archiveEntries).toContain('package/src/pytorch/templates/cpu-minimal/pyproject.toml');
+    expect(archiveEntries).not.toContain('package/src/pytorch/python/');
   });
 
   it('documents modular-prompt-runtime in package.json', () => {
@@ -58,5 +74,44 @@ describe('runtime CLI bin', () => {
     ) as { bin: Record<string, string> };
 
     expect(packageJson.bin['modular-prompt-runtime']).toBe('./scripts/runtime-cli.js');
+  });
+
+  it('reports a stale PyTorch driver version in runtime status', () => {
+    const temporaryDirectory = mkdtempSync(
+      join(tmpdir(), 'modular-prompt-driver-status-'),
+    );
+    temporaryDirectories.push(temporaryDirectory);
+
+    const runtimeDir = join(temporaryDirectory, 'runtimes', 'pytorch');
+    mkdirSync(join(runtimeDir, '.venv', 'bin'), { recursive: true });
+    mkdirSync(join(runtimeDir, 'python'), { recursive: true });
+    writeFileSync(join(runtimeDir, '.venv', 'bin', 'python'), '');
+    writeFileSync(join(runtimeDir, 'python', 'pyproject.toml'), '[project]\nname = "test"\n');
+    writeFileSync(join(runtimeDir, 'python', '__main__.py'), '');
+    writeFileSync(
+      join(runtimeDir, 'manifest.json'),
+      JSON.stringify({
+        profile: 'pytorch',
+        variant: 'cpu-minimal',
+        driverVersion: '0.0.0',
+        platform: process.platform,
+        pythonVersion: '3.12',
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    const output = execFileSync(
+      process.execPath,
+      [join(packageRoot, 'scripts', 'runtime-cli.js'), 'setup', '--status'],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, MODULAR_PROMPT_HOME: temporaryDirectory },
+      },
+    );
+
+    expect(output).toContain('pytorch: ready');
+    expect(output).toContain('driver version differs');
+    expect(output).toContain('modular-prompt-runtime sync pytorch');
+    expect(existsSync(join(runtimeDir, 'python', 'pyproject.toml'))).toBe(true);
   });
 });

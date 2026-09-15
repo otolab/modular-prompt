@@ -4,10 +4,11 @@
 
 import { Readable } from 'stream';
 import { existsSync } from 'fs';
+import { join } from 'path';
 import {
-  getPytorchPythonDir,
+  getPytorchRuntimePythonDir,
   getVenvPath,
-  resolvePackageRootFromProcessModule,
+  SETUP_PYTORCH_CLI,
   SETUP_PYTORCH_MONOREPO,
 } from '../../runtime/index.js';
 import { InferenceProcessClient } from '../../local-inference/process-client.js';
@@ -22,8 +23,7 @@ import type {
 import { mapOptionsToPython } from '../../mlx-ml/process/parameter-mapper.js';
 import type { PyTorchQueryOptions } from '../pytorch-options.js';
 
-const packageRoot = resolvePackageRootFromProcessModule(import.meta.url);
-const pytorchPythonDir = getPytorchPythonDir(packageRoot);
+const pytorchPythonDir = getPytorchRuntimePythonDir();
 
 export interface PyTorchProcessOptions {
   /** デフォルトの ~/.modular-prompt/runtimes/pytorch/.venv を上書き */
@@ -51,11 +51,21 @@ export class PyTorchProcess {
   constructor(modelName: string, options?: PyTorchProcessOptions) {
     this.modelName = modelName;
 
+    if (
+      !existsSync(join(pytorchPythonDir, 'pyproject.toml')) ||
+      !existsSync(join(pytorchPythonDir, '__main__.py'))
+    ) {
+      throw new Error(
+        `PyTorch runtime Python project not found at ${pytorchPythonDir}. ` +
+          `Run: ${SETUP_PYTORCH_MONOREPO} (monorepo) or ${SETUP_PYTORCH_CLI} (npm).`,
+      );
+    }
+
     const venvPath = resolveVenvPath(options);
     if (!existsSync(venvPath)) {
       throw new Error(
         `PyTorch venv not found at ${venvPath}. ` +
-          `Run: ${SETUP_PYTORCH_MONOREPO}`,
+          `Run: ${SETUP_PYTORCH_MONOREPO} (monorepo) or ${SETUP_PYTORCH_CLI} (npm).`,
       );
     }
 

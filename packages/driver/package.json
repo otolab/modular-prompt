@@ -15,7 +15,7 @@
     "scripts",
     "skills",
     "src/mlx-ml/python",
-    "src/pytorch/python",
+    "src/pytorch/templates",
     "docs"
   ],
   "bin": {
@@ -23,7 +23,7 @@
     "modular-runtime": "./scripts/runtime-cli.js"
   },
   "scripts": {
-    "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs src/runtime/setup-commands-core.mjs dist/runtime/",
+    "build": "tsc -b --force && cp src/runtime/paths-core.mjs src/runtime/manifest-core.mjs src/runtime/setup-commands-core.mjs src/runtime/pytorch-template-core.mjs dist/runtime/",
     "test": "vitest",
     "test:run": "vitest run",
     "test:system": "vitest run --config vitest.config.system.ts",
@@ -37,6 +37,7 @@
     "setup-mlx": "node scripts/runtime-cli.js setup mlx",
     "setup-pytorch": "node scripts/runtime-cli.js setup pytorch",
     "runtime:status": "node scripts/runtime-cli.js setup --status",
+    "runtime:sync-pytorch": "node scripts/runtime-cli.js sync pytorch",
     "runtime:cleanup": "node scripts/runtime-cli.js cleanup",
     "copy-docs": "node ../../scripts/copy-package-docs.mjs driver"
   },
