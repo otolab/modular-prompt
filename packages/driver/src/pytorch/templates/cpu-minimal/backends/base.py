@@ -60,6 +60,10 @@ class ModelBackend(ABC):
             f"{type(self).__name__} does not support prompt caching"
         )
 
+    def consume_cache_write_tokens(self, cache_path: str) -> int:
+        """Return and clear write usage pending for a cache reference."""
+        return 0
+
     def tokenize_prompt(
         self,
         prompt: str,

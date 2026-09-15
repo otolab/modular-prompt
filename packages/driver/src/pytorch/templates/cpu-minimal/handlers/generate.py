@@ -15,6 +15,7 @@ def _stream_to_stdout(
     prompt_cache=None,
     cache_loaded: bool | None = None,
     cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
 ) -> None:
     if images:
         raise ValueError("PyTorch LIP backend does not support images in Phase 1")
@@ -22,7 +23,11 @@ def _stream_to_stdout(
     if primer is not None:
         print(primer, end="", flush=True)
 
-    last_response = None
+    response_count = 0
+    first_prompt_tokens = None
+    first_cache_read_tokens = None
+    first_cache_write_tokens = None
+    reported_generation_tokens = None
     for response in backend.stream_generate(
         prompt,
         options,
@@ -31,19 +36,44 @@ def _stream_to_stdout(
     ):
         if poll_cancel():
             break
+        response_count += 1
+        response_prompt_tokens = getattr(response, "prompt_tokens", None)
+        if first_prompt_tokens is None and response_prompt_tokens is not None:
+            first_prompt_tokens = response_prompt_tokens
+        if (
+            first_cache_read_tokens is None
+            and getattr(response, "cache_read_tokens", None) is not None
+        ):
+            first_cache_read_tokens = response.cache_read_tokens
+        if (
+            first_cache_write_tokens is None
+            and getattr(response, "cache_write_tokens", None) is not None
+        ):
+            first_cache_write_tokens = response.cache_write_tokens
+        response_generation_tokens = getattr(response, "generation_tokens", None)
+        if response_generation_tokens is not None:
+            reported_generation_tokens = max(
+                reported_generation_tokens or 0,
+                int(response_generation_tokens),
+            )
         print(response.text.replace("\0", "").replace("\x1e", ""), end="", flush=True)
-        last_response = response
 
     meta: dict = {}
-    if last_response is not None:
-        if last_response.prompt_tokens is not None:
-            meta["prompt_tokens"] = last_response.prompt_tokens
-        if last_response.generation_tokens is not None:
-            meta["generation_tokens"] = last_response.generation_tokens
-        if getattr(last_response, "cache_read_tokens", None) is not None:
-            meta["cache_read_tokens"] = last_response.cache_read_tokens
+    if first_prompt_tokens is not None:
+        meta["prompt_tokens"] = first_prompt_tokens
+    if response_count > 0:
+        meta["generation_tokens"] = max(
+            response_count,
+            reported_generation_tokens or 0,
+        )
+    if first_cache_read_tokens is not None:
+        meta["cache_read_tokens"] = first_cache_read_tokens
+    if first_cache_write_tokens is not None:
+        meta["cache_write_tokens"] = first_cache_write_tokens
     if cache_read_tokens > 0 and "cache_read_tokens" not in meta:
         meta["cache_read_tokens"] = cache_read_tokens
+    if cache_write_tokens > 0 and "cache_write_tokens" not in meta:
+        meta["cache_write_tokens"] = cache_write_tokens
     if cache_loaded is not None:
         meta["cache_loaded"] = cache_loaded
 
@@ -78,6 +108,7 @@ def handle_generate(
     prompt_cache = None
     cache_loaded = None
     cache_read_tokens = 0
+    cache_write_tokens = 0
     if cache_path:
         if images:
             cache_loaded = False
@@ -110,6 +141,8 @@ def handle_generate(
                     prompt_cache = None
                     cache_loaded = False
                     cache_read_tokens = 0
+                if prompt_cache is not None:
+                    cache_write_tokens = backend.consume_cache_write_tokens(cache_path)
 
     _stream_to_stdout(
         backend,
@@ -120,4 +153,5 @@ def handle_generate(
         prompt_cache=prompt_cache,
         cache_loaded=cache_loaded,
         cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
     )

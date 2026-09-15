@@ -21,6 +21,7 @@ class StreamChunk:
     generation_tokens: int | None = None
     finish_reason: str | None = None
     cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
 
 
 class TransformersLmBackend(ModelBackend):
@@ -34,11 +35,13 @@ class TransformersLmBackend(ModelBackend):
         self._caches: dict[str, Any] = {}
         self._cache_token_counts: dict[str, int] = {}
         self._cache_token_ids: dict[str, tuple[int, ...]] = {}
+        self._cache_write_token_counts: dict[str, int] = {}
 
     def load(self, model_name: str) -> None:
         self._caches.clear()
         self._cache_token_counts.clear()
         self._cache_token_ids.clear()
+        self._cache_write_token_counts.clear()
 
         trust_remote_code = os.environ.get("PYTORCH_TRUST_REMOTE_CODE", "").lower() in (
             "1",
@@ -189,7 +192,16 @@ class TransformersLmBackend(ModelBackend):
         self._caches[cache_path] = past_key_values
         self._cache_token_counts[cache_path] = len(token_ids)
         self._cache_token_ids[cache_path] = tuple(token_ids)
-        return {"cache_path": cache_path, "token_count": len(token_ids)}
+        self._cache_write_token_counts[cache_path] = len(token_ids)
+        return {
+            "cache_path": cache_path,
+            "token_count": len(token_ids),
+            "cache_write_tokens": len(token_ids),
+        }
+
+    def consume_cache_write_tokens(self, cache_path: str) -> int:
+        """Attribute each prefill write to the first generate using the cache."""
+        return self._cache_write_token_counts.pop(cache_path, 0)
 
     def load_cache_from_file(
         self,
@@ -301,7 +313,9 @@ class TransformersLmBackend(ModelBackend):
                 prompt_tokens=(prompt_token_count + cache_read_tokens)
                 if generation_tokens == 1
                 else None,
-                generation_tokens=generation_tokens if generation_tokens == 1 else None,
+                # Keep a cumulative count so the handler can emit correct
+                # usage after TextIteratorStreamer yields multiple chunks.
+                generation_tokens=generation_tokens,
                 cache_read_tokens=cache_read_tokens if generation_tokens == 1 else None,
             )
             if is_eod_token(chunk, self.tokenizer):

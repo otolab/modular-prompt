@@ -25,8 +25,9 @@ class _Tokenizer:
 
 
 class _Model:
-    def __init__(self, past_key_values):
+    def __init__(self, past_key_values, generated_texts=None):
         self.past_key_values = past_key_values
+        self.generated_texts = generated_texts or ["generated"]
         self.forward_calls = []
         self.generate_calls = []
 
@@ -36,10 +37,15 @@ class _Model:
 
     def generate(self, **kwargs):
         self.generate_calls.append(kwargs)
-        kwargs["streamer"].on_finalized_text("generated", stream_end=True)
+        streamer = kwargs["streamer"]
+        for index, text in enumerate(self.generated_texts):
+            streamer.on_finalized_text(
+                text,
+                stream_end=index == len(self.generated_texts) - 1,
+            )
 
 
-def _backend():
+def _backend(generated_texts=None):
     # Legacy tuple-shaped caches remain supported by Transformers and make the
     # test independent of a specific Cache class implementation.
     key = torch.zeros((1, 1, 2, 4))
@@ -48,7 +54,7 @@ def _backend():
 
     backend = TransformersLmBackend()
     backend.tokenizer = _Tokenizer()
-    backend.model = _Model(past_key_values)
+    backend.model = _Model(past_key_values, generated_texts)
     return backend, past_key_values
 
 
@@ -57,8 +63,14 @@ def test_cache_prefill_keeps_past_key_values_in_process():
 
     result = backend.cache_prefill("memory://prefix", "prefix")
 
-    assert result == {"cache_path": "memory://prefix", "token_count": 2}
+    assert result == {
+        "cache_path": "memory://prefix",
+        "token_count": 2,
+        "cache_write_tokens": 2,
+    }
     assert backend.load_cache_from_file("memory://prefix") is past_key_values
+    assert backend.consume_cache_write_tokens("memory://prefix") == 2
+    assert backend.consume_cache_write_tokens("memory://prefix") == 0
     call = backend.model.forward_calls[0]
     assert call["input_ids"].tolist() == [[1, 2]]
     assert call["input_ids"].device == backend._device
@@ -100,6 +112,26 @@ def test_stream_generate_passes_cached_prefix_and_reports_usage():
     assert chunks[0].prompt_tokens == 3
     assert chunks[0].generation_tokens == 1
     assert chunks[0].cache_read_tokens == 2
+
+
+def test_stream_generate_reports_cumulative_generation_tokens_for_multiple_chunks():
+    backend, past_key_values = _backend(["a", "b", "c"])
+    backend.cache_prefill("memory://prefix", "prefix")
+
+    chunks = list(
+        backend.stream_generate(
+            [3],
+            {"max_tokens": 3, "temperature": 0},
+            prompt_cache=past_key_values,
+        )
+    )
+
+    assert [chunk.text for chunk in chunks] == ["a", "b", "c"]
+    assert [chunk.generation_tokens for chunk in chunks] == [1, 2, 3]
+    assert chunks[0].prompt_tokens == 3
+    assert chunks[1].prompt_tokens is None
+    assert chunks[0].cache_read_tokens == 2
+    assert chunks[1].cache_read_tokens is None
 
 
 def test_cache_prefill_rejects_phase_two_arguments():
