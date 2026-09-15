@@ -68,6 +68,8 @@ const prompt: CompiledPrompt = {
   output: [],
 };
 
+const META_MARKER = '\x1e__META__:';
+
 describe('LocalInferenceDriver', () => {
   let mockProcess: InferenceProcessPort;
   let mockAdapters: LocalInferenceAdapters;
@@ -211,5 +213,48 @@ describe('LocalInferenceDriver', () => {
       'vision-cache',
       undefined,
     );
+  });
+
+  it('maps backend-reported cache usage into QueryResult.usage', async () => {
+    mockProcess.generate = vi.fn().mockResolvedValue(
+      Readable.from([
+        `ok${META_MARKER}{"prompt_tokens":3,"generation_tokens":1,"cache_loaded":true,"cache_read_tokens":2,"cache_write_tokens":4}`,
+      ]),
+    );
+    const driver = createDriver({ mode: 'chat' });
+
+    const result = await driver.query(prompt, {
+      cacheHandle: {
+        ref: 'memory://prefix',
+        includes: { instructions: true, dataElementCount: 0, tools: false },
+      },
+    });
+
+    expect(result.usage).toMatchObject({
+      promptTokens: 3,
+      completionTokens: 1,
+      totalTokens: 4,
+      cacheReadTokens: 2,
+      cacheWriteTokens: 4,
+    });
+  });
+
+  it('maps the terminal LIP generation token count into completion usage', async () => {
+    mockProcess.generate = vi.fn().mockResolvedValue(
+      Readable.from([
+        'answer',
+        ' continuation',
+        `${META_MARKER}{"prompt_tokens":3,"generation_tokens":4}`,
+      ]),
+    );
+    const driver = createDriver({ mode: 'chat' });
+
+    const result = await driver.query(prompt);
+
+    expect(result.usage).toMatchObject({
+      promptTokens: 3,
+      completionTokens: 4,
+      totalTokens: 7,
+    });
   });
 });
