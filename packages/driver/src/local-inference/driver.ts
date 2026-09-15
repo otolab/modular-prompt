@@ -85,31 +85,24 @@ export class LocalInferenceDriver implements AIDriver {
       return;
     }
 
-    try {
-      this.runtimeInfo = await this.process.getCapabilities();
-      this.capabilitiesLoaded = true;
+    this.runtimeInfo = await this.process.getCapabilities();
+    this.capabilitiesLoaded = true;
 
-      if (this.runtimeInfo.special_tokens) {
-        this.formatterOptions.specialTokens = this.runtimeInfo.special_tokens;
-      }
+    if (this.runtimeInfo.special_tokens) {
+      this.formatterOptions.specialTokens = this.runtimeInfo.special_tokens;
+    }
 
-      this.modelProcessor.setRuntimeContext({
-        chatRestrictions: this.runtimeInfo.chat_restrictions,
-        modelKind: this.runtimeInfo.model_kind,
+    this.modelProcessor.setRuntimeContext({
+      chatRestrictions: this.runtimeInfo.chat_restrictions,
+      modelKind: this.runtimeInfo.model_kind,
+    });
+
+    if (this.onCapabilitiesLoaded) {
+      await this.onCapabilitiesLoaded(this.runtimeInfo, {
+        formatterOptions: this.formatterOptions,
+        modelProcessor: this.modelProcessor,
+        process: this.process,
       });
-
-      if (this.onCapabilitiesLoaded) {
-        await this.onCapabilitiesLoaded(this.runtimeInfo, {
-          formatterOptions: this.formatterOptions,
-          modelProcessor: this.modelProcessor,
-          process: this.process,
-        });
-      }
-    } catch (error) {
-      this.queryLogger.log.error(
-        'Failed to get runtime info:',
-        error instanceof Error ? error.message : String(error),
-      );
     }
   }
 
