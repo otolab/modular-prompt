@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 import os
+import sys
 from dataclasses import dataclass
 from threading import Thread
 from typing import Any, Iterator
@@ -18,6 +20,7 @@ class StreamChunk:
     prompt_tokens: int | None = None
     generation_tokens: int | None = None
     finish_reason: str | None = None
+    cache_read_tokens: int | None = None
 
 
 class TransformersLmBackend(ModelBackend):
@@ -28,8 +31,15 @@ class TransformersLmBackend(ModelBackend):
         self.tokenizer: Any | None = None
         self._device_name = device or os.environ.get("PYTORCH_DEVICE", "cpu")
         self._device = torch.device(self._device_name)
+        self._caches: dict[str, Any] = {}
+        self._cache_token_counts: dict[str, int] = {}
+        self._cache_token_ids: dict[str, tuple[int, ...]] = {}
 
     def load(self, model_name: str) -> None:
+        self._caches.clear()
+        self._cache_token_counts.clear()
+        self._cache_token_ids.clear()
+
         trust_remote_code = os.environ.get("PYTORCH_TRUST_REMOTE_CODE", "").lower() in (
             "1",
             "true",
@@ -54,12 +64,175 @@ class TransformersLmBackend(ModelBackend):
     def get_tokenizer(self) -> Any:
         return self.tokenizer
 
+    def tokenize_prompt(
+        self,
+        prompt: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+    ) -> list[int]:
+        if images:
+            raise ValueError("TransformersLmBackend does not support vision input")
+        if self.tokenizer is None:
+            raise RuntimeError("Model is not loaded")
+
+        bos_token = getattr(self.tokenizer, "bos_token", None)
+        add_special = bos_token is None or not prompt.startswith(bos_token or "")
+        token_ids = self.tokenizer.encode(prompt, add_special_tokens=add_special)
+        if hasattr(token_ids, "flatten"):
+            token_ids = token_ids.flatten().tolist()
+        return [int(token_id) for token_id in token_ids]
+
+    @staticmethod
+    def _clone_cache(prompt_cache: Any) -> Any:
+        """Clone model-owned cache state before generation mutates it."""
+        if isinstance(prompt_cache, torch.Tensor):
+            return prompt_cache.clone()
+        if isinstance(prompt_cache, tuple):
+            return tuple(TransformersLmBackend._clone_cache(item) for item in prompt_cache)
+        if isinstance(prompt_cache, list):
+            return [TransformersLmBackend._clone_cache(item) for item in prompt_cache]
+        if hasattr(prompt_cache, "layers"):
+            try:
+                cloned_cache = copy.copy(prompt_cache)
+                cloned_cache.layers = [
+                    TransformersLmBackend._clone_cache(layer)
+                    for layer in prompt_cache.layers
+                ]
+                return cloned_cache
+            except Exception:
+                pass
+        if hasattr(prompt_cache, "keys") and hasattr(prompt_cache, "values"):
+            try:
+                cloned_layer = copy.copy(prompt_cache)
+                cloned_layer.keys = TransformersLmBackend._clone_cache(prompt_cache.keys)
+                cloned_layer.values = TransformersLmBackend._clone_cache(prompt_cache.values)
+                return cloned_layer
+            except Exception:
+                pass
+        if hasattr(prompt_cache, "get_seq_length"):
+            try:
+                return copy.deepcopy(prompt_cache)
+            except Exception:
+                # Some third-party Cache implementations cannot be deep-copied.
+                # Keep the request usable; those implementations must tolerate
+                # in-place generation updates.
+                return prompt_cache
+        return prompt_cache
+
+    def get_cache_offset(self, prompt_cache: Any) -> int:
+        """Return the token count represented by a Transformers cache."""
+        for cache_path, cached in self._caches.items():
+            if cached is prompt_cache:
+                return self._cache_token_counts.get(cache_path, 0)
+
+        get_seq_length = getattr(prompt_cache, "get_seq_length", None)
+        if callable(get_seq_length):
+            try:
+                return int(get_seq_length())
+            except Exception:
+                pass
+
+        if isinstance(prompt_cache, (list, tuple)):
+            for layer in prompt_cache:
+                if isinstance(layer, (list, tuple)) and layer:
+                    key = layer[0]
+                else:
+                    key = layer
+                shape = getattr(key, "shape", None)
+                if shape is not None and len(shape) >= 2:
+                    return int(shape[-2])
+        return super().get_cache_offset(prompt_cache)
+
+    def cache_prefill(
+        self,
+        cache_path: str,
+        prompt: str,
+        base_cache_path: str | None = None,
+        trim_to_tokens: int | None = None,
+        prefix_offsets: list[int] | None = None,
+        prefix_hashes: list[str] | None = None,
+        images: list | None = None,
+        max_image_size: int = 768,
+    ) -> dict:
+        """Prefill and retain a Transformers KV cache in this process.
+
+        ``cache_path`` is an opaque process-local reference in Phase 1.  No
+        file is created; persistence and incremental prefill belong to Phase 2.
+        """
+        if images:
+            raise ValueError("TransformersLmBackend does not support vision input")
+        if base_cache_path is not None or trim_to_tokens is not None:
+            raise ValueError(
+                "TransformersLmBackend does not support incremental prefill in Phase 1"
+            )
+        if prefix_offsets is not None or prefix_hashes is not None:
+            raise ValueError(
+                "TransformersLmBackend does not support cache prefix metadata in Phase 1"
+            )
+        if self.model is None or self.tokenizer is None:
+            raise RuntimeError("Model is not loaded")
+
+        token_ids = self.tokenize_prompt(prompt)
+        if not token_ids:
+            raise ValueError("Cannot prefill an empty prompt")
+
+        input_ids = torch.tensor([token_ids], dtype=torch.long, device=self._device)
+        with torch.no_grad():
+            outputs = self.model(input_ids=input_ids, use_cache=True)
+
+        past_key_values = getattr(outputs, "past_key_values", None)
+        if past_key_values is None and isinstance(outputs, (tuple, list)) and len(outputs) > 1:
+            past_key_values = outputs[1]
+        if past_key_values is None:
+            raise RuntimeError("Transformers model did not return past_key_values")
+
+        self._caches[cache_path] = past_key_values
+        self._cache_token_counts[cache_path] = len(token_ids)
+        self._cache_token_ids[cache_path] = tuple(token_ids)
+        return {"cache_path": cache_path, "token_count": len(token_ids)}
+
+    def load_cache_from_file(
+        self,
+        cache_path: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+        prompt: str | list[int] | None = None,
+    ) -> Any | None:
+        """Resolve a process-local cache reference; disk loading is Phase 2."""
+        if images:
+            sys.stderr.write(
+                f"PyTorch cache does not support vision input: {cache_path}\n"
+            )
+            return None
+
+        prompt_cache = self._caches.get(cache_path)
+        if prompt_cache is None:
+            sys.stderr.write(f"PyTorch cache not found in this process: {cache_path}\n")
+            return None
+
+        cached_token_ids = self._cache_token_ids.get(cache_path)
+        if cached_token_ids is not None and isinstance(prompt, (str, list)):
+            current_token_ids = (
+                self.tokenize_prompt(prompt)
+                if isinstance(prompt, str)
+                else [int(token_id) for token_id in prompt]
+            )
+            if (
+                len(current_token_ids) < len(cached_token_ids)
+                or tuple(current_token_ids[: len(cached_token_ids)]) != cached_token_ids
+            ):
+                sys.stderr.write(
+                    f"PyTorch cache prompt prefix mismatch: {cache_path}\n"
+                )
+                return None
+        return prompt_cache
+
     def stream_generate(
         self,
         prompt: str | list[int],
         options: dict,
         images: list | None = None,
-        prompt_cache: list | None = None,
+        prompt_cache: Any | None = None,
     ) -> Iterator[StreamChunk]:
         if images:
             raise ValueError("TransformersLmBackend does not support vision input")
@@ -73,12 +246,15 @@ class TransformersLmBackend(ModelBackend):
         top_k = final_options.pop("top_k", None)
 
         if isinstance(prompt, list):
-            input_ids = torch.tensor([prompt], device=self._device)
-            prompt_token_count = len(prompt)
+            token_ids = [int(token_id) for token_id in prompt]
         else:
-            encoded = self.tokenizer(prompt, return_tensors="pt")
-            input_ids = encoded["input_ids"].to(self._device)
-            prompt_token_count = int(input_ids.shape[-1])
+            token_ids = self.tokenize_prompt(prompt)
+        if not token_ids:
+            raise ValueError("Cannot generate from an empty prompt")
+
+        input_ids = torch.tensor([token_ids], dtype=torch.long, device=self._device)
+        prompt_token_count = len(token_ids)
+        cache_read_tokens = 0
 
         do_sample = temperature > 0
         gen_kwargs: dict[str, Any] = {
@@ -92,6 +268,20 @@ class TransformersLmBackend(ModelBackend):
             gen_kwargs["top_p"] = float(top_p)
         if top_k is not None:
             gen_kwargs["top_k"] = int(top_k)
+        if prompt_cache is not None:
+            cache_read_tokens = self.get_cache_offset(prompt_cache)
+            gen_kwargs["past_key_values"] = self._clone_cache(prompt_cache)
+            gen_kwargs["cache_position"] = torch.arange(
+                cache_read_tokens,
+                cache_read_tokens + prompt_token_count,
+                dtype=torch.long,
+                device=self._device,
+            )
+            gen_kwargs["attention_mask"] = torch.ones(
+                (1, cache_read_tokens + prompt_token_count),
+                dtype=torch.long,
+                device=self._device,
+            )
 
         streamer = TextIteratorStreamer(
             self.tokenizer,
@@ -108,8 +298,11 @@ class TransformersLmBackend(ModelBackend):
             generation_tokens += 1
             chunk = StreamChunk(
                 text=text,
-                prompt_tokens=prompt_token_count if generation_tokens == 1 else None,
+                prompt_tokens=(prompt_token_count + cache_read_tokens)
+                if generation_tokens == 1
+                else None,
                 generation_tokens=generation_tokens if generation_tokens == 1 else None,
+                cache_read_tokens=cache_read_tokens if generation_tokens == 1 else None,
             )
             if is_eod_token(chunk, self.tokenizer):
                 chunk.finish_reason = "stop"

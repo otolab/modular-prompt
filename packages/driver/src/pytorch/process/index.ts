@@ -14,6 +14,7 @@ import {
 import { InferenceProcessClient } from '../../local-inference/process-client.js';
 import type {
   InferenceCapabilities,
+  InferenceCachePrefillResult,
   InferenceFormatTestResult,
   InferenceMessage,
   InferenceRenderResult,
@@ -117,13 +118,50 @@ export class PyTorchProcess {
     return this.client.tokenize(messages, tools, reasoningEffort);
   }
 
+  async cachePrefill(
+    cachePath: string,
+    messages: InferenceMessage[],
+    baseCachePath?: string,
+    trimToTokens?: number,
+    prefixOffsets?: number[],
+    prefixHashes?: string[],
+    tools?: InferenceToolDefinition[],
+    reasoningEffort?: 'low' | 'medium' | 'high',
+    images?: string[],
+    maxImageSize?: number,
+  ): Promise<InferenceCachePrefillResult> {
+    return this.client.cachePrefill(
+      cachePath,
+      messages,
+      baseCachePath,
+      trimToTokens,
+      prefixOffsets,
+      prefixHashes,
+      tools,
+      reasoningEffort,
+      images,
+      maxImageSize,
+    );
+  }
+
   async generate(
     prompt: string | number[],
     options?: Record<string, unknown>,
     images?: string[],
     maxImageSize?: number,
+    cachePath?: string,
+    cacheTrimTokens?: number,
+    primer?: string,
   ): Promise<Readable> {
-    return this.client.generate(prompt, options, images, maxImageSize);
+    return this.client.generate(
+      prompt,
+      options,
+      images,
+      maxImageSize,
+      cachePath,
+      cacheTrimTokens,
+      primer,
+    );
   }
 
   async exit(): Promise<void> {
