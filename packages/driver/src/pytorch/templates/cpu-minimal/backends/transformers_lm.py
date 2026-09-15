@@ -6,10 +6,15 @@ from threading import Thread
 from typing import Any, Iterator
 
 import torch
+import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 from backends.base import ModelBackend
 from utils.token_utils import is_eod_token
+from utils.transformers_errors import (
+    extract_unsupported_model_type,
+    unsupported_model_type_error,
+)
 
 
 @dataclass
@@ -43,11 +48,22 @@ class TransformersLmBackend(ModelBackend):
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         dtype = torch.float32 if self._device.type == "cpu" else torch.float16
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            trust_remote_code=trust_remote_code,
-            torch_dtype=dtype,
-        )
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                trust_remote_code=trust_remote_code,
+                dtype=dtype,
+            )
+        except (KeyError, ValueError) as error:
+            model_type = extract_unsupported_model_type(error)
+            if model_type is None:
+                raise
+            raise unsupported_model_type_error(
+                model_name,
+                model_type,
+                getattr(transformers, "__version__", "unknown"),
+            ) from error
+
         self.model.to(self._device)
         self.model.eval()
 
