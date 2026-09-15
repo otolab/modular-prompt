@@ -115,7 +115,7 @@ for await (const chunk of stream) {
 await pytorch.exit();
 ```
 
-`cachePrefill()` に渡した prefix と、`generate()` に渡す rendered prompt の先頭 token 列は一致している必要があります。`generate()` は cache を読み込んで suffix だけを推論し、cache 自体への書き戻しは行いません。cache を使えた場合の Python 側 stream meta には `cache_read_tokens`、最初の利用時だけ `cache_write_tokens`、`cache_loaded: true` が含まれ、`cache_loaded: false` の場合は `cacheReadTokens` に算入されません。`baseCachePath` と `trimToTokens` を指定した `cachePrefill()` では、既存 cache の共通 prefix を再利用して suffix だけを prefill します。
+`cachePrefill()` に渡した prefix と、`generate()` に渡す rendered prompt の先頭 token 列は一致している必要があります。`generate()` は cache を読み込んで suffix だけを推論し、cache 自体への書き戻しは行いません。`cacheTrimTokens` を指定した場合も、trim は生成用の clone に適用されるため、登録済みの元 cache ref は変更されません。cache を使えた場合の Python 側 stream meta には `cache_read_tokens`、最初の利用時だけ `cache_write_tokens`、`cache_loaded: true` が含まれ、`cache_loaded: false` の場合は `cacheReadTokens` に算入されません。`baseCachePath` と `trimToTokens` を指定した `cachePrefill()` では、既存 cache の共通 prefix を再利用して suffix だけを prefill します。
 
 契約は次のとおりです。
 

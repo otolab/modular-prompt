@@ -111,6 +111,7 @@ def handle_generate(
                 images=images,
                 max_image_size=max_image_size,
                 prompt=prompt,
+                prefix_token_count=cache_trim_tokens,
             )
             cache_loaded = prompt_cache is not None
 

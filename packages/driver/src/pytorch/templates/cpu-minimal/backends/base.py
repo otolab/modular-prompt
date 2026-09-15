@@ -91,6 +91,7 @@ class ModelBackend(ABC):
         images: list | None = None,
         max_image_size: int = 768,
         prompt: str | list[int] | None = None,
+        prefix_token_count: int | None = None,
     ) -> Any | None:
         """Load a prompt cache, or return None when it is unavailable."""
         return None

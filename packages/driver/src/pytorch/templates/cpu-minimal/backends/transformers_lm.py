@@ -620,6 +620,7 @@ class TransformersLmBackend(ModelBackend):
         self,
         prompt: str | list[int] | None,
         cached_token_ids: tuple[int, ...],
+        prefix_token_count: int | None = None,
     ) -> bool:
         if prompt is None:
             return True
@@ -628,15 +629,27 @@ class TransformersLmBackend(ModelBackend):
             if isinstance(prompt, str)
             else [int(token_id) for token_id in prompt]
         )
+        if prefix_token_count is None:
+            compare_count = len(cached_token_ids)
+        else:
+            try:
+                prefix_token_count = int(prefix_token_count)
+            except (TypeError, ValueError):
+                return False
+            if prefix_token_count < 0 or len(current_token_ids) < prefix_token_count:
+                return False
+            compare_count = min(prefix_token_count, len(cached_token_ids))
         return (
-            len(current_token_ids) >= len(cached_token_ids)
-            and tuple(current_token_ids[: len(cached_token_ids)]) == cached_token_ids
+            len(current_token_ids) >= compare_count
+            and tuple(current_token_ids[:compare_count])
+            == cached_token_ids[:compare_count]
         )
 
     def _load_disk_cache(
         self,
         cache_path: str,
         prompt: str | list[int] | None = None,
+        prefix_token_count: int | None = None,
     ) -> Any | None:
         meta = self._read_cache_meta(cache_path)
         if meta is None:
@@ -665,7 +678,11 @@ class TransformersLmBackend(ModelBackend):
             cache_offset = self._cache_offset_from_value(prompt_cache)
             if cache_offset not in (0, token_count):
                 raise ValueError("cache offset does not match metadata")
-            if not self._prompt_matches_cache(prompt, cached_token_ids):
+            if not self._prompt_matches_cache(
+                prompt,
+                cached_token_ids,
+                prefix_token_count=prefix_token_count,
+            ):
                 sys.stderr.write(f"PyTorch cache prompt prefix mismatch: {cache_path}\n")
                 return None
         except Exception as error:
@@ -812,9 +829,9 @@ class TransformersLmBackend(ModelBackend):
     def trim_cache(self, prompt_cache: Any, tokens: int) -> Any:
         """Remove trailing tokens from a Transformers KV cache.
 
-        Legacy tuple caches are immutable and therefore returned as a trimmed
-        copy.  Transformers ``Cache`` instances are trimmed in place and are
-        returned for callers that use the same code path for both layouts.
+        Legacy tuple caches and Transformers ``Cache`` instances are returned
+        as trimmed copies.  The input cache is never modified, so callers can
+        safely reuse a registered cache reference after a trim.
         """
         tokens = int(tokens)
         if tokens < 0:
@@ -830,6 +847,12 @@ class TransformersLmBackend(ModelBackend):
         if isinstance(prompt_cache, (torch.Tensor, tuple, list)):
             return self._trim_cache_sequence(prompt_cache, target_tokens)
 
+        trimmed_cache = self._clone_cache(prompt_cache)
+        if trimmed_cache is prompt_cache:
+            raise ValueError(
+                "Unable to clone Transformers cache for non-destructive trim"
+            )
+        prompt_cache = trimmed_cache
         layers = getattr(prompt_cache, "layers", None)
         if layers is not None:
             cache_crop = getattr(prompt_cache, "crop", None)
@@ -856,7 +879,6 @@ class TransformersLmBackend(ModelBackend):
                 # Transformers 5.x interprets a negative value as the number
                 # of tokens to remove.
                 cache_crop(-tokens)
-                self._update_registered_cache_offset(prompt_cache, target_tokens)
                 return prompt_cache
 
             for layer in layers:
@@ -868,13 +890,11 @@ class TransformersLmBackend(ModelBackend):
                     max(0, layer_tokens - tokens),
                     tokens,
                 )
-            self._update_registered_cache_offset(prompt_cache, target_tokens)
             return prompt_cache
 
         crop = getattr(prompt_cache, "crop", None)
         if callable(crop):
             crop(-tokens)
-            self._update_registered_cache_offset(prompt_cache, target_tokens)
             return prompt_cache
         raise ValueError(f"Unsupported Transformers cache: {type(prompt_cache).__name__}")
 
@@ -914,17 +934,18 @@ class TransformersLmBackend(ModelBackend):
             base_cache = self.load_cache_from_file(
                 base_cache_path,
                 prompt=token_ids,
+                prefix_token_count=trim_to_tokens,
             )
             if base_cache is not None:
-                prompt_cache = self._clone_cache(base_cache)
                 cache_offset = self.get_cache_offset(base_cache)
                 if trim_to_tokens is not None and cache_offset > trim_to_tokens:
                     prompt_cache = self.trim_cache(
-                        prompt_cache,
+                        base_cache,
                         cache_offset - trim_to_tokens,
                     )
                     cache_offset = trim_to_tokens
                 else:
+                    prompt_cache = self._clone_cache(base_cache)
                     cloned_offset = self.get_cache_offset(prompt_cache)
                     if cloned_offset > 0:
                         cache_offset = cloned_offset
@@ -1024,6 +1045,7 @@ class TransformersLmBackend(ModelBackend):
         images: list | None = None,
         max_image_size: int = 768,
         prompt: str | list[int] | None = None,
+        prefix_token_count: int | None = None,
     ) -> Any | None:
         """Load a process-local or ``pytorch_kv_v1`` disk cache."""
         if images:
@@ -1036,7 +1058,11 @@ class TransformersLmBackend(ModelBackend):
 
         prompt_cache = self._caches.get(cache_path)
         if prompt_cache is None and not self._is_memory_cache_path(cache_path):
-            return self._load_disk_cache(cache_path, prompt=prompt)
+            return self._load_disk_cache(
+                cache_path,
+                prompt=prompt,
+                prefix_token_count=prefix_token_count,
+            )
         if prompt_cache is None:
             sys.stderr.write(f"PyTorch cache not found in this process: {cache_path}\n")
             return None
@@ -1045,6 +1071,7 @@ class TransformersLmBackend(ModelBackend):
         if cached_token_ids is not None and not self._prompt_matches_cache(
             prompt,
             cached_token_ids,
+            prefix_token_count=prefix_token_count,
         ):
             sys.stderr.write(f"PyTorch cache prompt prefix mismatch: {cache_path}\n")
             return None

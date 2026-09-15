@@ -113,7 +113,7 @@ try {
 
 `cachePrefill()` の結果には prefill した `token_count` と `cache_write_tokens` が含まれ、同じ参照を最初に使う `generate()` の LIP meta にも write 数が一度だけ通知されます。キャッシュを使った生成では `cache_read_tokens` と `cache_write_tokens`、実際に参照を読み込めたかどうかは `cache_loaded` で確認できます。
 
-prefill に渡した prompt の token 列は、`generate()` に渡す rendered prompt の先頭と一致している必要があります。`memory://` ref は `PyTorchProcess` または Python 子プロセスの終了・再起動で失われますが、ファイル cache は同じ model ID・dtype・device の backend から再利用できます。不一致や破損したファイルは cache miss として full prompt の cold path にフォールバックします。`baseCachePath` と `trimToTokens` を指定した `cachePrefill()` では、base cache を trim して suffix だけを prefill できます。`PyTorchDriver` の自動 cache と `QueryResult.usage` への prefill 結合は #383 の対象です。
+prefill に渡した prompt の token 列は、`generate()` に渡す rendered prompt の先頭と一致している必要があります。`memory://` ref は `PyTorchProcess` または Python 子プロセスの終了・再起動で失われますが、ファイル cache は同じ model ID・dtype・device の backend から再利用できます。不一致や破損したファイルは cache miss として full prompt の cold path にフォールバックします。`baseCachePath` と `trimToTokens` を指定した `cachePrefill()` では、base cache を trim して suffix だけを prefill できます。`cacheTrimTokens` を指定した `generate()` の trim は生成用 clone に適用され、同じ cache ref の元 state は保持されます。`PyTorchDriver` の自動 cache と `QueryResult.usage` への prefill 結合は #383 の対象です。
 
 ## 主な機能
 

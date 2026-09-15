@@ -23,6 +23,9 @@ class _Tokenizer:
             "prefix": [1, 2],
             "prefix suffix": [1, 2, 3],
             "different suffix": [9, 8, 7],
+            "hello alpha": [1, 2],
+            "hello beta": [1, 3],
+            "hello beta gamma": [1, 3, 4],
         }
         self.token_text = {
             10: "a",
@@ -300,6 +303,98 @@ def test_incremental_prefill_loads_base_trims_and_prefills_suffix(tmp_path):
     assert meta["prefix_hashes"] == ["hash-prefix", "hash-full"]
 
 
+def test_incremental_prefill_validates_only_trimmed_prefix(tmp_path, capsys):
+    base_backend, _ = _backend()
+    base_path = tmp_path / "base.pytorch-cache"
+    base_backend.cache_prefill(str(base_path), "hello alpha")
+
+    backend, model = _incremental_backend()
+    cache_path = tmp_path / "diverged.pytorch-cache"
+    result = backend.cache_prefill(
+        str(cache_path),
+        "hello beta",
+        base_cache_path=str(base_path),
+        trim_to_tokens=1,
+    )
+
+    assert result["token_count"] == 2
+    assert result["cache_write_tokens"] == 1
+    assert model.forward_calls[0]["input_ids"].tolist() == [[3]]
+    assert model.forward_calls[0]["past_key_values"][0][0].shape[-2] == 1
+
+    handle_generate(
+        backend,
+        "hello beta gamma",
+        options={"max_tokens": 1},
+        cache_path=str(cache_path),
+    )
+    output = capsys.readouterr().out
+    meta = json.loads(output.split("\x1e__META__:", 1)[1].split("\0", 1)[0])
+    assert meta["cache_loaded"] is True
+    assert meta["cache_read_tokens"] == 2
+
+
+def test_generate_trim_does_not_mutate_reusable_disk_cache(tmp_path, capsys):
+    cache_path = tmp_path / "prefix.pytorch-cache"
+    backend = _tiny_gpt2_backend()
+    backend.cache_prefill(str(cache_path), "hello alpha")
+    original_cache = backend.load_cache_from_file(
+        str(cache_path),
+        prompt="hello alpha beta",
+    )
+    assert original_cache is not None
+    assert backend.get_cache_offset(original_cache) == 2
+
+    handle_generate(
+        backend,
+        "hello alpha beta",
+        options={"max_tokens": 1, "temperature": 0},
+        cache_path=str(cache_path),
+        cache_trim_tokens=1,
+    )
+    first_output = capsys.readouterr().out
+    first_meta = json.loads(
+        first_output.split("\x1e__META__:", 1)[1].split("\0", 1)[0]
+    )
+    assert first_meta["cache_loaded"] is True
+    assert first_meta["cache_read_tokens"] == 1
+    assert backend.get_cache_offset(original_cache) == 2
+
+    handle_generate(
+        backend,
+        "hello alpha beta",
+        options={"max_tokens": 1, "temperature": 0},
+        cache_path=str(cache_path),
+    )
+    second_output = capsys.readouterr().out
+    second_meta = json.loads(
+        second_output.split("\x1e__META__:", 1)[1].split("\0", 1)[0]
+    )
+    assert second_meta["cache_loaded"] is True
+    assert second_meta["cache_read_tokens"] == 2
+    assert backend.get_cache_offset(original_cache) == 2
+
+
+def test_generate_trim_validates_only_trimmed_prefix(tmp_path, capsys):
+    base_path = tmp_path / "base.pytorch-cache"
+    base_backend = _tiny_gpt2_backend()
+    base_backend.cache_prefill(str(base_path), "hello alpha")
+
+    backend = _tiny_gpt2_backend()
+    handle_generate(
+        backend,
+        "hello beta gamma",
+        options={"max_tokens": 1, "temperature": 0},
+        cache_path=str(base_path),
+        cache_trim_tokens=1,
+    )
+
+    output = capsys.readouterr().out
+    meta = json.loads(output.split("\x1e__META__:", 1)[1].split("\0", 1)[0])
+    assert meta["cache_loaded"] is True
+    assert meta["cache_read_tokens"] == 1
+
+
 def test_trim_cache_supports_legacy_tuple_and_cache_objects():
     backend, past_key_values = _backend()
 
@@ -310,9 +405,11 @@ def test_trim_cache_supports_legacy_tuple_and_cache_objects():
 
     cache = _Cache(3)
     trimmed_cache = backend.trim_cache(cache, 1)
-    assert trimmed_cache is cache
-    assert backend.get_cache_offset(cache) == 2
-    assert cache.layers[0].keys.shape[-2] == 2
+    assert trimmed_cache is not cache
+    assert backend.get_cache_offset(trimmed_cache) == 2
+    assert backend.get_cache_offset(cache) == 3
+    assert trimmed_cache.layers[0].keys.shape[-2] == 2
+    assert cache.layers[0].keys.shape[-2] == 3
 
 
 def test_load_cache_validates_prompt_prefix_without_reading_a_file():

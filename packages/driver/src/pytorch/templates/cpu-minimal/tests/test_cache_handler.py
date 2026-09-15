@@ -27,7 +27,7 @@ class _Backend:
     def __init__(self, cache=None, multi_chunk=False, cache_write_tokens=0):
         self.tokenizer = _Tokenizer()
         self.cache = cache
-        self.cache_offset = 2 if cache is not None else 0
+        self.cache_offsets = {cache: 2} if cache is not None else {}
         self.multi_chunk = multi_chunk
         self.pending_cache_write_tokens = cache_write_tokens
         self.calls = []
@@ -55,12 +55,16 @@ class _Backend:
         return self.cache
 
     def get_cache_offset(self, prompt_cache):
-        return self.cache_offset if prompt_cache is self.cache else 0
+        return self.cache_offsets.get(prompt_cache, 0)
 
     def trim_cache(self, prompt_cache, tokens):
         self.calls.append(("trim", prompt_cache, tokens))
-        self.cache_offset = max(0, self.cache_offset - tokens)
-        return prompt_cache
+        trimmed_cache = _Cache()
+        self.cache_offsets[trimmed_cache] = max(
+            0,
+            self.cache_offsets[prompt_cache] - tokens,
+        )
+        return trimmed_cache
 
     def tokenize_prompt(self, prompt):
         assert prompt == "prefix suffix"
@@ -68,9 +72,7 @@ class _Backend:
 
     def stream_generate(self, prompt, options, images=None, prompt_cache=None):
         self.calls.append(("generate", prompt, options, images, prompt_cache))
-        cache_read_tokens = (
-            self.cache_offset if self.cache is not None and prompt_cache is self.cache else None
-        )
+        cache_read_tokens = self.cache_offsets.get(prompt_cache)
         if self.multi_chunk:
             for index, text in enumerate(("a", "b", "c"), start=1):
                 yield SimpleNamespace(
@@ -175,6 +177,7 @@ def test_generate_loads_cache_and_only_generates_suffix(capsys):
     assert generate_call[4] is cache
     load_call = next(call for call in backend.calls if call[0] == "load")
     assert load_call[2]["prompt"] == "prefix suffix"
+    assert load_call[2]["prefix_token_count"] is None
     assert load_call[2]["images"] is None
     assert load_call[2]["max_image_size"] == 768
     assert ("consume-write", "memory://prefix") in backend.calls
@@ -195,10 +198,32 @@ def test_generate_trims_loaded_cache_before_generating(capsys):
     output = capsys.readouterr().out
     generate_call = next(call for call in backend.calls if call[0] == "generate")
     assert generate_call[1] == [2, 3]
-    assert generate_call[4] is cache
+    assert generate_call[4] is not cache
+    assert backend.get_cache_offset(cache) == 2
+    assert backend.get_cache_offset(generate_call[4]) == 1
     assert ("trim", cache, 1) in backend.calls
+    load_call = next(call for call in backend.calls if call[0] == "load")
+    assert load_call[2]["prefix_token_count"] == 1
     meta = json.loads(output.split("\x1e__META__:", 1)[1].split("\0", 1)[0])
     assert meta["cache_read_tokens"] == 1
+
+    # The original ref remains usable after the trimmed generation.
+    handle_generate(
+        backend,
+        "prefix suffix",
+        options={"max_tokens": 1},
+        cache_path="memory://prefix",
+    )
+    second_output = capsys.readouterr().out
+    second_generate_call = [
+        call for call in backend.calls if call[0] == "generate"
+    ][-1]
+    assert second_generate_call[1] == [3]
+    assert second_generate_call[4] is cache
+    second_meta = json.loads(
+        second_output.split("\x1e__META__:", 1)[1].split("\0", 1)[0]
+    )
+    assert second_meta["cache_read_tokens"] == 2
 
 
 def test_generate_preserves_usage_meta_across_multiple_chunks(capsys):
