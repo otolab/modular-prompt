@@ -63,6 +63,7 @@ export function writeManifest(profile, manifest) {
  * @property {string} pythonVersion
  * @property {string} createdAt
  * @property {string} [variant]
+ * @property {string} [cudaVersion]
  * @property {string} [torchVersion]
  * @property {Record<string, string>} [packages]
  */

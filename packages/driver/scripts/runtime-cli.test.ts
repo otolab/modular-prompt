@@ -76,6 +76,12 @@ process.exit(1);
           env,
         });
 
+      expect(() => runCli('setup', 'pytorch', '--cuda', '12.4')).toThrow(
+        /--cuda can only be used with --variant cuda/,
+      );
+      expect(
+        () => runCli('setup', 'pytorch', '--variant', 'cuda', '--cuda', '12'),
+      ).toThrow(/Invalid CUDA version/);
       runCli('setup', 'pytorch');
       expect(existsSync(join(runtimePythonDir, 'pyproject.toml'))).toBe(true);
       expect(existsSync(join(runtimePythonDir, '__main__.py'))).toBe(true);
@@ -118,10 +124,36 @@ process.exit(1);
         driverVersion,
       });
 
+      runCli('setup', 'pytorch', '--variant=cuda', '--cuda=12.1');
+      expect(JSON.parse(readFileSync(manifestPath, 'utf8'))).toMatchObject({
+        profile: 'pytorch',
+        variant: 'cuda',
+        cudaVersion: '12.1',
+        torchVersion: '2.9.1',
+        driverVersion,
+      });
+      expect(readFileSync(join(runtimePythonDir, '__main__.py'), 'utf8')).toContain(
+        'os.environ.get("PYTORCH_DEVICE", "cuda")',
+      );
+      expect(
+        readFileSync(
+          join(packageRoot, 'src', 'pytorch', 'templates', 'cuda', 'pyproject.toml'),
+          'utf8',
+        ),
+      ).toContain('https://download.pytorch.org/whl/cu124');
+
+      runCli('setup', 'pytorch', '--variant', 'cuda');
+      expect(JSON.parse(readFileSync(manifestPath, 'utf8'))).toMatchObject({
+        variant: 'cuda',
+        cudaVersion: '12.4',
+      });
+
       const uvLog = readFileSync(uvLogPath, 'utf8');
       expect(uvLog).toContain('venv --clear --python 3.12');
       expect(uvLog).toContain('pip install');
       expect(uvLog).toContain('torch==2.9.1');
+      expect(uvLog).toContain('https://download.pytorch.org/whl/cu121');
+      expect(uvLog).toContain('https://download.pytorch.org/whl/cu124');
       expect(uvLog).toContain(' .');
       expect(uvLog).not.toContain(' -e ');
     } finally {

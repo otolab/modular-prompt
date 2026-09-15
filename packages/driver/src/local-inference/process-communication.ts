@@ -25,7 +25,11 @@ export interface ProcessCommunicationConfig {
   extraEnv?: Record<string, string>;
   loggerPrefix?: string;
   loggerContext?: string;
-  processExitErrorMessage?: (code: number | null, signal: string | null) => string;
+  processExitErrorMessage?: (
+    code: number | null,
+    signal: string | null,
+    stderr?: string,
+  ) => string;
 }
 
 export class ProcessCommunication {
@@ -42,7 +46,11 @@ export class ProcessCommunication {
   private processExitError: Error | null = null;
   private processSpawnError: Error | null = null;
   private callbacks: ProcessCommunicationCallbacks;
-  private readonly exitErrorMessage: (code: number | null, signal: string | null) => string;
+  private readonly exitErrorMessage: (
+    code: number | null,
+    signal: string | null,
+    stderr?: string,
+  ) => string;
 
   constructor(config: ProcessCommunicationConfig, callbacks: ProcessCommunicationCallbacks) {
     this.callbacks = callbacks;
@@ -111,11 +119,13 @@ export class ProcessCommunication {
   }
 
   private createProcessExitError(code: number | null, signal: string | null): Error {
-    const baseMessage = this.processSpawnError?.message ?? this.exitErrorMessage(code, signal);
     const stderr = this.stderrBuffer.trim();
-    const message = stderr
-      ? `${baseMessage}\nProcess stderr:\n${stderr}`
-      : baseMessage;
+    const baseMessage =
+      this.processSpawnError?.message ?? this.exitErrorMessage(code, signal, stderr);
+    const message =
+      stderr && !baseMessage.includes(stderr)
+        ? `${baseMessage}\nProcess stderr:\n${stderr}`
+        : baseMessage;
     return new Error(message, { cause: this.processSpawnError ?? undefined });
   }
 
@@ -182,10 +192,7 @@ export class ProcessCommunication {
 
   sendToProcess(data: string): void {
     if (this.processExited) {
-      throw (
-        this.processExitError ??
-        new Error(this.exitErrorMessage(null, null))
-      );
+      throw this.processExitError ?? this.createProcessExitError(null, null);
     }
     this.process.stdin.write(data);
   }

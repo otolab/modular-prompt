@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -65,6 +66,7 @@ describe('runtime CLI bin', () => {
       { encoding: 'utf8' },
     );
     expect(archiveEntries).toContain('package/src/pytorch/templates/cpu-minimal/pyproject.toml');
+    expect(archiveEntries).toContain('package/src/pytorch/templates/cuda/pyproject.toml');
     expect(archiveEntries).not.toContain('package/src/pytorch/python/');
   });
 
@@ -76,23 +78,41 @@ describe('runtime CLI bin', () => {
     expect(packageJson.bin['modular-prompt-runtime']).toBe('./scripts/runtime-cli.js');
   });
 
-  it('reports a stale PyTorch driver version in runtime status', () => {
+  it('smokes torch CUDA availability and reports runtime status details', () => {
     const temporaryDirectory = mkdtempSync(
       join(tmpdir(), 'modular-prompt-driver-status-'),
     );
     temporaryDirectories.push(temporaryDirectory);
 
     const runtimeDir = join(temporaryDirectory, 'runtimes', 'pytorch');
-    mkdirSync(join(runtimeDir, '.venv', 'bin'), { recursive: true });
+    const venvPythonDir = process.platform === 'win32' ? 'Scripts' : 'bin';
+    const venvPython = join(
+      runtimeDir,
+      '.venv',
+      venvPythonDir,
+      'python' + (process.platform === 'win32' ? '.exe' : ''),
+    );
+    mkdirSync(join(runtimeDir, '.venv', venvPythonDir), { recursive: true });
     mkdirSync(join(runtimeDir, 'python'), { recursive: true });
-    writeFileSync(join(runtimeDir, '.venv', 'bin', 'python'), '');
+    if (process.platform === 'win32') {
+      writeFileSync(venvPython, '');
+    } else {
+      writeFileSync(
+        venvPython,
+        '#!/usr/bin/env node\n' +
+          'if (process.argv[2] !== "-c" || !process.argv[3].includes("import torch")) process.exit(2);\n' +
+          'console.log("false");\n',
+      );
+      chmodSync(venvPython, 0o755);
+    }
     writeFileSync(join(runtimeDir, 'python', 'pyproject.toml'), '[project]\nname = "test"\n');
     writeFileSync(join(runtimeDir, 'python', '__main__.py'), '');
     writeFileSync(
       join(runtimeDir, 'manifest.json'),
       JSON.stringify({
         profile: 'pytorch',
-        variant: 'cpu-minimal',
+        variant: 'cuda',
+        cudaVersion: '12.4',
         driverVersion: '0.0.0',
         platform: process.platform,
         pythonVersion: '3.12',
@@ -110,6 +130,11 @@ describe('runtime CLI bin', () => {
     );
 
     expect(output).toContain('pytorch: ready');
+    expect(output).toContain('variant cuda');
+    expect(output).toContain('CUDA 12.4');
+    expect(output).toContain(
+      `CUDA: ${process.platform === 'win32' ? 'unknown' : 'unavailable'}`,
+    );
     expect(output).toContain('driver version differs');
     expect(output).toContain('modular-prompt-runtime sync pytorch');
     expect(existsSync(join(runtimeDir, 'python', 'pyproject.toml'))).toBe(true);

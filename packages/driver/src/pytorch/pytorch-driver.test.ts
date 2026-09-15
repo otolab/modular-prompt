@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PyTorchDriver } from './pytorch-driver.js';
+import type { CompiledPrompt } from '@modular-prompt/core';
+
+const CUDA_UNAVAILABLE_ERROR =
+  'CUDA device requested, but CUDA is not available in this PyTorch runtime. ' +
+  'Install a CUDA-enabled torch wheel and verify the NVIDIA driver.';
 
 const pytorchMocks = vi.hoisted(() => {
   const capabilities = {
@@ -65,6 +70,26 @@ describe('PyTorchDriver', () => {
       driver.query({ instructions: [], data: [], output: [] }),
     ).rejects.toThrow(startupError.message);
     expect(pytorchMocks.process.render).not.toHaveBeenCalled();
+    expect(pytorchMocks.process.generate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a CUDA-specific initialization error from getCapabilities', async () => {
+    const driver = new PyTorchDriver({ model: 'gpt2' });
+    pytorchMocks.process.getCapabilities.mockRejectedValueOnce(new Error(CUDA_UNAVAILABLE_ERROR));
+
+    await expect(driver.getCapabilities()).rejects.toThrow(CUDA_UNAVAILABLE_ERROR);
+  });
+
+  it('rejects a CUDA-specific initialization error before the first query', async () => {
+    const driver = new PyTorchDriver({ model: 'gpt2' });
+    pytorchMocks.process.getCapabilities.mockRejectedValueOnce(new Error(CUDA_UNAVAILABLE_ERROR));
+
+    const prompt: CompiledPrompt = {
+      instructions: [],
+      data: [],
+      output: [],
+    };
+    await expect(driver.query(prompt)).rejects.toThrow(CUDA_UNAVAILABLE_ERROR);
     expect(pytorchMocks.process.generate).not.toHaveBeenCalled();
   });
 });

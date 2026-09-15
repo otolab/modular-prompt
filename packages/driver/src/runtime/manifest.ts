@@ -13,6 +13,8 @@ export interface RuntimeManifest {
   createdAt: string;
   /** PyTorch 等の runtime variant（例: cpu-minimal） */
   variant?: string;
+  /** CUDA variant で選択した CUDA toolkit index のバージョン（例: 12.4） */
+  cudaVersion?: string;
   /** セットアップ時に記録した torch バージョン */
   torchVersion?: string;
   packages?: Record<string, string>;

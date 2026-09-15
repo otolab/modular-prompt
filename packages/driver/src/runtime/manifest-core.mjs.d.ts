@@ -5,6 +5,7 @@ export interface RuntimeManifest {
   pythonVersion: string;
   createdAt: string;
   variant?: string;
+  cudaVersion?: string;
   torchVersion?: string;
   packages?: Record<string, string>;
 }

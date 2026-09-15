@@ -33,6 +33,24 @@ export interface PyTorchProcessOptions {
   device?: string;
 }
 
+export const PYTORCH_CUDA_UNAVAILABLE_ERROR =
+  'CUDA device requested, but CUDA is not available in this PyTorch runtime. ' +
+  'Install a CUDA-enabled torch wheel and verify the NVIDIA driver.';
+
+const PYTORCH_CUDA_ERROR_MARKER =
+  'CUDA device requested, but CUDA is not available';
+
+function formatPytorchProcessExitError(
+  code: number | null,
+  signal: string | null,
+  stderr?: string,
+): string {
+  if (stderr?.includes(PYTORCH_CUDA_ERROR_MARKER)) {
+    return PYTORCH_CUDA_UNAVAILABLE_ERROR;
+  }
+  return `PyTorch process exited unexpectedly (code=${code}, signal=${signal})`;
+}
+
 function resolveVenvPath(options?: PyTorchProcessOptions): string {
   return (
     options?.venvPath ??
@@ -81,8 +99,8 @@ export class PyTorchProcess {
       extraEnv,
       loggerPrefix: 'PyTorch',
       mapSamplingOptions: (opts) => mapOptionsToPython(opts as PyTorchQueryOptions | undefined, false),
-      processExitErrorMessage: (code, signal) =>
-        `PyTorch process exited unexpectedly (code=${code}, signal=${signal})`,
+      processExitErrorMessage: (code, signal, stderr) =>
+        formatPytorchProcessExitError(code, signal, stderr),
     });
   }
 
