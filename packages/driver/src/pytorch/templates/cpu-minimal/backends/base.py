@@ -64,6 +64,12 @@ class ModelBackend(ABC):
         """Return and clear write usage pending for a cache reference."""
         return 0
 
+    def trim_cache(self, prompt_cache: Any, tokens: int) -> Any:
+        """Remove trailing tokens from a backend-owned prompt cache."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support prompt cache trimming"
+        )
+
     def tokenize_prompt(
         self,
         prompt: str,
@@ -85,8 +91,9 @@ class ModelBackend(ABC):
         images: list | None = None,
         max_image_size: int = 768,
         prompt: str | list[int] | None = None,
+        prefix_token_count: int | None = None,
     ) -> Any | None:
-        """Load a prompt cache, or return None when it is unavailable."""
+        """Load a prompt cache, optionally validating only a prompt prefix."""
         return None
 
     def get_cache_offset(self, prompt_cache: Any) -> int:

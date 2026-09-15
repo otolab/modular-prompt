@@ -61,17 +61,9 @@ def handle_cache_prefill(
     images: list | None = None,
     max_image_size: int = 768,
 ) -> None:
-    """Build a process-local PyTorch KV cache from chat messages."""
+    """Build a persistent or process-local PyTorch KV cache from chat messages."""
     if images:
         raise ValueError("PyTorch LIP backend does not support vision input")
-    if base_cache_path is not None or trim_to_tokens is not None:
-        raise ValueError(
-            "PyTorch LIP backend does not support incremental prefill in Phase 1"
-        )
-    if prefix_offsets is not None or prefix_hashes is not None:
-        raise ValueError(
-            "PyTorch LIP backend does not support cache prefix metadata in Phase 1"
-        )
 
     prompt = _render_prefill_prompt(
         backend,
@@ -90,4 +82,7 @@ def handle_cache_prefill(
         images=images,
         max_image_size=max_image_size,
     )
+    if prefix_offsets is not None and prefix_hashes is not None:
+        result["prefix_offsets"] = prefix_offsets
+        result["prefix_hashes"] = prefix_hashes
     print(json.dumps(result), end="\0", flush=True)
