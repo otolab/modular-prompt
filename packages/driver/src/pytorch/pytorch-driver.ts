@@ -23,7 +23,7 @@ export interface PyTorchDriverConfig {
   formatterOptions?: FormatterOptions;
   /** 外部 venv パス（未指定時は ~/.modular-prompt/runtimes/pytorch/.venv） */
   venvPath?: string;
-  /** PYTORCH_DEVICE（例: cpu, cuda）。未指定時は Python 側で cpu */
+  /** PYTORCH_DEVICE（例: cpu, cuda）。未指定時は template の既定値（cpu/cuda） */
   device?: string;
 }
 

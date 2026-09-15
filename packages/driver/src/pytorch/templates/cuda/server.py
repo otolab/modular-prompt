@@ -1,0 +1,140 @@
+"""JSON-RPC風サーバー: stdin/stdoutベースのリクエストディスパッチ"""
+import json
+import sys
+
+from backends.base import ModelBackend
+from handlers import handle_capabilities, handle_completion, handle_format_test, handle_generate, handle_render, handle_tokenize
+from handlers.cancel import request_cancel, reset_cancel
+
+
+MAX_READ_LINES = 10000
+
+
+def read():
+    lines = []
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return None
+        lines.append(line)
+        if len(lines) > MAX_READ_LINES:
+            sys.stderr.write(f"Error: read buffer exceeded {MAX_READ_LINES} lines, discarding\n")
+            lines.clear()
+            continue
+        try:
+            return json.loads(''.join(lines))
+        except json.JSONDecodeError:
+            continue
+
+
+def _is_valid_generate_prompt(prompt) -> bool:
+    """prompt は非空文字列または非空のトークン ID リスト"""
+    if isinstance(prompt, str):
+        return bool(prompt)
+    if isinstance(prompt, list):
+        return len(prompt) > 0
+    return False
+
+
+class Server:
+    def __init__(self, backend: ModelBackend, capabilities: dict):
+        self.backend = backend
+        self.capabilities = capabilities
+
+    def run(self):
+        while True:
+            req = read()
+            if req is None:
+                break
+            self._dispatch(req)
+
+    def _error_response(self, message: str) -> None:
+        sys.stderr.write(f"Error: {message}\n")
+        print(json.dumps({"error": message}), end='\0', flush=True)
+
+    def _dispatch(self, req: dict):
+        method = req.get('method')
+        if not method:
+            self._error_response("'method' field is required")
+            return
+
+        if method == 'cancel':
+            request_cancel()
+            return
+
+        reset_cancel()
+
+        try:
+            if method == 'capabilities':
+                handle_capabilities(self.capabilities)
+
+            elif method == 'format_test':
+                messages = req.get('messages')
+                if not messages:
+                    self._error_response("'messages' field is required for format_test method")
+                    return
+                handle_format_test(self.backend, self.capabilities, messages, req.get('options', {}), req.get('tools'))
+
+            elif method == 'tokenize':
+                messages = req.get('messages')
+                if messages is None:
+                    self._error_response("'messages' field is required for tokenize method")
+                    return
+                handle_tokenize(
+                    self.backend, self.capabilities, messages,
+                    tools=req.get('tools'),
+                    reasoning_effort=req.get('reasoning_effort'),
+                )
+
+            elif method == 'cache_prefill':
+                self._error_response("cache_prefill is not supported by the PyTorch backend")
+
+            elif method == 'render':
+                messages = req.get('messages')
+                if not messages:
+                    self._error_response("'messages' field is required for render method")
+                    return
+                handle_render(
+                    self.backend,
+                    messages,
+                    options=req.get('options', {}),
+                    tools=req.get('tools'),
+                    reasoning_effort=req.get('reasoning_effort'),
+                )
+
+            elif method == 'generate':
+                prompt = req.get('prompt')
+                if not _is_valid_generate_prompt(prompt):
+                    self._error_response("'prompt' field is required for generate method")
+                    return
+                images = req.get('images', [])
+                handle_generate(
+                    self.backend,
+                    prompt,
+                    options=req.get('options', {}),
+                    images=images if images else None,
+                    max_image_size=req.get('maxImageSize', 768),
+                    primer=req.get('primer'),
+                    cache_path=req.get('cache_path'),
+                    cache_trim_tokens=req.get('cache_trim_tokens'),
+                )
+
+            elif method == 'completion':
+                prompt = req.get('prompt')
+                if not prompt:
+                    self._error_response("'prompt' field is required for completion method")
+                    return
+                images = req.get('images', [])
+                handle_completion(
+                    self.backend,
+                    prompt,
+                    options=req.get('options', {}),
+                    images=images if images else None,
+                    max_image_size=req.get('maxImageSize', 768),
+                )
+
+            else:
+                self._error_response(f"Unknown method '{method}'")
+
+        except Exception as e:
+            self._error_response(f"Error processing request: {e}")

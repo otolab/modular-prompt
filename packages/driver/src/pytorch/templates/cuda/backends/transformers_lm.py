@@ -21,12 +21,12 @@ class StreamChunk:
 
 
 class TransformersLmBackend(ModelBackend):
-    """Transformers causal LM backend (text-only, CPU-first)."""
+    """Transformers causal LM backend (text-only, CUDA-first)."""
 
     def __init__(self, device: str | None = None) -> None:
         self.model: Any | None = None
         self.tokenizer: Any | None = None
-        self._device_name = device or os.environ.get("PYTORCH_DEVICE", "cpu")
+        self._device_name = device or os.environ.get("PYTORCH_DEVICE", "cuda")
         self._device = torch.device(self._device_name)
         if self._device.type == "cuda" and not torch.cuda.is_available():
             raise RuntimeError(
