@@ -93,7 +93,7 @@ class ModelBackend(ABC):
         prompt: str | list[int] | None = None,
         prefix_token_count: int | None = None,
     ) -> Any | None:
-        """Load a prompt cache, or return None when it is unavailable."""
+        """Load a prompt cache, optionally validating only a prompt prefix."""
         return None
 
     def get_cache_offset(self, prompt_cache: Any) -> int:

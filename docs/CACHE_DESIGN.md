@@ -288,7 +288,8 @@ PyTorch の Transformers LM は、MLX とは互換でない backend 固有の
 - `memory://` ref は Phase 1 互換の process-local cache として扱い、ファイルを作成しない
 
 PyTorch の cache payload は Transformers の legacy tuple と `Cache` の KV layer を
-扱います。`Cache` の trim は論理 token 数を更新し、static cache の容量は維持します。
+扱います。`Cache` の trim は clone に対して論理 token 数を更新し、static cache の容量は
+維持します。元の cache ref は変更されません。
 PyTorch の cache は MLX / provider 間で共有しません。
 
 ### GoogleGenAICacheController

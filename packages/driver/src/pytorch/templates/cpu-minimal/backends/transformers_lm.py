@@ -707,15 +707,6 @@ class TransformersLmBackend(ModelBackend):
 
         return super().get_cache_offset(prompt_cache)
 
-    def _update_registered_cache_offset(
-        self,
-        prompt_cache: Any,
-        token_count: int,
-    ) -> None:
-        for cache_path, cached in self._caches.items():
-            if cached is prompt_cache:
-                self._cache_token_counts[cache_path] = token_count
-
     @staticmethod
     def _trim_tensor(tensor: torch.Tensor, target_tokens: int) -> torch.Tensor:
         if tensor.ndim < 2:
@@ -1047,7 +1038,7 @@ class TransformersLmBackend(ModelBackend):
         prompt: str | list[int] | None = None,
         prefix_token_count: int | None = None,
     ) -> Any | None:
-        """Load a process-local or ``pytorch_kv_v1`` disk cache."""
+        """Load a cache, optionally validating only ``prefix_token_count`` tokens."""
         if images:
             sys.stderr.write(
                 f"PyTorch cache does not support vision input: {cache_path}\n"
