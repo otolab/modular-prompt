@@ -228,7 +228,9 @@ describe('LocalInferenceDriver', () => {
   it('maps the terminal LIP generation token count into completion usage', async () => {
     mockProcess.generate = vi.fn().mockResolvedValue(
       Readable.from([
-        `answer${META_MARKER}{"prompt_tokens":3,"generation_tokens":4}`,
+        'answer',
+        ' continuation',
+        `${META_MARKER}{"prompt_tokens":3,"generation_tokens":4}`,
       ]),
     );
     const driver = createDriver({ mode: 'chat' });

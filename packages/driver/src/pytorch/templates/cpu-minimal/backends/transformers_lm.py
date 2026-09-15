@@ -28,6 +28,18 @@ class _TokenCountingTextIteratorStreamer(TextIteratorStreamer):
             self.generated_token_count += int(token_count)
         super().put(value)
 
+    def on_finalized_text(self, text: str, stream_end: bool = False) -> None:
+        """Queue text together with the token count at its emission point."""
+        self.text_queue.put((text, self.generated_token_count), timeout=self.timeout)
+        if stream_end:
+            self.text_queue.put(self.stop_signal, timeout=self.timeout)
+
+    def __next__(self) -> tuple[str, int]:
+        value = self.text_queue.get(timeout=self.timeout)
+        if value == self.stop_signal:
+            raise StopIteration()
+        return value
+
 
 @dataclass
 class StreamChunk:
@@ -36,7 +48,6 @@ class StreamChunk:
     generation_tokens: int | None = None
     finish_reason: str | None = None
     cache_read_tokens: int | None = None
-    cache_write_tokens: int | None = None
 
 
 class TransformersLmBackend(ModelBackend):
@@ -321,8 +332,7 @@ class TransformersLmBackend(ModelBackend):
         thread.start()
 
         first_chunk = True
-        for text in streamer:
-            generation_tokens = streamer.generated_token_count
+        for text, generation_tokens in streamer:
             chunk = StreamChunk(
                 text=text,
                 prompt_tokens=(prompt_token_count + cache_read_tokens)

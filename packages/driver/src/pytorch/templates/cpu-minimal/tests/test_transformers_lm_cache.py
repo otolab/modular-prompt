@@ -257,7 +257,11 @@ def test_generate_handler_preserves_usage_for_tiny_gpt2_multiple_chunks(capsys):
     options = {"max_tokens": 4, "temperature": 0}
 
     expected_chunks = list(backend.stream_generate("hello", options))
-    assert len(expected_chunks) > 1
+    # The real TextIteratorStreamer buffers the generated word, so the first
+    # text chunk is empty and the final chunk flushes all four generated
+    # tokens.  Token usage must not be derived from this five-chunk sequence.
+    assert len(expected_chunks) == 5
+    assert expected_chunks[0].text == ""
     expected_generation_tokens = expected_chunks[-1].generation_tokens
     assert expected_generation_tokens == 4
 
