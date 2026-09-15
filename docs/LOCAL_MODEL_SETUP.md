@@ -11,13 +11,13 @@
   - [テスト用モデルのダウンロード](#テスト用モデルのダウンロード)
   - [任意のモデルのダウンロード](#任意のモデルのダウンロード)
   - [トラブルシューティング](#トラブルシューティング-mlx)
-- [PyTorch (Transformers, cpu-minimal)](#pytorch-transformers-cpu-minimal)
+- [PyTorch (Transformers)](#pytorch-transformers)
   - [環境要件](#環境要件-pytorch)
   - [初回セットアップ](#初回セットアップ-pytorch)
   - [サポートモデルと Transformers バージョン](#サポートモデルと-transformers-バージョン)
   - [既存ユーザーからの移行](#既存ユーザーからの移行-pytorch)
   - [依存・runtime のカスタマイズ](#依存runtime-のカスタマイズ)
-  - [手動カスタマイズ](#手動カスタマイズ-pytorch)
+  - [カスタム index / 手動カスタマイズ](#カスタム-index--手動カスタマイズ-pytorch)
   - [トラブルシューティング](#トラブルシューティング-pytorch)
 - [Ollama](#ollama)
   - [インストール](#インストール)
@@ -196,17 +196,18 @@ npm run download-model
 
 より小さいモデル（テスト用の270MBモデルなど）を使用するか、他のアプリケーションを終了してメモリを確保してください。
 
-## PyTorch (Transformers, cpu-minimal)
+## PyTorch (Transformers)
 
 Windows / Linux など **MLX が使えない環境**向けの Thin Python 推論ドライバ（Local Inference Protocol）。
 
-- **自動セットアップは CPU 最小構成のみ**（`torch` CPU wheel + `transformers`）
-- CUDA / GPU / 量子化は **手動調整**（下記「手動カスタマイズ」）
+- `cpu-minimal`: `torch` CPU wheel + `transformers` の最小構成
+- `cuda`: CUDA 対応 `torch` wheel + `transformers`（デフォルトは CUDA 12.4 / `cu124`）
+- 量子化や追加依存は下記「カスタム index / 手動カスタマイズ」で調整
 - Linux + NVIDIA で本番寄りの推論が必要な場合は [vLLM](#vllm-cuda-gpu) を検討
 
 ### 環境要件 (PyTorch)
 
-- **OS**: Windows / Linux / macOS（macOS では MLX を推奨）
+- **OS**: Windows / Linux / macOS（CUDA variant は NVIDIA ドライバーが使える Linux / Windows 向け。macOS では MLX を推奨）
 - **Python**: 3.12（`setup-pytorch` が venv に使用）
 - **uv**: パッケージマネージャー（未インストール時は自動インストール）
 
@@ -222,13 +223,36 @@ pnpm --filter @modular-prompt/driver run runtime:status
 
 Python プロジェクトは `~/.modular-prompt/runtimes/pytorch/python/` に、仮想環境は
 `~/.modular-prompt/runtimes/pytorch/.venv` に作成されます。パッケージ内の
-`src/pytorch/templates/cpu-minimal/` は初回 seed 用の template であり、実行時には参照されません。
+`src/pytorch/templates/cpu-minimal/` と `src/pytorch/templates/cuda/` は初回 seed 用の template であり、実行時には参照されません。
+
+#### CUDA variant
+
+NVIDIA GPU を使う場合は `cuda` variant を選択します。CUDA index のデフォルトは `cu124` です。
+
+```bash
+# monorepo ルートから
+pnpm --filter @modular-prompt/driver run setup-pytorch -- --variant cuda
+
+# CUDA 12.1 の wheel を選択する例
+pnpm --filter @modular-prompt/driver run setup-pytorch -- --variant cuda --cuda 12.1
+
+# @modular-prompt/driver を npm インストールした場合
+modular-prompt-runtime setup pytorch --variant cuda --cuda 12.4
+```
+
+`--cuda 12.4` は PyTorch の `cu124` index に解決されます。`cu124` のような index 名も指定できます。
+セットアップ時に NVIDIA GPU / ドライバーを検出できない場合も、警告を表示して続行します。実行前に
+`runtime:status` の CUDA 状態を確認してください。
 
 **セットアップ内容：**
 
 1. `uv venv --python 3.12`
-2. `torch==2.9.1` を **CPU index** からインストール
-3. `transformers` 等の最小依存を runtime 側プロジェクトからインストール
+2. `torch==2.9.1` を variant に対応する index からインストール（CPU は CPU index、CUDA は `cu124` など）
+3. `transformers` 等の依存を runtime 側プロジェクトからインストール
+
+`runtime:status` は、インストール済み manifest の `variant` / `cudaVersion` / `torchVersion` と、CUDA variant の
+`torch.cuda.is_available()` の結果を表示します。CUDA variant の既定 device は `cuda` です。CUDA が利用できない場合は、
+推論開始時に NVIDIA ドライバーと CUDA 対応 torch wheel の確認を促すエラーになります。
 
 ### サポートモデルと Transformers バージョン
 
@@ -292,15 +316,18 @@ modular-prompt-runtime sync pytorch
 runtime 側へ同期します。runtime 側の `pyproject.toml` と `uv.lock` は上書きされません。
 template は package 更新で置き換わるため、依存設定や永続化したい変更は runtime 側を編集してください。
 
-### 手動カスタマイズ (PyTorch)
+### カスタム index / 手動カスタマイズ (PyTorch)
 
-#### CUDA 版 torch への差し替え
+自動セットアップが対応していない PyTorch index や torch バージョンを使う場合は、runtime 側の venv に手動で差し替えます。
+自動セットアップ済みの CUDA variant を別の index に変更する場合にも利用できます。
+
+#### torch の手動差し替え
 
 ```bash
 PYTORCH_DIR=~/.modular-prompt/runtimes/pytorch
 cd "$PYTORCH_DIR/python"
 
-# 例: CUDA 12.4（環境に合わせて index を選ぶ）
+# 例: カスタム CUDA index（環境に合わせて index を選ぶ）
 UV_PROJECT_ENVIRONMENT=$PYTORCH_DIR/.venv \
   uv pip install --upgrade torch --index-url https://download.pytorch.org/whl/cu124
 
@@ -337,7 +364,8 @@ vi ~/.modular-prompt/runtimes/pytorch/python/pyproject.toml
 modular-prompt-runtime sync pytorch
 ```
 
-モデル要件に応じてユーザーが選択する想定です。`setup-pytorch` には含めません。
+モデル要件に応じてユーザーが選択する想定です。現行の CUDA template は `device_map` を使わず model を指定 device に移すため、
+`accelerate` は標準依存に含めていません。必要なモデルで使う場合は runtime 側へ追加してください。
 
 ### トラブルシューティング (PyTorch)
 
@@ -349,7 +377,15 @@ pnpm run setup-pytorch
 
 #### CUDA が有効にならない
 
-手動カスタマイズの CUDA 差し替え手順を実施し、ドライバと CUDA バージョンの整合を確認してください。CPU に戻す場合:
+まず状態を確認します。
+
+```bash
+modular-prompt-runtime setup --status
+```
+
+`CUDA: unavailable` または `CUDA: unknown` の場合は、NVIDIA ドライバー、GPU の可視性、選択した
+CUDA index の torch wheel を確認してください。CUDA 版 torch を別の index に差し替える必要がある場合は、
+上記「カスタム index / 手動カスタマイズ」の手順を実施します。CPU に戻す場合:
 
 ```bash
 pnpm --filter @modular-prompt/driver run runtime:cleanup pytorch -- --yes

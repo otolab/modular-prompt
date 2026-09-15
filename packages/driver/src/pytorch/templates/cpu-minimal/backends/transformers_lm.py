@@ -69,6 +69,11 @@ class TransformersLmBackend(ModelBackend):
         self.tokenizer: Any | None = None
         self._device_name = device or os.environ.get("PYTORCH_DEVICE", "cpu")
         self._device = torch.device(self._device_name)
+        if self._device.type == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA device requested, but CUDA is not available in this PyTorch runtime. "
+                "Install a CUDA-enabled torch wheel and verify the NVIDIA driver."
+            )
         self._model_id: str | None = None
         self._model_dtype: str | None = None
         self._caches: dict[str, Any] = {}

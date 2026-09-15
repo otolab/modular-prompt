@@ -7,6 +7,7 @@ vi.mock('./process-communication.js', () => ({
     sendToProcess: vi.fn(),
     createNewStream: vi.fn(),
     cancelActiveStream: vi.fn(),
+    getTerminalError: vi.fn(() => null),
     isStreamingActive: vi.fn(() => false),
     isJsonBuffering: vi.fn(() => false),
     exit: vi.fn(),

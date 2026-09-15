@@ -4,14 +4,14 @@
  * Python runtime 管理 CLI
  *
  * setup mlx     — ~/.modular-prompt/runtimes/mlx に venv を作成
- * setup pytorch — ~/.modular-prompt/runtimes/pytorch に cpu-minimal venv を作成
+ * setup pytorch — ~/.modular-prompt/runtimes/pytorch に選択した variant の venv を作成
  * sync pytorch  — PyTorch runtime のコードと依存を更新
  * setup --status
  * cleanup mlx [--yes]
  * cleanup --all [--yes]
  */
 
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { existsSync, readFileSync, rmSync, mkdirSync } from 'fs';
 import { createInterface } from 'readline';
 import { dirname, join } from 'path';
@@ -127,6 +127,9 @@ function setupMlx() {
 }
 
 const PYTORCH_CPU_INDEX = 'https://download.pytorch.org/whl/cpu';
+const PYTORCH_CUDA_INDEX_BASE = 'https://download.pytorch.org/whl';
+const PYTORCH_DEFAULT_CUDA_VERSION = '12.4';
+const PYTORCH_TORCH_VERSION = '2.9.1';
 const PYTORCH_PYTHON_VERSION = '3.12';
 
 function resolveVenvPython(venvPath) {
@@ -135,23 +138,106 @@ function resolveVenvPython(venvPath) {
     : join(venvPath, 'bin', 'python');
 }
 
-function installPytorchProject(pythonDir, venvPath, env, { installTorch = false } = {}) {
-  const venvPython = resolveVenvPython(venvPath);
-  if (installTorch) {
-    execSync(`uv pip install --python "${venvPython}" "torch==2.9.1" --index-url ${PYTORCH_CPU_INDEX}`, {
-      cwd: pythonDir,
-      stdio: 'inherit',
-      env,
-    });
+function resolveCudaVersion(value = PYTORCH_DEFAULT_CUDA_VERSION) {
+  const raw = String(value).trim().toLowerCase();
+  const match =
+    raw.match(/^(?:cu)?(\d{1,2})\.(\d{1,2})$/) ??
+    raw.match(/^(?:cu)?(\d{2})(\d{1,2})$/);
+  if (!match) {
+    throw new Error(
+      `Invalid CUDA version "${value}". Use a version such as 12.4 or cu124.`,
+    );
   }
-  execSync(`uv pip install --python "${venvPython}" .`, {
-    cwd: pythonDir,
-    stdio: 'inherit',
-    env,
-  });
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (major < 1 || minor > 99) {
+    throw new Error(
+      `Invalid CUDA version "${value}". Use a version such as 12.4 or cu124.`,
+    );
+  }
+
+  return {
+    version: `${major}.${minor}`,
+    index: `${PYTORCH_CUDA_INDEX_BASE}/cu${major}${minor}`,
+  };
 }
 
-function writePytorchManifest(previousManifest, variant, packages) {
+function resolvePytorchIndex(variant, cudaVersion) {
+  if (variant !== 'cuda') {
+    return { index: PYTORCH_CPU_INDEX };
+  }
+  return resolveCudaVersion(cudaVersion);
+}
+
+function hasNvidiaGpu() {
+  try {
+    const output = execFileSync(
+      'nvidia-smi',
+      ['--query-gpu=name', '--format=csv,noheader,nounits'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return output.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function checkCudaAvailability(venvPath) {
+  const venvPython = resolveVenvPython(venvPath);
+  if (!existsSync(venvPython)) {
+    return null;
+  }
+
+  try {
+    const output = execFileSync(
+      venvPython,
+      ['-c', 'import torch; print(torch.cuda.is_available())'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const value = output.trim().split(/\s+/).at(-1)?.toLowerCase();
+    if (value === 'true') {
+      return true;
+    }
+    if (value === 'false') {
+      return false;
+    }
+  } catch {
+    // A partially installed runtime or an unavailable torch import is reported as unknown.
+  }
+  return null;
+}
+
+function installPytorchProject(
+  pythonDir,
+  venvPath,
+  env,
+  { installTorch = false, torchIndex = PYTORCH_CPU_INDEX } = {},
+) {
+  const venvPython = resolveVenvPython(venvPath);
+  if (installTorch) {
+    execFileSync(
+      'uv',
+      [
+        'pip',
+        'install',
+        '--python',
+        venvPython,
+        `torch==${PYTORCH_TORCH_VERSION}`,
+        '--index-url',
+        torchIndex,
+      ],
+      { cwd: pythonDir, stdio: 'inherit', env },
+    );
+  }
+  execFileSync(
+    'uv',
+    ['pip', 'install', '--python', venvPython, '.'],
+    { cwd: pythonDir, stdio: 'inherit', env },
+  );
+}
+
+function writePytorchManifest(previousManifest, variant, packages, cudaVersion) {
   const manifest = {
     ...(previousManifest ?? {}),
     profile: 'pytorch',
@@ -161,18 +247,40 @@ function writePytorchManifest(previousManifest, variant, packages) {
     pythonVersion: previousManifest?.pythonVersion ?? PYTORCH_PYTHON_VERSION,
     createdAt: new Date().toISOString(),
   };
+
+  if (variant === 'cuda') {
+    manifest.cudaVersion = resolveCudaVersion(
+      cudaVersion ?? previousManifest?.cudaVersion ?? PYTORCH_DEFAULT_CUDA_VERSION,
+    ).version;
+  } else {
+    delete manifest.cudaVersion;
+  }
+
   if (packages) {
-    manifest.torchVersion = packages.torch;
+    if (packages.torch) {
+      manifest.torchVersion = packages.torch;
+    }
     manifest.packages = packages;
+  }
+  if (!manifest.torchVersion) {
+    manifest.torchVersion = PYTORCH_TORCH_VERSION;
   }
   writeManifest('pytorch', manifest);
 }
 
-function setupPytorch(variant = PYTORCH_DEFAULT_VARIANT) {
+function setupPytorch(variant = PYTORCH_DEFAULT_VARIANT, cudaVersion) {
   const templateDir = getPytorchTemplateDir(packageRoot, variant);
   if (!existsSync(templateDir)) {
     console.error(`❌ PyTorch template not found for variant ${variant}: ${templateDir}`);
     process.exit(1);
+  }
+
+  const pytorchIndex = resolvePytorchIndex(variant, cudaVersion);
+  if (variant === 'cuda' && !hasNvidiaGpu()) {
+    console.warn(
+      '⚠️  NVIDIA GPU/driver was not detected. Continuing with the CUDA runtime; ' +
+        'verify torch.cuda.is_available() before running inference.',
+    );
   }
 
   const pythonDir = getPytorchRuntimePythonDir();
@@ -183,7 +291,7 @@ function setupPytorch(variant = PYTORCH_DEFAULT_VARIANT) {
   console.log(`📁 Template:       ${templateDir}`);
   console.log(`📁 Python project: ${pythonDir}`);
   console.log(`📁 Runtime venv:  ${venvPath}`);
-  console.log(`📦 torch index:    ${PYTORCH_CPU_INDEX}\n`);
+  console.log(`📦 torch index:    ${pytorchIndex.index}\n`);
 
   ensureUv();
   mkdirSync(runtimeDir, { recursive: true });
@@ -196,10 +304,13 @@ function setupPytorch(variant = PYTORCH_DEFAULT_VARIANT) {
   try {
     seedPytorchTemplate(templateDir, pythonDir);
     execSync(`uv venv --clear --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
-    installPytorchProject(pythonDir, venvPath, env, { installTorch: true });
+    installPytorchProject(pythonDir, venvPath, env, {
+      installTorch: true,
+      torchIndex: pytorchIndex.index,
+    });
 
     const packages = collectInstalledPackages(pythonDir, venvPath);
-    writePytorchManifest(null, variant, packages);
+    writePytorchManifest(null, variant, packages, pytorchIndex.version);
 
     console.log(`\n✅ PyTorch runtime setup completed (${variant}).`);
     console.log(`   Home: ${getModularPromptHome()}`);
@@ -278,6 +389,9 @@ function formatManifestDetail(manifest) {
   if (manifest.variant) {
     parts.push(`variant ${manifest.variant}`);
   }
+  if (manifest.cudaVersion) {
+    parts.push(`CUDA ${manifest.cudaVersion}`);
+  }
   const torchVersion = manifest.torchVersion ?? manifest.packages?.torch;
   if (torchVersion) {
     parts.push(`torch ${torchVersion}`);
@@ -296,6 +410,16 @@ function printStatus() {
     const runtimePath = getRuntimeDir(profile);
     console.log(`${icon} ${profile}: ${ready ? 'ready' : 'not installed'}${detail}`);
     console.log(`   ${runtimePath}`);
+    if (profile === 'pytorch' && manifest?.variant === 'cuda') {
+      const cudaAvailable = ready ? checkCudaAvailability(getVenvPath('pytorch')) : null;
+      const cudaStatus =
+        cudaAvailable === true
+          ? 'available'
+          : cudaAvailable === false
+            ? 'unavailable'
+            : 'unknown';
+      console.log(`   CUDA: ${cudaStatus}`);
+    }
     if (profile === 'pytorch' && manifest && manifest.driverVersion !== driverVersion) {
       console.log(
         `   ⚠️ driver version differs (installed ${manifest.driverVersion}, current ${driverVersion}). ` +
@@ -360,7 +484,7 @@ function printUsage() {
   console.log(`Usage:
   modular-prompt-runtime setup mlx         Set up MLX Python runtime (macOS only)
   modular-prompt-runtime setup pytorch     Set up PyTorch runtime (cpu-minimal)
-  modular-prompt-runtime setup pytorch --variant <variant>
+  modular-prompt-runtime setup pytorch --variant <variant> [--cuda <version>]
   modular-prompt-runtime sync pytorch      Sync PyTorch code and dependencies
   modular-prompt-runtime sync pytorch --variant <variant>
   modular-prompt-runtime setup --status    Show runtime status
@@ -373,15 +497,29 @@ function printUsage() {
 }
 
 function parseVariant(args) {
-  const index = args.indexOf('--variant');
-  if (index === -1) {
+  return parseOptionValue(args, '--variant');
+}
+
+function parseCudaVersion(args) {
+  return parseOptionValue(args, '--cuda');
+}
+
+function parseOptionValue(args, option) {
+  const inlinePrefix = `${option}=`;
+  const inline = args.find((arg) => arg.startsWith(inlinePrefix));
+  const index = args.indexOf(option);
+  if (!inline && index === -1) {
     return undefined;
   }
-  const variant = args[index + 1];
-  if (!variant || variant.startsWith('-')) {
-    throw new Error('Missing value for --variant');
+  if (inline && index !== -1) {
+    throw new Error(`Specify ${option} only once`);
   }
-  return variant;
+
+  const value = inline ? inline.slice(inlinePrefix.length) : args[index + 1];
+  if (!value || value.startsWith('-')) {
+    throw new Error(`Missing value for ${option}`);
+  }
+  return value;
 }
 
 async function main() {
@@ -403,7 +541,13 @@ async function main() {
       return;
     }
     if (target === 'pytorch') {
-      setupPytorch(parseVariant(args.slice(2)) ?? PYTORCH_DEFAULT_VARIANT);
+      const setupArgs = args.slice(2);
+      const variant = parseVariant(setupArgs) ?? PYTORCH_DEFAULT_VARIANT;
+      const cudaVersion = parseCudaVersion(setupArgs);
+      if (cudaVersion && variant !== 'cuda') {
+        throw new Error('--cuda can only be used with --variant cuda');
+      }
+      setupPytorch(variant, cudaVersion);
       return;
     }
     console.error(`Unknown setup target: ${target ?? '(none)'}`);
