@@ -40,15 +40,15 @@ class TransformersLmBackend(ModelBackend):
             "true",
             "yes",
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=trust_remote_code,
-        )
-        if self.tokenizer.pad_token is None and self.tokenizer.eos_token is not None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
-        dtype = torch.float32 if self._device.type == "cpu" else torch.float16
         try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                trust_remote_code=trust_remote_code,
+            )
+            if self.tokenizer.pad_token is None and self.tokenizer.eos_token is not None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+
+            dtype = torch.float32 if self._device.type == "cpu" else torch.float16
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 trust_remote_code=trust_remote_code,

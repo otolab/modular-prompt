@@ -66,3 +66,24 @@ def test_backend_wraps_unknown_architecture_error(monkeypatch):
 
     assert f"transformers {backend_module.transformers.__version__}" in str(raised.value)
     assert "transformers>=5.14.0" in str(raised.value)
+
+
+def test_backend_wraps_unknown_architecture_error_from_tokenizer(monkeypatch):
+    pytest.importorskip("torch")
+    import backends.transformers_lm as backend_module
+
+    backend = backend_module.TransformersLmBackend(device="cpu")
+
+    def load_tokenizer(*args, **kwargs):
+        raise ValueError(
+            "The checkpoint has model type `qwen3_5` but Transformers does not "
+            "recognize this architecture."
+        )
+
+    monkeypatch.setattr(backend_module.AutoTokenizer, "from_pretrained", load_tokenizer)
+
+    with pytest.raises(RuntimeError, match="qwen3_5") as raised:
+        backend.load("Qwen/Qwen3.5-0.8B")
+
+    assert f"transformers {backend_module.transformers.__version__}" in str(raised.value)
+    assert "transformers>=5.14.0" in str(raised.value)
