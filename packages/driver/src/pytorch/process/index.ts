@@ -8,6 +8,7 @@ import { join } from 'path';
 import {
   getPytorchRuntimePythonDir,
   getVenvPath,
+  SETUP_PYTORCH_CLI,
   SETUP_PYTORCH_MONOREPO,
 } from '../../runtime/index.js';
 import { InferenceProcessClient } from '../../local-inference/process-client.js';
@@ -56,7 +57,7 @@ export class PyTorchProcess {
     ) {
       throw new Error(
         `PyTorch runtime Python project not found at ${pytorchPythonDir}. ` +
-          `Run: ${SETUP_PYTORCH_MONOREPO}`,
+          `Run: ${SETUP_PYTORCH_MONOREPO} (monorepo) or ${SETUP_PYTORCH_CLI} (npm).`,
       );
     }
 
@@ -64,7 +65,7 @@ export class PyTorchProcess {
     if (!existsSync(venvPath)) {
       throw new Error(
         `PyTorch venv not found at ${venvPath}. ` +
-          `Run: ${SETUP_PYTORCH_MONOREPO}`,
+          `Run: ${SETUP_PYTORCH_MONOREPO} (monorepo) or ${SETUP_PYTORCH_CLI} (npm).`,
       );
     }
 
