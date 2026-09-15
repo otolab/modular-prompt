@@ -14,6 +14,7 @@
 - [PyTorch (Transformers, cpu-minimal)](#pytorch-transformers-cpu-minimal)
   - [環境要件](#環境要件-pytorch)
   - [初回セットアップ](#初回セットアップ-pytorch)
+  - [既存ユーザーからの移行](#既存ユーザーからの移行-pytorch)
   - [依存・runtime のカスタマイズ](#依存runtime-のカスタマイズ)
   - [手動カスタマイズ](#手動カスタマイズ-pytorch)
   - [トラブルシューティング](#トラブルシューティング-pytorch)
@@ -228,6 +229,26 @@ Python プロジェクトは `~/.modular-prompt/runtimes/pytorch/python/` に、
 2. `torch==2.9.1` を **CPU index** からインストール
 3. `transformers` 等の最小依存を runtime 側プロジェクトからインストール
 
+### 既存ユーザーからの移行 (PyTorch)
+
+既存の `~/.modular-prompt/runtimes/pytorch/`（venv のみ）を利用している場合は、
+`setup-pytorch` を再実行してください。パッケージ内 template から runtime 側の
+`python/` が seed され、以後は runtime 側の Python プロジェクトが実行に使われます。
+
+monorepo では:
+
+```bash
+pnpm run setup-pytorch
+```
+
+npm パッケージ利用時は:
+
+```bash
+modular-prompt-runtime setup pytorch
+# または、都度実行する場合
+npx --package @modular-prompt/driver modular-prompt-runtime setup pytorch
+```
+
 パッケージを更新したあとに Python コードを反映する場合は、次の sync を実行します。
 `setup --status` で driver バージョンの差分が表示された場合も同じコマンドを利用できます。
 
@@ -247,7 +268,9 @@ vi ~/.modular-prompt/runtimes/pytorch/python/pyproject.toml
 modular-prompt-runtime sync pytorch
 ```
 
-`node_modules` 内の template は直接編集しないでください。次回のパッケージ更新や sync で runtime 側へ反映されません。
+`sync pytorch` は package 内 template のコード（`backends/`、`handlers/`、`__main__.py` など）を
+runtime 側へ同期します。runtime 側の `pyproject.toml` と `uv.lock` は上書きされません。
+template は package 更新で置き換わるため、依存設定や永続化したい変更は runtime 側を編集してください。
 
 ### 手動カスタマイズ (PyTorch)
 
@@ -268,6 +291,10 @@ UV_PROJECT_ENVIRONMENT=$PYTORCH_DIR/.venv \
 [CUDA 対応表は PyTorch 公式](https://pytorch.org/get-started/locally/)を参照してください。
 
 #### 外部 venv / conda の利用
+
+外部 venv / conda を指定する場合も、先に `setup-pytorch` を一度実行して
+`~/.modular-prompt/runtimes/pytorch/python/` を seed してください。実行時の Python
+プロジェクトは常にこの runtime 側を使い、`venvPath`（または環境変数）だけを外部環境へ変更します。
 
 ```typescript
 import { PyTorchDriver } from '@modular-prompt/driver';
