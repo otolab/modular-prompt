@@ -224,4 +224,21 @@ describe('LocalInferenceDriver', () => {
       cacheWriteTokens: 4,
     });
   });
+
+  it('maps the terminal LIP generation token count into completion usage', async () => {
+    mockProcess.generate = vi.fn().mockResolvedValue(
+      Readable.from([
+        `answer${META_MARKER}{"prompt_tokens":3,"generation_tokens":4}`,
+      ]),
+    );
+    const driver = createDriver({ mode: 'chat' });
+
+    const result = await driver.query(prompt);
+
+    expect(result.usage).toMatchObject({
+      promptTokens: 3,
+      completionTokens: 4,
+      totalTokens: 7,
+    });
+  });
 });

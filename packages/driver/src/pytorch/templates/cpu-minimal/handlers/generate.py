@@ -23,7 +23,6 @@ def _stream_to_stdout(
     if primer is not None:
         print(primer, end="", flush=True)
 
-    response_count = 0
     first_prompt_tokens = None
     first_cache_read_tokens = None
     first_cache_write_tokens = None
@@ -36,7 +35,6 @@ def _stream_to_stdout(
     ):
         if poll_cancel():
             break
-        response_count += 1
         response_prompt_tokens = getattr(response, "prompt_tokens", None)
         if first_prompt_tokens is None and response_prompt_tokens is not None:
             first_prompt_tokens = response_prompt_tokens
@@ -61,11 +59,8 @@ def _stream_to_stdout(
     meta: dict = {}
     if first_prompt_tokens is not None:
         meta["prompt_tokens"] = first_prompt_tokens
-    if response_count > 0:
-        meta["generation_tokens"] = max(
-            response_count,
-            reported_generation_tokens or 0,
-        )
+    if reported_generation_tokens is not None:
+        meta["generation_tokens"] = max(0, reported_generation_tokens)
     if first_cache_read_tokens is not None:
         meta["cache_read_tokens"] = first_cache_read_tokens
     if first_cache_write_tokens is not None:

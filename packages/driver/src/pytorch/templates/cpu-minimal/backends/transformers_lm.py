@@ -14,6 +14,21 @@ from backends.base import ModelBackend
 from utils.token_utils import is_eod_token
 
 
+class _TokenCountingTextIteratorStreamer(TextIteratorStreamer):
+    """TextIteratorStreamer that counts generated token IDs, not text chunks."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.generated_token_count = 0
+
+    def put(self, value: torch.Tensor) -> None:
+        is_prompt = self.skip_prompt and self.next_tokens_are_prompt
+        if not is_prompt:
+            token_count = value[0].numel() if value.ndim > 1 else value.numel()
+            self.generated_token_count += int(token_count)
+        super().put(value)
+
+
 @dataclass
 class StreamChunk:
     text: str
@@ -295,7 +310,7 @@ class TransformersLmBackend(ModelBackend):
                 device=self._device,
             )
 
-        streamer = TextIteratorStreamer(
+        streamer = _TokenCountingTextIteratorStreamer(
             self.tokenizer,
             skip_special_tokens=True,
             skip_prompt=True,
@@ -305,19 +320,18 @@ class TransformersLmBackend(ModelBackend):
         thread = Thread(target=self.model.generate, kwargs=gen_kwargs)
         thread.start()
 
-        generation_tokens = 0
+        first_chunk = True
         for text in streamer:
-            generation_tokens += 1
+            generation_tokens = streamer.generated_token_count
             chunk = StreamChunk(
                 text=text,
                 prompt_tokens=(prompt_token_count + cache_read_tokens)
-                if generation_tokens == 1
+                if first_chunk
                 else None,
-                # Keep a cumulative count so the handler can emit correct
-                # usage after TextIteratorStreamer yields multiple chunks.
                 generation_tokens=generation_tokens,
-                cache_read_tokens=cache_read_tokens if generation_tokens == 1 else None,
+                cache_read_tokens=cache_read_tokens if first_chunk else None,
             )
+            first_chunk = False
             if is_eod_token(chunk, self.tokenizer):
                 chunk.finish_reason = "stop"
                 yield chunk

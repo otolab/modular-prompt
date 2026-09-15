@@ -66,24 +66,13 @@ class _Backend:
             2 if self.cache is not None and prompt_cache is self.cache else None
         )
         if self.multi_chunk:
-            yield SimpleNamespace(
-                text="a",
-                prompt_tokens=3,
-                generation_tokens=1,
-                cache_read_tokens=cache_read_tokens,
-            )
-            yield SimpleNamespace(
-                text="b",
-                prompt_tokens=None,
-                generation_tokens=None,
-                cache_read_tokens=None,
-            )
-            yield SimpleNamespace(
-                text="c",
-                prompt_tokens=None,
-                generation_tokens=None,
-                cache_read_tokens=None,
-            )
+            for index, text in enumerate(("a", "b", "c"), start=1):
+                yield SimpleNamespace(
+                    text=text,
+                    prompt_tokens=3 if index == 1 else None,
+                    generation_tokens=index,
+                    cache_read_tokens=cache_read_tokens if index == 1 else None,
+                )
             return
         yield SimpleNamespace(
             text="ok",
