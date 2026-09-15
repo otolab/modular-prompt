@@ -85,9 +85,13 @@ describe('InferenceRequestQueue.addCachePrefillRequest', () => {
 
     queue.handleJsonResponse(JSON.stringify({
       cache_path: '/tmp/cache.vlm-vision.safetensors',
+      token_count: 3,
+      cache_write_tokens: 3,
     }));
     await expect(result).resolves.toEqual({
       cache_path: '/tmp/cache.vlm-vision.safetensors',
+      token_count: 3,
+      cache_write_tokens: 3,
     });
   });
 });

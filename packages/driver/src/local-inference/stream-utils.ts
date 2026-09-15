@@ -5,6 +5,10 @@ export interface StreamMeta {
   generation_tokens?: number;
   /** Whether the requested prompt cache was actually loaded for this stream. */
   cache_loaded?: boolean;
+  /** Tokens read from a backend-owned prompt/KV cache for this stream. */
+  cache_read_tokens?: number;
+  /** Tokens written to a backend-owned prompt/KV cache for this stream. */
+  cache_write_tokens?: number;
 }
 
 export const META_MARKER = '\x1e__META__:';

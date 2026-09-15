@@ -71,6 +71,50 @@ if (result.logEntries) {
 
 各ドライバーの詳細な設定・オプションは `skills/driver-usage/SKILL.md` を参照。
 
+### PyTorchProcess のインメモリ KV キャッシュ（Phase 1）
+
+`PyTorchProcess` の低レベル API では、Transformers の text-only LM に対して、同一 Python プロセス内で KV キャッシュを prefill して suffix を生成できます。`PyTorchDriver` の `PromptCacheController` との連携は後続の #383 の対象です。
+
+```typescript
+import { PyTorchProcess } from '@modular-prompt/driver';
+import type { InferenceMessage } from '@modular-prompt/driver';
+
+const process = new PyTorchProcess('your-transformers-model');
+const prefixMessages: InferenceMessage[] = [
+  { role: 'system', content: 'You are a helpful assistant.' },
+  { role: 'user', content: 'Keep this conversation context.' },
+];
+const queryMessages: InferenceMessage[] = [
+  ...prefixMessages,
+  { role: 'user', content: 'Answer the next question.' },
+];
+
+try {
+  const cache = await process.cachePrefill('memory://conversation-prefix', prefixMessages);
+  const rendered = await process.render(queryMessages);
+  if (rendered.error || rendered.formatted_prompt == null) {
+    throw new Error(rendered.error ?? 'Failed to render the prompt');
+  }
+
+  const stream = await process.generate(
+    rendered.formatted_prompt,
+    { max_tokens: 64, temperature: 0 },
+    undefined,
+    undefined,
+    cache.cache_path,
+  );
+  for await (const chunk of stream) {
+    process.stdout.write(chunk.toString());
+  }
+} finally {
+  await process.exit();
+}
+```
+
+Phase 1 の `cache_path` はファイル名ではなく、バックエンドが管理するプロセス内限定の参照です。`cachePrefill()` の結果には prefill した `token_count` と `cache_write_tokens` が含まれ、同じ参照を最初に使う `generate()` の LIP meta にも write 数が一度だけ通知されます。キャッシュを使った生成では `cache_read_tokens` と `cache_write_tokens`、実際に参照を読み込めたかどうかは `cache_loaded` で確認できます。
+
+prefill に渡した prompt の token 列は、`generate()` に渡す rendered prompt の先頭と一致している必要があります。`PyTorchProcess` または Python 子プロセスを終了・再起動すると参照と `past_key_values` は失われ、同じ `cache_path` は cache miss になり、full prompt の cold path にフォールバックします（ディスクへの読み書きは行いません）。画像入力、cache trimming、incremental prefill は Phase 1 ではサポートしません。`PyTorchDriver` の自動 cache と `QueryResult.usage` への prefill 結合は #383 の対象です。
+
 ## 主な機能
 
 - **統一インターフェース**: `query()` / `streamQuery()` / `close()` の3メソッド

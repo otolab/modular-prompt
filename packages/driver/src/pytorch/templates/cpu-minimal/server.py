@@ -3,7 +3,7 @@ import json
 import sys
 
 from backends.base import ModelBackend
-from handlers import handle_capabilities, handle_completion, handle_format_test, handle_generate, handle_render, handle_tokenize
+from handlers import handle_cache_prefill, handle_capabilities, handle_completion, handle_format_test, handle_generate, handle_render, handle_tokenize
 from handlers.cancel import request_cancel, reset_cancel
 
 
@@ -87,7 +87,25 @@ class Server:
                 )
 
             elif method == 'cache_prefill':
-                self._error_response("cache_prefill is not supported by the PyTorch backend")
+                cache_path = req.get('cache_path')
+                messages = req.get('messages')
+                if not cache_path or not messages:
+                    self._error_response("'cache_path' and 'messages' fields are required for cache_prefill")
+                    return
+                handle_cache_prefill(
+                    self.backend,
+                    self.capabilities,
+                    cache_path,
+                    messages,
+                    base_cache_path=req.get('base_cache_path'),
+                    trim_to_tokens=req.get('trim_to_tokens'),
+                    prefix_offsets=req.get('prefix_offsets'),
+                    prefix_hashes=req.get('prefix_hashes'),
+                    tools=req.get('tools'),
+                    reasoning_effort=req.get('reasoning_effort'),
+                    images=req.get('images'),
+                    max_image_size=req.get('maxImageSize', 768),
+                )
 
             elif method == 'render':
                 messages = req.get('messages')

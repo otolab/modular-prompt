@@ -165,6 +165,8 @@ export interface InferenceCachePrefillRequest extends InferenceBaseRequest {
 export interface InferenceCachePrefillResult {
   cache_path: string;
   token_count?: number;
+  /** Tokens written while creating this backend-owned cache. */
+  cache_write_tokens?: number;
   prefix_offsets?: number[];
   prefix_hashes?: string[];
 }
