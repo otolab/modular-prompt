@@ -18,6 +18,8 @@ export interface ExtractDriverOptions {
   cacheController?: PromptCacheController;
   /** Persisted or explicitly selected MLX backend for extract. */
   backend?: MlxBackendMode;
+  /** VLM image resize limit for driver/cache alignment. */
+  maxImageSize?: number;
 }
 
 export interface ExtractDriverResult {
@@ -82,9 +84,11 @@ function withExtractDriverOptions(
   // configured.  In particular, extract must not force a VLM model through
   // the mlx-lm backend just to enable prompt caching.
   const backend = options.backend ?? spec.backend ?? existingDriverOptions?.backend ?? 'auto';
+  const maxImageSize = options.maxImageSize ?? existingDriverOptions?.maxImageSize;
   const driverOptions: MlxModelDriverOptions = {
     ...existingDriverOptions,
     backend,
+    ...(maxImageSize !== undefined ? { maxImageSize } : {}),
     ...(options.cacheController ? { cacheController: options.cacheController } : {}),
   };
 

@@ -140,6 +140,8 @@ export class InferenceProcessClient {
     prefixHashes?: string[],
     tools?: InferenceToolDefinition[],
     reasoningEffort?: 'low' | 'medium' | 'high',
+    images?: string[],
+    maxImageSize?: number,
   ): Promise<InferenceCachePrefillResult> {
     return this.requestQueue.addCachePrefillRequest(
       cachePath,
@@ -150,6 +152,8 @@ export class InferenceProcessClient {
       prefixHashes,
       tools,
       reasoningEffort,
+      images,
+      maxImageSize,
     );
   }
 

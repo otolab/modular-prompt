@@ -765,6 +765,29 @@ describe('formatPromptAsMessages', () => {
     expect(messages[1].content).toHaveLength(2);
   });
 
+  it('preserves image attachments in MaterialElement for VLM conversion', () => {
+    const image = { type: 'image_url' as const, image_url: { url: '/path/to/material.jpg' } };
+    const prompt: CompiledPrompt = {
+      instructions: [],
+      data: [{
+        type: 'material',
+        id: 'material-1',
+        title: 'Photo notes',
+        content: [{ type: 'text', text: 'A photo' }, image],
+      }],
+      output: [],
+    };
+
+    const messages = formatPromptAsMessages(prompt, {
+      sectionDescriptions: {},
+    });
+
+    expect(messages[1]?.content).toEqual([
+      { type: 'text', text: 'Material: Photo notes\nID: material-1\n\nA photo' },
+      image,
+    ]);
+  });
+
   it('should preserve string content in StandardMessageElement (regression test)', () => {
     const prompt: CompiledPrompt = {
       instructions: [],

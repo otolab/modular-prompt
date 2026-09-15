@@ -140,19 +140,34 @@ describe('LocalInferenceDriver', () => {
     expect(generateOptions).not.toHaveProperty('trustRemoteCode');
   });
 
-  it('does not prepare or use a cache for VLM image requests', async () => {
+  it('prepares and uses a cache for VLM image requests in the cacheable prefix', async () => {
     vi.mocked(mockProcess.getCapabilities).mockResolvedValue({
       ...mockCapabilities,
       model_kind: 'vlm',
     });
+    const imagePrompt: CompiledPrompt = {
+      instructions: prompt.instructions,
+      data: [{
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Inspect this image' },
+          { type: 'image_url', image_url: { url: 'image.png' } },
+        ],
+      }],
+      output: [],
+    };
     const cache = {
       bind: vi.fn().mockResolvedValue(undefined),
       shouldDisableForVlm: vi.fn().mockReturnValue(false),
       recordQuery: vi.fn(),
       getGrowthBefore: vi.fn().mockReturnValue(0),
       getWriteTokensSince: vi.fn().mockReturnValue(0),
-      prepare: vi.fn(),
-      readTokenCount: vi.fn().mockReturnValue(0),
+      prepare: vi.fn().mockResolvedValue({
+        ref: 'vision-cache',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      }),
+      readTokenCount: vi.fn().mockReturnValue(2),
       recordPromptTokens: vi.fn(),
       logStats: vi.fn(),
       close: vi.fn().mockResolvedValue(undefined),
@@ -160,20 +175,26 @@ describe('LocalInferenceDriver', () => {
     const driver = new LocalInferenceDriver({
       model: 'test-vlm',
       process: mockProcess,
-      adapters: createMockAdapters({ extractImagePaths: () => ['image.png'] }),
+      adapters: createMockAdapters({
+        extractImagePaths: (content) =>
+          Array.isArray(content) ? ['image.png'] : [],
+      }),
       cache,
       loggerPrefix: 'TEST',
     });
 
-    await driver.query(prompt);
+    await driver.query(imagePrompt);
 
-    expect(cache.prepare).not.toHaveBeenCalled();
+    expect(cache.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      images: ['image.png'],
+      maxImageSize: 768,
+    }));
     expect(mockProcess.generate).toHaveBeenCalledWith(
       'rendered-prompt',
       expect.any(Object),
       expect.arrayContaining(['image.png']),
       768,
-      undefined,
+      'vision-cache',
       undefined,
     );
   });

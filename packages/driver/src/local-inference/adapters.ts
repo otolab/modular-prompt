@@ -66,6 +66,10 @@ export interface CachePrepareParams {
   data: CompiledPrompt['data'];
   tools?: ToolDefinition[];
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** Image sources belonging to a VLM cacheable prefix. */
+  images?: string[];
+  /** Image resize limit used when constructing a VLM cache. */
+  maxImageSize?: number;
   readOnly?: boolean;
 }
 

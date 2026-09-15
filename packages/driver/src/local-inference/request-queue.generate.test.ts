@@ -56,3 +56,38 @@ describe('InferenceRequestQueue.addGenerateRequest', () => {
     });
   });
 });
+
+describe('InferenceRequestQueue.addCachePrefillRequest', () => {
+  it('includes images and maxImageSize when provided', async () => {
+    const sendToProcess = vi.fn();
+    const queue = createQueue(sendToProcess);
+
+    const result = queue.addCachePrefillRequest(
+      '/tmp/cache.vlm-vision.safetensors',
+      [{ role: 'user', content: 'prompt' }],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ['/tmp/a.png'],
+      512,
+    );
+
+    expect(parseSentRequest(sendToProcess)).toEqual({
+      method: 'cache_prefill',
+      cache_path: '/tmp/cache.vlm-vision.safetensors',
+      messages: [{ role: 'user', content: 'prompt' }],
+      images: ['/tmp/a.png'],
+      maxImageSize: 512,
+    });
+
+    queue.handleJsonResponse(JSON.stringify({
+      cache_path: '/tmp/cache.vlm-vision.safetensors',
+    }));
+    await expect(result).resolves.toEqual({
+      cache_path: '/tmp/cache.vlm-vision.safetensors',
+    });
+  });
+});

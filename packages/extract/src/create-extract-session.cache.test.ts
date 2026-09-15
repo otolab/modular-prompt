@@ -76,6 +76,33 @@ describe('cache-lifecycle', () => {
     expect(tracking.releases).toContain('cache-1');
   });
 
+  it('passes image material paths to cache preparation', async () => {
+    const tracking = createMockCacheController();
+    const state: CacheLifecycleState = { handle: null, controllerReady: true };
+
+    await prepareSessionCache(
+      tracking.controller,
+      'test-vlm',
+      defaultExtractBaseModule,
+      {
+        materials: [{
+          title: 'Photo notes',
+          content: [
+            { type: 'text', text: 'A photo' },
+            { type: 'image_url', image_url: { url: '/docs/photo.png' } },
+          ],
+        }],
+      },
+      { cue: 'Describe the photo' },
+      undefined,
+      state,
+      { maxImageSize: 512 },
+    );
+
+    expect(tracking.prepares[0]?.images).toEqual(['/docs/photo.png']);
+    expect(tracking.prepares[0]?.maxImageSize).toBe(512);
+  });
+
   it('releaseSessionCache clears held handle', () => {
     const tracking = createMockCacheController();
     const state: CacheLifecycleState = {

@@ -192,21 +192,34 @@ export class LocalInferenceDriver implements AIDriver {
     const trustRemoteCode = samplingOptions.trustRemoteCode;
 
     const externalHandle = queryOptions?.cacheHandle;
-    // Cache implementations do not carry vision features.  Keep image
-    // requests on the cold path, including externally supplied handles.
-    if (externalHandle?.ref && images.length === 0) {
+    // An externally supplied VLM handle may contain the image prefix.  The
+    // backend validates the image sidecar/extra_hash before using it.
+    if (externalHandle?.ref) {
       cachePath = externalHandle.ref;
       cacheTrimTokens = externalHandle.trimTokens;
     } else if (
       this.cacheSupport &&
-      images.length === 0 &&
       queryOptions?.cache !== false &&
       trustRemoteCode === undefined
     ) {
       const prefix = extractCacheablePrefix(augmentedPrompt);
       const hasCacheableContent = prefix.instructions.length > 0 || prefix.data.length > 0;
 
-      if (hasCacheableContent) {
+      // A cache snapshot must contain exactly the image sequence used by the
+      // query.  In particular, do not create a text-only snapshot and then
+      // attach an image that lives in a volatile/output element.
+      const prefixImages = vlm
+        ? formatPromptAsMessages({ ...prefix, output: [] }, this.formatterOptions).flatMap((message) =>
+            'content' in message && !isToolResult(message)
+              ? this.adapters.extractImagePaths(message.content)
+              : [],
+          )
+        : [];
+      const imagePrefixMatches =
+        images.length === 0 ||
+        (prefixImages.length === images.length && prefixImages.every((image, i) => image === images[i]));
+
+      if (hasCacheableContent && imagePrefixMatches) {
         const cacheStart = performance.now();
         const handle = await this.cacheSupport.prepare({
           model: this.model,
@@ -214,6 +227,8 @@ export class LocalInferenceDriver implements AIDriver {
           data: prefix.data,
           tools: nativeTools ? queryOptions!.tools : undefined,
           reasoningEffort: queryOptions?.reasoningEffort,
+          images: images.length > 0 ? images : undefined,
+          maxImageSize: images.length > 0 ? this.maxImageSize : undefined,
           readOnly: queryOptions?.cache === 'read-only',
         });
         cachePath = handle.ref || undefined;

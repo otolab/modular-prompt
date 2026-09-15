@@ -23,6 +23,12 @@ export interface ExtractSessionOptions<TContext = ExtractContext> {
   /** Model identifier for cache prepare (must match the driver). */
   model: string;
   /**
+   * Maximum image edge used by the MLX VLM cache normalizer.  The MLX extract
+   * runtime supplies this automatically; custom sessions should match the
+   * driver's `maxImageSize` setting.
+   */
+  maxImageSize?: number;
+  /**
    * Base prompt for extraction task.
    * 省略時は {@link defaultExtractBaseModule} を使用する。
    */

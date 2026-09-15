@@ -30,9 +30,9 @@ export function createMlxCacheSupport(
         preprocess,
       );
     },
-    // VLM uses its own exact_cache_v1 disk format.  LM/VLM cache objects are
-    // intentionally never shared, even though both expose the same controller
-    // usage contract.
+    // VLM uses backend-local exact/vision cache namespaces.  LM/VLM cache
+    // objects are intentionally never shared, even though both expose the
+    // same controller usage contract.
     shouldDisableForVlm: () => false,
     recordQuery: () => mlxCache.recordQuery?.(),
     getGrowthBefore: () => mlxCache.getStats().cacheGrowthTokens,

@@ -78,15 +78,25 @@ class MlxLmBackend(ModelBackend):
 
     # get_cache_offset is inherited from ModelBackend base class
 
-    def _tokenize_prompt(self, prompt: str) -> list[int]:
+    def _tokenize_prompt(
+        self,
+        prompt: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+    ) -> list[int]:
         """Tokenize a prompt string using the same logic as stream_generate."""
         add_special = self.tokenizer.bos_token is None or not prompt.startswith(
             self.tokenizer.bos_token
         )
         return list(self.tokenizer.encode(prompt, add_special_tokens=add_special))
 
-    def tokenize_prompt(self, prompt: str) -> list[int]:
-        return self._tokenize_prompt(prompt)
+    def tokenize_prompt(
+        self,
+        prompt: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+    ) -> list[int]:
+        return self._tokenize_prompt(prompt, images, max_image_size)
 
     def trim_cache(self, prompt_cache: list, tokens: int) -> None:
         if tokens > 0:
@@ -129,6 +139,8 @@ class MlxLmBackend(ModelBackend):
         trim_to_tokens: int | None = None,
         prefix_offsets: list[int] | None = None,
         prefix_hashes: list[str] | None = None,
+        images: list | None = None,
+        max_image_size: int = 768,
     ) -> dict:
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded")
@@ -207,7 +219,13 @@ class MlxLmBackend(ModelBackend):
             sys.stderr.write(f"Cache created: {cache_path} ({token_count} tokens)\n")
         return {"cache_path": cache_path, "token_count": token_count}
 
-    def load_cache_from_file(self, cache_path: str) -> list | None:
+    def load_cache_from_file(
+        self,
+        cache_path: str,
+        images: list | None = None,
+        max_image_size: int = 768,
+        prompt: str | list[int] | None = None,
+    ) -> list | None:
         try:
             return load_prompt_cache(cache_path)
         except FileNotFoundError:

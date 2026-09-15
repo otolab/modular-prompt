@@ -144,6 +144,8 @@ export class InferenceRequestQueue {
     prefixHashes?: string[],
     tools?: InferenceToolDefinition[],
     reasoningEffort?: 'low' | 'medium' | 'high',
+    images?: string[],
+    maxImageSize?: number,
   ): Promise<InferenceCachePrefillResult> {
     return new Promise((resolve, reject) => {
       const request: InferenceCachePrefillRequest = {
@@ -155,6 +157,7 @@ export class InferenceRequestQueue {
         ...(prefixOffsets && prefixHashes && { prefix_offsets: prefixOffsets, prefix_hashes: prefixHashes }),
         ...(tools && { tools }),
         ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
+        ...(images?.length ? { images, maxImageSize } : {}),
       };
       this.queue.push({
         request,

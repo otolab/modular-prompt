@@ -152,6 +152,8 @@ export interface InferenceCachePrefillRequest extends InferenceBaseRequest {
   method: 'cache_prefill';
   cache_path: string;
   messages: InferenceMessage[];
+  images?: string[];
+  maxImageSize?: number;
   base_cache_path?: string;
   trim_to_tokens?: number;
   prefix_offsets?: number[];

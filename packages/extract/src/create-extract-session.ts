@@ -58,7 +58,10 @@ export function createExtractSession<TContext = ExtractContext>(
         request,
         baseModule,
         cacheState,
-        { required: options.cachePreparation === 'required' },
+        {
+          required: options.cachePreparation === 'required',
+          maxImageSize: options.maxImageSize,
+        },
       );
 
       const compiled = compileExtractPrompt(

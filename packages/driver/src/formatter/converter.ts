@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   Element,
   CompiledPrompt
 } from '@modular-prompt/core';
@@ -167,7 +168,6 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       
     case 'material': {
       // Format material with clear structure
-      const materialContent = contentToString(element.content);
       const materialLines: string[] = [`Material: ${element.title}`];
       if (element.id) {
         materialLines.push(`ID: ${element.id}`);
@@ -175,6 +175,27 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       if (element.usage != null) {
         materialLines.push(`Usage: ${element.usage} tokens`);
       }
+
+      // Keep image attachments on materials so VLM callers (including the
+      // extract runtime) can discover and pass them to mlx-vlm.  Text-only
+      // material formatting remains byte-for-byte compatible.
+      if (hasImageAttachment(element.content)) {
+        const imageAttachments = element.content.filter(
+          (attachment) => attachment.type === 'image_url' && attachment.image_url?.url != null,
+        );
+        return [{
+          role: 'system',
+          content: [
+            {
+              type: 'text',
+              text: `${materialLines.join('\n')}\n\n${contentToString(element.content)}`,
+            },
+            ...imageAttachments,
+          ],
+        }];
+      }
+
+      const materialContent = contentToString(element.content);
       materialLines.push('', materialContent);
 
       return [{
@@ -185,8 +206,6 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       
     case 'chunk': {
       // Format chunk with partOf, index, and total
-      const chunkContent = contentToString(element.content);
-
       // Format header based on available information
       let chunkHeader: string;
       if (element.index !== undefined && element.total !== undefined) {
@@ -196,6 +215,21 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       } else {
         chunkHeader = `Part of ${element.partOf}:`;
       }
+
+      if (hasImageAttachment(element.content)) {
+        const imageAttachments = element.content.filter(
+          (attachment) => attachment.type === 'image_url' && attachment.image_url?.url != null,
+        );
+        return [{
+          role: 'system',
+          content: [
+            { type: 'text', text: `${chunkHeader}\n\n${contentToString(element.content)}` },
+            ...imageAttachments,
+          ],
+        }];
+      }
+
+      const chunkContent = contentToString(element.content);
 
       return [{
         role: 'system',
@@ -221,4 +255,10 @@ function elementToMessages(element: Element, formatter: ElementFormatter): ChatM
       throw new Error(`Unknown element type: ${(_exhaustive as unknown as { type: string }).type}`);
     }
   }
+}
+
+function hasImageAttachment(content: string | Attachment[]): content is Attachment[] {
+  return Array.isArray(content) && content.some(
+    (attachment) => attachment.type === 'image_url' && attachment.image_url?.url != null,
+  );
 }

@@ -18,6 +18,8 @@ def handle_cache_prefill(
     prefix_hashes: list[str] | None = None,
     tools: list | None = None,
     reasoning_effort: str | None = None,
+    images: list | None = None,
+    max_image_size: int = 768,
 ) -> None:
     tokenizer = backend.get_tokenizer()
 
@@ -74,6 +76,8 @@ def handle_cache_prefill(
         trim_to_tokens=trim_to_tokens,
         prefix_offsets=prefix_offsets,
         prefix_hashes=prefix_hashes,
+        images=images,
+        max_image_size=max_image_size,
     )
     if prefix_offsets and prefix_hashes:
         result["prefix_offsets"] = prefix_offsets

@@ -101,6 +101,23 @@ describe('createMlxExtractRuntime', () => {
     expect(cacheControllerClose).toHaveBeenCalledOnce();
   });
 
+  it('propagates the VLM image resize limit to the driver and runtime', async () => {
+    const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
+    const runtime = await createMlxExtractRuntime({
+      model: 'default',
+      maxImageSize: 512,
+    });
+
+    expect(aiServiceCreateDriver).toHaveBeenCalledWith(
+      expect.objectContaining({
+        driverOptions: expect.objectContaining({ maxImageSize: 512 }),
+      }),
+    );
+    expect(runtime.maxImageSize).toBe(512);
+
+    await runtime.close();
+  });
+
   it('defaults extract MLX models to backend auto', async () => {
     const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
     const runtime = await createMlxExtractRuntime({ model: 'default' });

@@ -66,7 +66,7 @@ cp packages/driver/test/integration/models.testing.yaml.example \
 
 `MODULAR_PROMPT_HOME` を設定している場合は、そのディレクトリ配下の `models.testing.yaml` を使用します。通常の `models.yaml` と併用した場合の優先順位は **base → `models.yaml` → `models.testing.yaml` → overlay** です。Vitest 実行中または `NODE_ENV=test` では自動的に testing 設定がマージされ、CLI で同じ設定を使う場合は `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定します。
 
-`models.testing.yaml` の `models.default` または `mlx-native-tool` / `mlx-fallback-tool` などの convention alias は、driver 統合テストの設定へ変換されます。cache 統合テストを実行する `models.default` には cache 対応の text-only LM を指定し、`qwen3` や `lfm2` のように自動判定が VLM 扱いするモデルでは `driverOptions.backend: lm` を明示してください。MLX VLM は `driverOptions.backend: vlm`（または `auto`）で text-only exact cache をディスク永続化できますが、画像 cache、VLM incremental prefill、LM cache との相互利用は対象外です。testing ファイルが無い場合は `packages/driver/test/integration/test-drivers.yaml` を後方互換のために使用します。どちらも無い CI 環境では従来どおり skip されます。
+`models.testing.yaml` の `models.default` または `mlx-native-tool` / `mlx-fallback-tool` などの convention alias は、driver 統合テストの設定へ変換されます。cache 統合テストを実行する `models.default` には cache 対応の text-only LM を指定し、`qwen3` や `lfm2` のように自動判定が VLM 扱いするモデルでは `driverOptions.backend: lm` を明示してください。MLX VLM は `driverOptions.backend: vlm`（または `auto`）で text-only exact cache と画像付き vision cache を別 namespace にディスク永続化できます。VLM incremental prefill と LM cache との相互利用は対象外です。testing ファイルが無い場合は `packages/driver/test/integration/test-drivers.yaml` を後方互換のために使用します。どちらも無い CI 環境では従来どおり skip されます。
 
 ### 3. E2Eテスト (End-to-End Tests)
 

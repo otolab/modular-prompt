@@ -77,6 +77,8 @@ node packages/extract/bin/modular-prompt-extract.js clean meeting
 
 `list` は各 store の model、materials 数・タイトル、作成日時、KV cache の有無を表示します。
 
+CLI の `create` / `add` は入力ファイルを UTF-8 の文字列として読み込みます。画像ファイルを `Attachment` に変換する機能はなく、CLI の画像 material は Phase 3 の対象外です。画像を corpus に含める場合は library API の `MaterialInput.content: Attachment[]` を使用してください。MLX VLM の画像入力・画像 cache が受け付けるのは local file path のみで、URL や data URI は未対応です。
+
 ```text
 Store: meeting
   Model: mlx-community/SomeModel-4bit
@@ -120,7 +122,7 @@ models:
 
 モデルが設定されていない構成では、`-m <model-id-or-alias>` を指定するか、user yaml に `models.default` を定義してください。
 
-**MLX バックエンドは models.yaml の指定に従う**。未指定時は `auto` で、モデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` を指定した VLM 判定モデルも、画像なしの text-only exact KV cache をディスクへ保存して extract session 間で再利用できる。VLM の画像 feature cache と incremental prefill は対象外。
+**MLX バックエンドは models.yaml の指定に従う**。未指定時は `auto` で、モデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` を指定した VLM 判定モデルは、画像なしの text-only exact KV cache に加えて、画像 material を含む prompt の vision cache もディスクへ保存して extract session 間で再利用できる。画像あり VLM cache は text-only VLM / LM の store とは別 namespace・非互換で、VLM の incremental prefill は対象外。
 
 ```yaml
 models:
@@ -351,7 +353,7 @@ modular-prompt-extract clean --all [-d <cache-dir>]
 
 `add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID と選択した MLX `backend`（`auto` / `lm` / `vlm` / `optiq`）を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の値を新しい runtime に渡して再開します。backend がない既存 manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache のみを使用し、画像入力では cache を読みません。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID と選択した MLX `backend`（`auto` / `lm` / `vlm` / `optiq`）を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の値を新しい runtime に渡して再開します。backend がない既存 manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache と画像 material 用の vision cache を別 namespace で使用し、VLM incremental prefill は対象外です。
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 

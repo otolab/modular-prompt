@@ -100,6 +100,8 @@ class Server:
                     prefix_hashes=req.get('prefix_hashes'),
                     tools=req.get('tools'),
                     reasoning_effort=req.get('reasoning_effort'),
+                    images=req.get('images'),
+                    max_image_size=req.get('maxImageSize', 768),
                 )
 
             elif method == 'render':

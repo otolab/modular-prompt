@@ -160,6 +160,58 @@ describe('MlxCacheController', () => {
       await second.close();
     });
 
+    it('uses a separate vision namespace and forwards image cache inputs', async () => {
+      const vlmController = new MlxCacheController({ cacheDir: '/fixed-vlm-cache' });
+      vlmController.setModelKind('vlm');
+      await vlmController.bind(
+        mockProcess as unknown as import('./process/index.js').MlxProcess,
+        {},
+      );
+      mockProcess.cachePrefill.mockResolvedValue({ token_count: 123 });
+      mockProcess.tokenize.mockClear();
+
+      const handleA = await vlmController.prepare({
+        model: 'test-vlm',
+        instructions: [{ type: 'text', content: 'Inspect the image' }],
+        data: [{
+          type: 'material',
+          id: 'image-a',
+          title: 'Image',
+          content: [{ type: 'image_url', image_url: { url: '/tmp/image-a.png' } }],
+        }],
+        images: ['/tmp/image-a.png'],
+        maxImageSize: 512,
+      });
+      const handleB = await vlmController.prepare({
+        model: 'test-vlm',
+        instructions: [{ type: 'text', content: 'Inspect the image' }],
+        data: [{
+          type: 'material',
+          id: 'image-b',
+          title: 'Image',
+          content: [{ type: 'image_url', image_url: { url: '/tmp/image-b.png' } }],
+        }],
+        images: ['/tmp/image-b.png'],
+        maxImageSize: 512,
+      });
+
+      expect(handleA.ref).toMatch(/\.vlm-vision\.safetensors$/);
+      expect(handleB.ref).toMatch(/\.vlm-vision\.safetensors$/);
+      expect(handleA.ref).not.toBe(handleB.ref);
+      expect(mockProcess.cachePrefill).toHaveBeenCalledTimes(2);
+      expect(mockProcess.tokenize).not.toHaveBeenCalled();
+      expect(mockProcess.cachePrefill.mock.calls[0]?.[8]).toEqual(['/tmp/image-a.png']);
+      expect(mockProcess.cachePrefill.mock.calls[0]?.[9]).toBe(512);
+      expect(mockProcess.cachePrefill.mock.calls[0]?.[1]).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.arrayContaining([{ type: 'image' }]),
+        }),
+      ]));
+      expect(mockProcess.cachePrefill.mock.calls[1]?.[8]).toEqual(['/tmp/image-b.png']);
+
+      await vlmController.close();
+    });
+
     it('should create cache with instructions', async () => {
       const handle = await controller.prepare({
         model: 'test-model',

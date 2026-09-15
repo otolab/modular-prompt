@@ -7,6 +7,10 @@ export interface CachePrepareParams {
   data?: Element[];
   tools?: ToolDefinition[];
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** Image sources belonging to a VLM cacheable prefix. */
+  images?: string[];
+  /** Image resize limit used when constructing a VLM cache. */
+  maxImageSize?: number;
   /** When true, only return existing cache hits — never create new entries */
   readOnly?: boolean;
 }
