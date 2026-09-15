@@ -14,6 +14,7 @@
 - [PyTorch (Transformers)](#pytorch-transformers)
   - [環境要件](#環境要件-pytorch)
   - [初回セットアップ](#初回セットアップ-pytorch)
+  - [サポートモデルと Transformers バージョン](#サポートモデルと-transformers-バージョン)
   - [既存ユーザーからの移行](#既存ユーザーからの移行-pytorch)
   - [依存・runtime のカスタマイズ](#依存runtime-のカスタマイズ)
   - [カスタム index / 手動カスタマイズ](#カスタム-index--手動カスタマイズ-pytorch)
@@ -252,6 +253,25 @@ modular-prompt-runtime setup pytorch --variant cuda --cuda 12.4
 `runtime:status` は、インストール済み manifest の `variant` / `cudaVersion` / `torchVersion` と、CUDA variant の
 `torch.cuda.is_available()` の結果を表示します。CUDA variant の既定 device は `cuda` です。CUDA が利用できない場合は、
 推論開始時に NVIDIA ドライバーと CUDA 対応 torch wheel の確認を促すエラーになります。
+
+### サポートモデルと Transformers バージョン
+
+cpu-minimal template は `transformers>=5.14.0` を使用します。template の
+`uv.lock` では現在 `transformers==5.15.1` に解決されています。
+`qwen3_5` を使う Qwen 3.5 / 3.6 / 3.8 系のテキスト生成モデル（例:
+`Qwen/Qwen3.5-0.8B`、`Qwen/Qwen3.8-27B-FP8`）は
+このバージョン要件を満たす PyTorch runtime で読み込めます。
+
+PyTorch の cpu-minimal backend はテキスト専用で、画像入力には対応していません。
+また、FP8 などの量子化モデルで必要になる CUDA / `accelerate` 等の追加依存は
+`setup-pytorch` に含めていないため、モデルと実行環境に合わせて「手動カスタマイズ」
+を行ってください。
+
+`@modular-prompt/driver` を更新して Transformers の依存が変わった場合は、必ず
+`setup-pytorch` を再実行して runtime を更新してください。既存 runtime ではユーザーの
+`pyproject.toml` / `uv.lock` が保持されるため、古い `transformers` の pin が残っている
+場合は runtime 側の制約を `transformers>=5.14.0` と `safetensors==0.8.0` に更新してから
+sync します。
 
 ### 既存ユーザーからの移行 (PyTorch)
 

@@ -32,8 +32,6 @@ export interface LocalInferenceDriverConfig {
   defaultOptions?: Record<string, unknown>;
   loggerPrefix?: string;
   cache?: LocalInferenceCacheSupport;
-  /** 初期化失敗を呼び出し元へ伝播する（既定値: false、後方互換） */
-  propagateInitializationErrors?: boolean;
   onCapabilitiesLoaded?: (
     runtimeInfo: InferenceCapabilities,
     ctx: CapabilitiesLoadedContext,
@@ -48,7 +46,6 @@ export class LocalInferenceDriver implements AIDriver {
   protected readonly maxImageSize: number;
   private onCapabilitiesLoaded?: LocalInferenceDriverConfig['onCapabilitiesLoaded'];
   private cacheSupport?: LocalInferenceCacheSupport;
-  private readonly propagateInitializationErrors: boolean;
 
   protected runtimeInfo: InferenceCapabilities | null = null;
   protected modelProcessor: ReturnType<LocalInferenceAdapters['createModelProcessor']>;
@@ -72,7 +69,6 @@ export class LocalInferenceDriver implements AIDriver {
     this.formatterOptions = config.formatterOptions ?? {};
     this.maxImageSize = config.maxImageSize ?? 768;
     this.cacheSupport = config.cache;
-    this.propagateInitializationErrors = config.propagateInitializationErrors ?? false;
     this.onCapabilitiesLoaded = config.onCapabilitiesLoaded;
     this.modelProcessor = config.adapters.createModelProcessor(config.model);
     this.queryLogger = new QueryLogger(config.loggerPrefix ?? 'LIP');
@@ -89,34 +85,24 @@ export class LocalInferenceDriver implements AIDriver {
       return;
     }
 
-    try {
-      this.runtimeInfo = await this.process.getCapabilities();
-      this.capabilitiesLoaded = true;
+    this.runtimeInfo = await this.process.getCapabilities();
+    this.capabilitiesLoaded = true;
 
-      if (this.runtimeInfo.special_tokens) {
-        this.formatterOptions.specialTokens = this.runtimeInfo.special_tokens;
-      }
+    if (this.runtimeInfo.special_tokens) {
+      this.formatterOptions.specialTokens = this.runtimeInfo.special_tokens;
+    }
 
-      this.modelProcessor.setRuntimeContext({
-        chatRestrictions: this.runtimeInfo.chat_restrictions,
-        modelKind: this.runtimeInfo.model_kind,
+    this.modelProcessor.setRuntimeContext({
+      chatRestrictions: this.runtimeInfo.chat_restrictions,
+      modelKind: this.runtimeInfo.model_kind,
+    });
+
+    if (this.onCapabilitiesLoaded) {
+      await this.onCapabilitiesLoaded(this.runtimeInfo, {
+        formatterOptions: this.formatterOptions,
+        modelProcessor: this.modelProcessor,
+        process: this.process,
       });
-
-      if (this.onCapabilitiesLoaded) {
-        await this.onCapabilitiesLoaded(this.runtimeInfo, {
-          formatterOptions: this.formatterOptions,
-          modelProcessor: this.modelProcessor,
-          process: this.process,
-        });
-      }
-    } catch (error) {
-      this.queryLogger.log.error(
-        'Failed to get runtime info:',
-        error instanceof Error ? error.message : String(error),
-      );
-      if (this.propagateInitializationErrors) {
-        throw error;
-      }
     }
   }
 

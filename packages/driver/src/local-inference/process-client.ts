@@ -71,16 +71,15 @@ export class InferenceProcessClient {
     const processCallbacks: ProcessCommunicationCallbacks = {
       onJsonResponse: (jsonData) => this.requestQueue.handleJsonResponse(jsonData),
       onRequestCompleted: () => this.requestQueue.onRequestCompleted(),
-      onProcessExit: (code, signal, stderr) => {
-        const message =
-          config.processExitErrorMessage?.(code, signal, stderr) ??
-          `Inference process exited unexpectedly (code=${code}, signal=${signal})`;
-        const error = new Error(message);
+      onProcessExit: (code, _signal, error) => {
         this.terminalError = error;
-        if (code !== 0) {
-          logger.error(message);
+        const hasPendingRequests = this.requestQueue.length > 0;
+        if (code !== 0 || hasPendingRequests) {
+          logger.error(error.message);
         }
-        this.requestQueue.rejectAll(error);
+        if (hasPendingRequests) {
+          this.requestQueue.rejectAll(error);
+        }
       },
     };
 
@@ -218,9 +217,8 @@ export class InferenceProcessClient {
   }
 
   private throwIfTerminated(): void {
-    const terminalError = this.terminalError ?? this.processComm.getTerminalError();
+    const terminalError = this.terminalError;
     if (terminalError) {
-      this.terminalError = terminalError;
       throw terminalError;
     }
   }

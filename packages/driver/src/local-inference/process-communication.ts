@@ -10,7 +10,7 @@ import { Logger } from '@modular-prompt/utils';
 export interface ProcessCommunicationCallbacks {
   onJsonResponse: (jsonData: string) => void;
   onRequestCompleted: () => void;
-  onProcessExit: (code: number | null, signal: string | null, stderr?: string) => void;
+  onProcessExit: (code: number | null, signal: string | null, error: Error) => void;
 }
 
 export interface ProcessCommunicationConfig {
@@ -33,14 +33,18 @@ export interface ProcessCommunicationConfig {
 }
 
 export class ProcessCommunication {
+  private static readonly MAX_STDERR_LENGTH = 16_384;
+
   private process: ChildProcessWithoutNullStreams;
   private decoder: StringDecoder;
   private currentStream: Readable | null = null;
   private jsonBuffer: string = '';
-  private stderrBuffer: string = '';
-  private terminalError: Error | null = null;
   private draining = false;
-  private closed = false;
+  private stderrBuffer = '';
+  private processExited = false;
+  private processClosed = false;
+  private processExitError: Error | null = null;
+  private processSpawnError: Error | null = null;
   private callbacks: ProcessCommunicationCallbacks;
   private readonly exitErrorMessage: (
     code: number | null,
@@ -80,9 +84,9 @@ export class ProcessCommunication {
     });
 
     this.process.stderr.on('data', (data) => {
-      const message = data.toString();
-      this.stderrBuffer = `${this.stderrBuffer}${message}`.slice(-16_384);
-      logger.debug(message);
+      const text = data.toString();
+      this.stderrBuffer = `${this.stderrBuffer}${text}`.slice(-ProcessCommunication.MAX_STDERR_LENGTH);
+      logger.debug(text);
     });
 
     this.process.stdout.on('data', (data) => {
@@ -90,21 +94,39 @@ export class ProcessCommunication {
     });
 
     this.process.on('error', (err) => {
+      this.processSpawnError = err;
       logger.error('Child process error:', err);
     });
 
+    this.process.on('exit', () => {
+      this.processExited = true;
+    });
+
     this.process.on('close', (code, signal) => {
-      this.closed = true;
-      this.terminalError = new Error(
-        this.exitErrorMessage(code, signal, this.stderrBuffer),
-      );
-      const error = this.terminalError;
+      if (this.processClosed) {
+        return;
+      }
+      this.processClosed = true;
+      this.processExited = true;
+      this.processExitError = this.createProcessExitError(code, signal);
+
       if (this.currentStream) {
-        this.currentStream.destroy(error);
+        this.currentStream.destroy(this.processExitError);
         this.currentStream = null;
       }
-      this.callbacks.onProcessExit(code, signal, this.stderrBuffer);
+      this.callbacks.onProcessExit(code, signal, this.processExitError);
     });
+  }
+
+  private createProcessExitError(code: number | null, signal: string | null): Error {
+    const stderr = this.stderrBuffer.trim();
+    const baseMessage =
+      this.processSpawnError?.message ?? this.exitErrorMessage(code, signal, stderr);
+    const message =
+      stderr && !baseMessage.includes(stderr)
+        ? `${baseMessage}\nProcess stderr:\n${stderr}`
+        : baseMessage;
+    return new Error(message, { cause: this.processSpawnError ?? undefined });
   }
 
   private processData(data: Buffer): void {
@@ -169,14 +191,10 @@ export class ProcessCommunication {
   }
 
   sendToProcess(data: string): void {
-    if (this.terminalError) {
-      throw this.terminalError;
+    if (this.processExited) {
+      throw this.processExitError ?? this.createProcessExitError(null, null);
     }
     this.process.stdin.write(data);
-  }
-
-  getTerminalError(): Error | null {
-    return this.terminalError;
   }
 
   isStreamingActive(): boolean {
@@ -188,7 +206,7 @@ export class ProcessCommunication {
   }
 
   async exit(): Promise<void> {
-    if (this.closed) {
+    if (this.processClosed) {
       return;
     }
 

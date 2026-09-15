@@ -45,7 +45,6 @@ export class PyTorchDriver extends LocalInferenceDriver {
       formatterOptions: config.formatterOptions,
       defaultOptions: config.defaultOptions,
       loggerPrefix: 'PyTorch',
-      propagateInitializationErrors: true,
     });
   }
 

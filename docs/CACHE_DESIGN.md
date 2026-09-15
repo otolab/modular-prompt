@@ -426,5 +426,5 @@ MLX ドライバーで `QueryOptions.signal` により推論をキャンセル�
 ## 関連ドキュメント
 
 - [Driver APIリファレンス](./DRIVER_API.md) - AIDriverインターフェースとドライバー一覧
-- [ローカルモデルセットアップガイド](./LOCAL_MODEL_SETUP.md) - MLXとOllamaのセットアップ
+- [ローカルモデルセットアップガイド](./LOCAL_MODEL_SETUP.md) - MLX、PyTorch、Ollamaのセットアップ
 - [packages/driver/README.md](../packages/driver/README.md) - ドライバーパッケージの詳細
