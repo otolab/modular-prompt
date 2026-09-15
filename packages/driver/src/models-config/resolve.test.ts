@@ -413,6 +413,30 @@ models:
       })).toBe('pytorch');
     });
 
+    it('rejects conflicting providers regardless of matching entry order', () => {
+      const model = 'org/shared-model';
+      const configurations = [
+        {
+          models: {
+            mlx: { provider: 'mlx', model },
+            pytorch: { provider: 'pytorch', model },
+          },
+        },
+        {
+          models: {
+            pytorch: { provider: 'pytorch', model },
+            mlx: { provider: 'mlx', model },
+          },
+        },
+      ];
+
+      for (const configuration of configurations) {
+        expect(() => inferProvider(model, configuration)).toThrow(
+          /Unable to infer provider uniquely.*--provider/,
+        );
+      }
+    });
+
     it('infers pytorch from a matching top-level runtime', () => {
       expect(inferProvider('org/model', {
         models: {

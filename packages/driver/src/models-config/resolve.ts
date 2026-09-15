@@ -244,6 +244,15 @@ function inferProviderFromModelName(model: string): DriverProvider | undefined {
   return undefined;
 }
 
+function providerInferenceError(model: string, ambiguous = false): Error {
+  const qualifier = ambiguous ? ' uniquely' : '';
+  return new Error(
+    `Unable to infer provider${qualifier} for model '${model}'. `
+    + 'Specify --provider <provider>, use a model alias, '
+    + 'or configure a single provider for this model in models.yaml.',
+  );
+}
+
 /**
  * 生 model ID から driver provider を推論する。
  *
@@ -263,18 +272,33 @@ export function inferProvider(
     return 'echo';
   }
 
-  const matchingEntry = Object.values(config.models ?? {})
-    .find(entry => entry.model === model);
-  if (matchingEntry) {
-    const configuredProvider = normalizeProvider(matchingEntry.provider);
-    if (configuredProvider) {
-      return configuredProvider;
+  const matchingEntries = Object.values(config.models ?? {})
+    .filter(entry => entry.model === model);
+  if (matchingEntries.length > 0) {
+    const matchingProviders = matchingEntries.map(entry =>
+      normalizeProvider(entry.provider)
+      ?? inferProviderFromRuntime(entry.runtime)
+      ?? inferProviderFromRuntime(entry.metadata?.runtime)
+    );
+    const uniqueProviders = new Set(
+      matchingProviders.filter(
+        (provider): provider is DriverProvider => provider !== undefined,
+      ),
+    );
+
+    // More than one exact entry is valid only when every entry resolves to the
+    // same provider. An unresolved entry could hide another provider, so do not
+    // let its position in the config decide the result.
+    if (
+      uniqueProviders.size > 1
+      || (matchingEntries.length > 1
+        && matchingProviders.some(provider => provider === undefined))
+    ) {
+      throw providerInferenceError(model, true);
     }
 
-    const runtimeProvider = inferProviderFromRuntime(matchingEntry.runtime)
-      ?? inferProviderFromRuntime(matchingEntry.metadata?.runtime);
-    if (runtimeProvider) {
-      return runtimeProvider;
+    if (uniqueProviders.size === 1 && matchingProviders.every(Boolean)) {
+      return [...uniqueProviders][0];
     }
   }
 
@@ -283,10 +307,7 @@ export function inferProvider(
     return modelNameProvider;
   }
 
-  throw new Error(
-    `Unable to infer provider for model '${model}'. `
-    + 'Specify --provider <provider> or configure this model in models.yaml.',
-  );
+  throw providerInferenceError(model);
 }
 
 /**
