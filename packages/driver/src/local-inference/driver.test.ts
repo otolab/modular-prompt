@@ -112,6 +112,20 @@ describe('LocalInferenceDriver', () => {
     expect(mockProcess.generate).toHaveBeenCalled();
   });
 
+  it('propagates initialization errors without sending a query', async () => {
+    const startupError = new Error(
+      'PyTorch process exited unexpectedly\nProcess stderr:\n' +
+        'Runtime uses transformers 4.57.6; model requires transformers>=5.14.0',
+    );
+    vi.mocked(mockProcess.getCapabilities).mockRejectedValueOnce(startupError);
+
+    const driver = createDriver({ mode: 'chat' });
+
+    await expect(driver.query(prompt)).rejects.toThrow(startupError.message);
+    expect(mockProcess.render).not.toHaveBeenCalled();
+    expect(mockProcess.generate).not.toHaveBeenCalled();
+  });
+
   it('uses generateMergedPrompt when chat template is unavailable', async () => {
     vi.mocked(mockProcess.getCapabilities).mockResolvedValue({
       ...mockCapabilities,

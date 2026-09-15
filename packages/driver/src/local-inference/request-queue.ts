@@ -39,6 +39,10 @@ export type SamplingOptionsMapper = (
   options?: unknown,
 ) => InferenceSamplingOptions | Record<string, unknown> | undefined;
 
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 export class InferenceRequestQueue {
   private queue: QueueItem[] = [];
   private isProcessing = false;
@@ -236,14 +240,29 @@ export class InferenceRequestQueue {
     const queueItem = this.queue[0];
     const { request, expectJsonResponse } = queueItem;
 
-    if (!expectJsonResponse) {
-      const stream = this.callbacks.createNewStream();
-      queueItem.resolve(stream);
-      this.queue.shift();
-    }
-
     const input = JSON.stringify(request);
-    this.callbacks.sendToProcess(input + '\n');
+    let stream: Readable | undefined;
+    try {
+      if (!expectJsonResponse) {
+        stream = this.callbacks.createNewStream();
+      }
+
+      this.callbacks.sendToProcess(input + '\n');
+
+      if (!expectJsonResponse && stream) {
+        queueItem.resolve(stream);
+        this.queue.shift();
+      }
+    } catch (error) {
+      const requestError = toError(error);
+      if (stream) {
+        stream.destroy(requestError);
+      }
+      const failedItem = this.queue.shift();
+      failedItem?.reject?.(requestError);
+      this.isProcessing = false;
+      this.processNext();
+    }
   }
 
   handleJsonResponse(jsonData: string): void {

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **PyTorch driver**
+  - cpu-minimal runtime の `transformers` を `>=5.14.0`（互換する `safetensors==0.8.0`）に更新し、`qwen3_5` モデルを読み込めるようにしました
+  - 未対応の `model_type` では runtime の Transformers バージョンと必要バージョンを表示します
+  - Transformers の依存更新を反映するため、既存ユーザーは `setup-pytorch` を再実行してください
+
 ### Changed
 - **Driver Package (Breaking Change)**
   - Section/SubSection要素の自動箇条書き変換を削除

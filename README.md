@@ -43,7 +43,7 @@
 - [プロンプトモジュール仕様](./docs/PROMPT_MODULE_SPEC.md) - プロンプトモジュールの完全な仕様
 - [プロセスモジュールガイド](./docs/PROCESS_MODULE_GUIDE.md) - プロセスモジュールの実装ガイドライン
 - [ドライバーAPI](./docs/DRIVER_API.md) - AIモデルドライバーのAPI仕様
-- [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) - MLXとOllamaのセットアップとモデルダウンロード
+- [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) - MLX、PyTorch、Ollamaのセットアップとモデルダウンロード
 - [Structured Outputs](./docs/STRUCTURED_OUTPUTS.md) - 構造化出力（JSON）の仕様と使用方法
 - [テスト用ドライバー](./docs/TEST_DRIVERS.md) - TestDriverとEchoDriverの使用方法
 - [ユーティリティ](./docs/UTILITIES.md) - ログシステムとその他のユーティリティ

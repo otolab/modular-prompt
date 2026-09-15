@@ -83,7 +83,7 @@ describe('MlxDriver', () => {
       expect(process.getCapabilities).toHaveBeenCalled();
     });
 
-    it('should handle initialization errors gracefully', async () => {
+    it('should propagate initialization errors', async () => {
       const driver = new MlxDriver({
         model: 'test-model'
       });
@@ -91,19 +91,12 @@ describe('MlxDriver', () => {
       // Mock error
       // @ts-expect-error - Accessing private property for testing
       const process = driver.process;
-      process.getCapabilities.mockRejectedValueOnce(new Error('Process error'));
-
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const startupError = new Error('Process error');
+      process.getCapabilities.mockRejectedValueOnce(startupError);
 
       // @ts-expect-error - Accessing private method for testing
       const ensureInitialized = driver.ensureInitialized.bind(driver);
-      await ensureInitialized();
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to get runtime info:')
-      );
-
-      consoleSpy.mockRestore();
+      await expect(ensureInitialized()).rejects.toThrow(startupError.message);
     });
 
   });
