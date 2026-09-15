@@ -52,6 +52,7 @@ export class InferenceProcessClient {
 
   private requestQueue: InferenceRequestQueue;
   private processComm: ProcessCommunication;
+  private terminalError: Error | null = null;
 
   constructor(config: InferenceProcessClientConfig) {
     this.modelName = config.modelName;
@@ -71,13 +72,15 @@ export class InferenceProcessClient {
       onJsonResponse: (jsonData) => this.requestQueue.handleJsonResponse(jsonData),
       onRequestCompleted: () => this.requestQueue.onRequestCompleted(),
       onProcessExit: (code, signal, stderr) => {
+        const message =
+          config.processExitErrorMessage?.(code, signal, stderr) ??
+          `Inference process exited unexpectedly (code=${code}, signal=${signal})`;
+        const error = new Error(message);
+        this.terminalError = error;
         if (code !== 0) {
-          const message =
-            config.processExitErrorMessage?.(code, signal, stderr) ??
-            `Inference process exited unexpectedly (code=${code}, signal=${signal})`;
           logger.error(message);
-          this.requestQueue.rejectAll(new Error(message));
         }
+        this.requestQueue.rejectAll(error);
       },
     };
 
@@ -108,6 +111,7 @@ export class InferenceProcessClient {
   }
 
   async getCapabilities(): Promise<InferenceCapabilities> {
+    this.throwIfTerminated();
     return this.requestQueue.addCapabilitiesRequest();
   }
 
@@ -115,6 +119,7 @@ export class InferenceProcessClient {
     messages: InferenceMessage[],
     options?: { primer?: string },
   ): Promise<InferenceFormatTestResult> {
+    this.throwIfTerminated();
     return this.requestQueue.addFormatTestRequest(messages, options);
   }
 
@@ -124,6 +129,7 @@ export class InferenceProcessClient {
     tools?: InferenceToolDefinition[],
     reasoningEffort?: 'low' | 'medium' | 'high',
   ): Promise<InferenceRenderResult> {
+    this.throwIfTerminated();
     return this.requestQueue.addRenderRequest(messages, options, tools, reasoningEffort);
   }
 
@@ -132,6 +138,7 @@ export class InferenceProcessClient {
     tools?: InferenceToolDefinition[],
     reasoningEffort?: 'low' | 'medium' | 'high',
   ): Promise<InferenceTokenizeResult> {
+    this.throwIfTerminated();
     return this.requestQueue.addTokenizeRequest(messages, tools, reasoningEffort);
   }
 
@@ -147,6 +154,7 @@ export class InferenceProcessClient {
     images?: string[],
     maxImageSize?: number,
   ): Promise<InferenceCachePrefillResult> {
+    this.throwIfTerminated();
     return this.requestQueue.addCachePrefillRequest(
       cachePath,
       messages,
@@ -167,6 +175,7 @@ export class InferenceProcessClient {
     images?: string[],
     maxImageSize?: number,
   ): Promise<Readable> {
+    this.throwIfTerminated();
     return this.requestQueue.addCompletionRequest(prompt, options, images, maxImageSize);
   }
 
@@ -179,6 +188,7 @@ export class InferenceProcessClient {
     cacheTrimTokens?: number,
     primer?: string,
   ): Promise<Readable> {
+    this.throwIfTerminated();
     return this.requestQueue.addGenerateRequest(
       prompt,
       options,
@@ -205,5 +215,13 @@ export class InferenceProcessClient {
       isStreamingActive: this.processComm.isStreamingActive(),
       isJsonBuffering: this.processComm.isJsonBuffering(),
     };
+  }
+
+  private throwIfTerminated(): void {
+    const terminalError = this.terminalError ?? this.processComm.getTerminalError();
+    if (terminalError) {
+      this.terminalError = terminalError;
+      throw terminalError;
+    }
   }
 }

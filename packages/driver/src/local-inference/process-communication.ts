@@ -38,6 +38,7 @@ export class ProcessCommunication {
   private currentStream: Readable | null = null;
   private jsonBuffer: string = '';
   private stderrBuffer: string = '';
+  private terminalError: Error | null = null;
   private draining = false;
   private closed = false;
   private callbacks: ProcessCommunicationCallbacks;
@@ -94,7 +95,10 @@ export class ProcessCommunication {
 
     this.process.on('close', (code, signal) => {
       this.closed = true;
-      const error = new Error(this.exitErrorMessage(code, signal, this.stderrBuffer));
+      this.terminalError = new Error(
+        this.exitErrorMessage(code, signal, this.stderrBuffer),
+      );
+      const error = this.terminalError;
       if (this.currentStream) {
         this.currentStream.destroy(error);
         this.currentStream = null;
@@ -165,7 +169,14 @@ export class ProcessCommunication {
   }
 
   sendToProcess(data: string): void {
+    if (this.terminalError) {
+      throw this.terminalError;
+    }
     this.process.stdin.write(data);
+  }
+
+  getTerminalError(): Error | null {
+    return this.terminalError;
   }
 
   isStreamingActive(): boolean {
