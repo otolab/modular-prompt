@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from backends.transformers_lm import TransformersLmBackend
+from handlers.generate import handle_generate
 
 
 class _Tokenizer:
@@ -132,6 +134,29 @@ def test_stream_generate_reports_cumulative_generation_tokens_for_multiple_chunk
     assert chunks[1].prompt_tokens is None
     assert chunks[0].cache_read_tokens == 2
     assert chunks[1].cache_read_tokens is None
+
+
+def test_generate_handler_reports_backend_prefill_write_usage(capsys):
+    backend, _ = _backend()
+    backend.cache_prefill("memory://prefix", "prefix")
+
+    handle_generate(
+        backend,
+        "prefix suffix",
+        options={"max_tokens": 1, "temperature": 0},
+        cache_path="memory://prefix",
+    )
+
+    output = capsys.readouterr().out
+    assert output.startswith("generated")
+    meta = output.split("\x1e__META__:", 1)[1].split("\0", 1)[0]
+    assert json.loads(meta) == {
+        "prompt_tokens": 3,
+        "generation_tokens": 1,
+        "cache_read_tokens": 2,
+        "cache_write_tokens": 2,
+        "cache_loaded": True,
+    }
 
 
 def test_cache_prefill_rejects_phase_two_arguments():
