@@ -157,6 +157,14 @@ models:
 
 `workflow.models.default.ref: local-chat` で alias を参照できます。**CLI `-m` / `profile.model` が最優先**で、上記を上書きします。
 
+生の model ID を `-m` または `profile.model` で指定した場合、provider は次の順で推論されます。
+
+1. merged `models.yaml` の `model` フィールド完全一致エントリの `provider`
+2. 一致エントリの `runtime` または `metadata.runtime`（`pytorch` / `pytorch-*` は `pytorch`、`mlx` / `mlx-lm` / `mlx-vlm` は `mlx`）
+3. モデル名の既知パターン（`mlx-community/...` や `-mlx-` など）
+
+`--provider` または `profile.provider` を指定した場合は、この推論結果を上書きします。上記から provider を推論できない生 model ID は、誤った runtime を起動しないようエラーになります。`--provider mlx` や `--provider pytorch` のように明示指定してください。
+
 simple-chat は **デフォルトで `merge` モード**です。マシン共通の alias 定義（`local-chat` 等）を user yaml で共有しつつ、プロファイル overlay で上書きできます。
 
 - **`modelsConfig.mode: merge`**（既定）— user yaml をマージ

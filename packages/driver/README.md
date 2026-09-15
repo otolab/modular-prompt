@@ -117,7 +117,7 @@ const profileOverlay = {
 const ai = AIService.fromMergedConfig(bundled, profileOverlay);
 const models = ai.modelsConfig;
 
-const spec = resolveModelName('local-chat', models, () => 'mlx');
+const spec = resolveModelName('local-chat', models);
 const fallback = resolveDefaultModelFromConfig(models);
 const driver = await ai.createDriver(spec);
 ```
@@ -126,7 +126,8 @@ const driver = await ai.createDriver(spec);
 - `AIService.fromModelsConfig({ source })` — `source: 'merge'`（デフォルト）で user yaml を読み込み、`source: 'overlay'` で無視
 - `mode: 'merge' | 'override'` — models セクションの浅いマージ / 置換
 - デフォルト model は `models.default` alias、なければ models の先頭エントリから導出
-- `defaults` / `runtime` による暗黙解決は廃止（YAML に残っていても警告のみ）
+- `defaults` によるモデルの暗黙解決は廃止（YAML に残っていても警告のみ）。`runtime` はモデル決定後の provider 推論に限って利用する
+- 生 model ID は `resolveModelName()` が merged models の model 完全一致エントリ、`runtime` / `metadata.runtime`、既知のモデル名パターンの順で provider を推論する。推論できない場合は `--provider <provider>` などで明示指定する
 
 simple-chat では profile の `modelsConfig` に inline の `models` / `drivers` を載せ、`workflow.models.default.ref` で alias 参照できます。`ref` に未知の alias を指定した場合は **エラーで停止**します。
 

@@ -1,10 +1,10 @@
 import {
   AIService,
+  inferProvider,
   resolveModelName,
   resolveModelReference,
   type AIDriver,
   type MlxBackendMode,
-  type DriverProvider,
   type ModelSpec,
   type ModelsConfig,
   type MlxModelDriverOptions,
@@ -26,11 +26,6 @@ export interface ExtractDriverResult {
   driver: AIDriver;
   /** alias 解決後の生 model ID */
   spec: ModelSpec;
-}
-
-function inferProvider(_model: string): DriverProvider {
-  // extract runtime は MLX 専用。生の model ID は MLX model として扱う。
-  return 'mlx';
 }
 
 function createAIService(): AIService {

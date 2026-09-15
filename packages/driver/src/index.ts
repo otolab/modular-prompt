@@ -247,6 +247,7 @@ export {
   toApplicationConfig,
   entryToModelSpec,
   resolveModelAlias,
+  inferProvider,
   resolveModelName,
   resolveDefaultModelFromConfig,
   resolveModelReference,

@@ -138,11 +138,14 @@ describe('createMlxExtractRuntime', () => {
 
   it('lets a persisted backend override a changed model configuration', async () => {
     const { createMlxExtractRuntime } = await import('./create-mlx-extract-runtime.js');
-    const runtime = await createMlxExtractRuntime({ model: 'raw/vlm-model', backend: 'vlm' });
+    const runtime = await createMlxExtractRuntime({
+      model: 'mlx-community/raw-vlm-model',
+      backend: 'vlm',
+    });
 
     expect(aiServiceCreateDriver).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'raw/vlm-model',
+        model: 'mlx-community/raw-vlm-model',
         backend: 'vlm',
         driverOptions: expect.objectContaining({ backend: 'vlm' }),
       }),

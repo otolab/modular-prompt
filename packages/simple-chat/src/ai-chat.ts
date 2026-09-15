@@ -12,6 +12,7 @@ import {
   type ModelSpec,
   type ModelsConfig,
   AIService,
+  inferProvider,
   resolveModelReference,
   resolveModelName,
   RuntimeNotReadyError,
@@ -68,12 +69,6 @@ export function buildChatModule(profile: DialogProfile): PromptModule<ChatContex
   return merge(baseChatModule, withMaterials, profile.module as PromptModule<any>);
 }
 
-function inferProvider(model: string): DriverProvider {
-  if (model.startsWith('test-')) return 'test' as DriverProvider;
-  if (model.startsWith('echo-')) return 'echo';
-  return 'mlx';
-}
-
 function profileModelsOverlay(profile: DialogProfile): ModelsConfig | undefined {
   const mc = profile.modelsConfig;
   const overlay: ModelsConfig = {};
@@ -122,7 +117,12 @@ export function resolveModelSpec(
 
   const explicitModel = overrides?.model ?? profile.model;
   if (explicitModel) {
-    return finalize(resolveModelName(explicitModel, models, inferProvider));
+    // An explicit provider is allowed to resolve an otherwise unknown raw ID.
+    // Without it, the shared helper validates that the provider is inferable.
+    const providerResolver = selection.provider
+      ? () => selection.provider as DriverProvider
+      : inferProvider;
+    return finalize(resolveModelName(explicitModel, models, providerResolver));
   }
 
   const workflowDefault = profile.workflow?.models?.default;

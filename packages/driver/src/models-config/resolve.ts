@@ -190,13 +190,112 @@ export function resolveModelAlias(
   return entryToModelSpec(entry);
 }
 
+const DRIVER_PROVIDERS: readonly DriverProvider[] = [
+  'openai',
+  'anthropic',
+  'vertexai',
+  'googlegenai',
+  'mlx',
+  'pytorch',
+  'ollama',
+  'vllm',
+  'echo',
+  'test',
+];
+
+function normalizeProvider(value: unknown): DriverProvider | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return DRIVER_PROVIDERS.includes(normalized as DriverProvider)
+    ? normalized as DriverProvider
+    : undefined;
+}
+
+function inferProviderFromRuntime(runtime: unknown): DriverProvider | undefined {
+  if (typeof runtime !== 'string') {
+    return undefined;
+  }
+
+  const normalized = runtime.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized === 'mlx' || normalized.startsWith('mlx-')) {
+    return 'mlx';
+  }
+  if (
+    normalized === 'pytorch'
+    || normalized.startsWith('pytorch-')
+    || normalized === 'torch'
+    || normalized.startsWith('torch-')
+  ) {
+    return 'pytorch';
+  }
+
+  return normalizeProvider(normalized);
+}
+
+function inferProviderFromModelName(model: string): DriverProvider | undefined {
+  // MLX model repositories commonly use either the mlx-community namespace or
+  // an `-mlx-` / `-mlx` marker in the model name.
+  if (/(?:^|[\\/_-])mlx(?:[\\/_-]|$)/i.test(model)) {
+    return 'mlx';
+  }
+  return undefined;
+}
+
+/**
+ * 生 model ID から driver provider を推論する。
+ *
+ * alias の解決は呼び出し側の `resolveModelName()` が先に行う。この helper
+ * は生 ID に対して、merged models の一致エントリ、runtime metadata、
+ * モデル名の既知パターンの順に推論し、判断できない場合は明示指定を促す。
+ */
+export function inferProvider(
+  model: string,
+  config: ModelsConfig = {}
+): DriverProvider {
+  // Keep the test/echo shortcuts stable for local and unit-test drivers.
+  if (model.startsWith('test-')) {
+    return 'test';
+  }
+  if (model.startsWith('echo-')) {
+    return 'echo';
+  }
+
+  const matchingEntry = Object.values(config.models ?? {})
+    .find(entry => entry.model === model);
+  if (matchingEntry) {
+    const configuredProvider = normalizeProvider(matchingEntry.provider);
+    if (configuredProvider) {
+      return configuredProvider;
+    }
+
+    const runtimeProvider = inferProviderFromRuntime(matchingEntry.runtime)
+      ?? inferProviderFromRuntime(matchingEntry.metadata?.runtime);
+    if (runtimeProvider) {
+      return runtimeProvider;
+    }
+  }
+
+  const modelNameProvider = inferProviderFromModelName(model);
+  if (modelNameProvider) {
+    return modelNameProvider;
+  }
+
+  throw new Error(
+    `Unable to infer provider for model '${model}'. `
+    + 'Specify --provider <provider> or configure this model in models.yaml.',
+  );
+}
+
 /**
  * モデル名を alias または生の model 名として解決する
  */
 export function resolveModelName(
   name: string,
   config: ModelsConfig,
-  inferProvider: (model: string) => DriverProvider
+  providerResolver: (model: string, config: ModelsConfig) => DriverProvider = inferProvider
 ): ModelSpec {
   const byAlias = resolveModelAlias(name, config);
   if (byAlias) {
@@ -205,7 +304,7 @@ export function resolveModelName(
 
   return {
     model: name,
-    provider: inferProvider(name),
+    provider: providerResolver(name, config),
     capabilities: [],
   };
 }
