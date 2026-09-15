@@ -19,6 +19,7 @@
     "docs"
   ],
   "bin": {
+    "modular-prompt-runtime": "./scripts/runtime-cli.js",
     "modular-runtime": "./scripts/runtime-cli.js"
   },
   "scripts": {
