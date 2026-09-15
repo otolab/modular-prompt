@@ -40,7 +40,11 @@ export interface InferenceProcessClientConfig {
   extraEnv?: Record<string, string>;
   loggerPrefix?: string;
   mapSamplingOptions?: SamplingOptionsMapper;
-  processExitErrorMessage?: (code: number | null, signal: string | null) => string;
+  processExitErrorMessage?: (
+    code: number | null,
+    signal: string | null,
+    stderr?: string,
+  ) => string;
 }
 
 export class InferenceProcessClient {
@@ -66,10 +70,10 @@ export class InferenceProcessClient {
     const processCallbacks: ProcessCommunicationCallbacks = {
       onJsonResponse: (jsonData) => this.requestQueue.handleJsonResponse(jsonData),
       onRequestCompleted: () => this.requestQueue.onRequestCompleted(),
-      onProcessExit: (code, signal) => {
+      onProcessExit: (code, signal, stderr) => {
         if (code !== 0) {
           const message =
-            config.processExitErrorMessage?.(code, signal) ??
+            config.processExitErrorMessage?.(code, signal, stderr) ??
             `Inference process exited unexpectedly (code=${code}, signal=${signal})`;
           logger.error(message);
           this.requestQueue.rejectAll(new Error(message));

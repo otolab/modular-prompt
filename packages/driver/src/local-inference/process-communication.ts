@@ -10,7 +10,7 @@ import { Logger } from '@modular-prompt/utils';
 export interface ProcessCommunicationCallbacks {
   onJsonResponse: (jsonData: string) => void;
   onRequestCompleted: () => void;
-  onProcessExit: (code: number | null, signal: string | null) => void;
+  onProcessExit: (code: number | null, signal: string | null, stderr?: string) => void;
 }
 
 export interface ProcessCommunicationConfig {
@@ -25,7 +25,11 @@ export interface ProcessCommunicationConfig {
   extraEnv?: Record<string, string>;
   loggerPrefix?: string;
   loggerContext?: string;
-  processExitErrorMessage?: (code: number | null, signal: string | null) => string;
+  processExitErrorMessage?: (
+    code: number | null,
+    signal: string | null,
+    stderr?: string,
+  ) => string;
 }
 
 export class ProcessCommunication {
@@ -33,9 +37,15 @@ export class ProcessCommunication {
   private decoder: StringDecoder;
   private currentStream: Readable | null = null;
   private jsonBuffer: string = '';
+  private stderrBuffer: string = '';
   private draining = false;
+  private closed = false;
   private callbacks: ProcessCommunicationCallbacks;
-  private readonly exitErrorMessage: (code: number | null, signal: string | null) => string;
+  private readonly exitErrorMessage: (
+    code: number | null,
+    signal: string | null,
+    stderr?: string,
+  ) => string;
 
   constructor(config: ProcessCommunicationConfig, callbacks: ProcessCommunicationCallbacks) {
     this.callbacks = callbacks;
@@ -69,7 +79,9 @@ export class ProcessCommunication {
     });
 
     this.process.stderr.on('data', (data) => {
-      logger.debug(data.toString());
+      const message = data.toString();
+      this.stderrBuffer = `${this.stderrBuffer}${message}`.slice(-16_384);
+      logger.debug(message);
     });
 
     this.process.stdout.on('data', (data) => {
@@ -80,12 +92,14 @@ export class ProcessCommunication {
       logger.error('Child process error:', err);
     });
 
-    this.process.on('exit', (code, signal) => {
+    this.process.on('close', (code, signal) => {
+      this.closed = true;
+      const error = new Error(this.exitErrorMessage(code, signal, this.stderrBuffer));
       if (this.currentStream) {
-        this.currentStream.destroy(new Error(this.exitErrorMessage(code, signal)));
+        this.currentStream.destroy(error);
         this.currentStream = null;
       }
-      this.callbacks.onProcessExit(code, signal);
+      this.callbacks.onProcessExit(code, signal, this.stderrBuffer);
     });
   }
 
@@ -163,13 +177,17 @@ export class ProcessCommunication {
   }
 
   async exit(): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         this.process.kill('SIGTERM');
         resolve();
       }, 5000);
 
-      this.process.once('exit', () => {
+      this.process.once('close', () => {
         clearTimeout(timeout);
         resolve();
       });
