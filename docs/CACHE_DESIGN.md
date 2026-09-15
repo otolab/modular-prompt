@@ -272,6 +272,25 @@ interface CacheIndexEntry {
 5. 新キャッシュの`supersedes`にベースキャッシュのrefを記録
 6. ベースキャッシュを自動的に`release()`
 
+### TransformersLmBackend（PyTorch）
+
+PyTorch の Transformers LM は、MLX とは互換でない backend 固有の
+`pytorch_kv_v1` 形式を使用します。
+
+- cache 本体は `torch.save` の payload として指定された cache path に保存
+- payload には KV state と、load 時の prefix 検証に使う token IDs を保存
+- `<cache path>.meta.json` には `layout`、`token_count`、`prefix_offsets`、
+  `prefix_hashes`、`model_id`、`dtype`、`device` を保存
+- load 時に layout、token 数、prompt prefix、model ID、dtype、device を検証し、
+  不一致・破損・欠損は cache miss として cold path に戻す
+- `base_cache_path` と `trim_to_tokens` を指定した場合は、base cache を clone・trim
+  して suffix だけを prefill し、新しい cache と meta を保存
+- `memory://` ref は Phase 1 互換の process-local cache として扱い、ファイルを作成しない
+
+PyTorch の cache payload は Transformers の legacy tuple と `Cache` の KV layer を
+扱います。`Cache` の trim は論理 token 数を更新し、static cache の容量は維持します。
+PyTorch の cache は MLX / provider 間で共有しません。
+
 ### GoogleGenAICacheController
 
 GoogleGenAI APIのキャッシュ機能を管理。

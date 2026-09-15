@@ -64,6 +64,12 @@ class ModelBackend(ABC):
         """Return and clear write usage pending for a cache reference."""
         return 0
 
+    def trim_cache(self, prompt_cache: Any, tokens: int) -> Any:
+        """Remove trailing tokens from a backend-owned prompt cache."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support prompt cache trimming"
+        )
+
     def tokenize_prompt(
         self,
         prompt: str,

@@ -18,7 +18,7 @@ def _stream_to_stdout(
     cache_write_tokens: int = 0,
 ) -> None:
     if images:
-        raise ValueError("PyTorch LIP backend does not support images in Phase 1")
+        raise ValueError("PyTorch LIP backend does not support vision input")
 
     if primer is not None:
         print(primer, end="", flush=True)
@@ -89,10 +89,8 @@ def handle_generate(
     cache_trim_tokens: int | None = None,
 ) -> None:
     """LIP generate: 整形済み prompt のストリーム推論"""
-    if cache_trim_tokens is not None:
-        raise ValueError(
-            "PyTorch LIP backend does not support cache trimming in Phase 1"
-        )
+    if cache_trim_tokens is not None and cache_trim_tokens < 0:
+        raise ValueError("cache_trim_tokens must be non-negative")
 
     if options is None:
         options = {}
@@ -118,6 +116,12 @@ def handle_generate(
 
         if prompt_cache is not None:
             cache_read_tokens = backend.get_cache_offset(prompt_cache)
+            if cache_trim_tokens is not None and cache_read_tokens > cache_trim_tokens:
+                prompt_cache = backend.trim_cache(
+                    prompt_cache,
+                    cache_read_tokens - cache_trim_tokens,
+                )
+                cache_read_tokens = cache_trim_tokens
             if cache_read_tokens <= 0:
                 prompt_cache = None
                 cache_loaded = False
@@ -132,7 +136,7 @@ def handle_generate(
                 else:
                     # A cache covering the complete prompt cannot be passed
                     # with an empty input_ids tensor.  The safe fallback is a
-                    # cold generation for this Phase 1 handler.
+                    # cold generation for this handler.
                     prompt_cache = None
                     cache_loaded = False
                     cache_read_tokens = 0
