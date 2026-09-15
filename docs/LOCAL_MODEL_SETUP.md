@@ -14,6 +14,7 @@
 - [PyTorch (Transformers, cpu-minimal)](#pytorch-transformers-cpu-minimal)
   - [環境要件](#環境要件-pytorch)
   - [初回セットアップ](#初回セットアップ-pytorch)
+  - [依存・runtime のカスタマイズ](#依存runtime-のカスタマイズ)
   - [手動カスタマイズ](#手動カスタマイズ-pytorch)
   - [トラブルシューティング](#トラブルシューティング-pytorch)
 - [Ollama](#ollama)
@@ -217,13 +218,36 @@ pnpm run setup-pytorch
 pnpm --filter @modular-prompt/driver run runtime:status
 ```
 
-Python 環境は `~/.modular-prompt/runtimes/pytorch/.venv` に作成されます。
+Python プロジェクトは `~/.modular-prompt/runtimes/pytorch/python/` に、仮想環境は
+`~/.modular-prompt/runtimes/pytorch/.venv` に作成されます。パッケージ内の
+`src/pytorch/templates/cpu-minimal/` は初回 seed 用の template であり、実行時には参照されません。
 
 **セットアップ内容：**
 
 1. `uv venv --python 3.12`
 2. `torch==2.9.1` を **CPU index** からインストール
-3. `transformers` 等の最小依存を editable install
+3. `transformers` 等の最小依存を runtime 側プロジェクトからインストール
+
+パッケージを更新したあとに Python コードを反映する場合は、次の sync を実行します。
+`setup --status` で driver バージョンの差分が表示された場合も同じコマンドを利用できます。
+
+```bash
+modular-prompt-runtime sync pytorch
+```
+
+monorepo では `pnpm --filter @modular-prompt/driver run runtime:sync-pytorch` を使えます。
+
+### 依存・runtime のカスタマイズ
+
+runtime 側の `pyproject.toml` はユーザーが編集できます。編集後に sync すると、
+`pyproject.toml` を保持したまま Python コードを更新し、依存を再解決します。
+
+```bash
+vi ~/.modular-prompt/runtimes/pytorch/python/pyproject.toml
+modular-prompt-runtime sync pytorch
+```
+
+`node_modules` 内の template は直接編集しないでください。次回のパッケージ更新や sync で runtime 側へ反映されません。
 
 ### 手動カスタマイズ (PyTorch)
 
@@ -231,7 +255,7 @@ Python 環境は `~/.modular-prompt/runtimes/pytorch/.venv` に作成されま�
 
 ```bash
 PYTORCH_DIR=~/.modular-prompt/runtimes/pytorch
-cd node_modules/@modular-prompt/driver/src/pytorch/python
+cd "$PYTORCH_DIR/python"
 
 # 例: CUDA 12.4（環境に合わせて index を選ぶ）
 UV_PROJECT_ENVIRONMENT=$PYTORCH_DIR/.venv \
@@ -259,16 +283,18 @@ const driver = new PyTorchDriver({
 
 #### 追加依存（accelerate / 量子化など）
 
+依存を永続化する場合は、runtime 側の `pyproject.toml` に追加してから sync します。
+
 ```bash
-UV_PROJECT_ENVIRONMENT=~/.modular-prompt/runtimes/pytorch/.venv \
-  uv pip install accelerate
+vi ~/.modular-prompt/runtimes/pytorch/python/pyproject.toml
+modular-prompt-runtime sync pytorch
 ```
 
 モデル要件に応じてユーザーが選択する想定です。`setup-pytorch` には含めません。
 
 ### トラブルシューティング (PyTorch)
 
-#### venv が見つからない
+#### runtime が見つからない
 
 ```bash
 pnpm run setup-pytorch

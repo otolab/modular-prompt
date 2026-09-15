@@ -1,5 +1,5 @@
 import type { RuntimeProfile } from './paths.js';
-import { getVenvPath, isRuntimeReady } from './paths.js';
+import { getPytorchRuntimePythonDir, getVenvPath, isRuntimeReady } from './paths.js';
 import {
   SETUP_MLX_CLI,
   SETUP_PYTORCH_CLI,
@@ -16,10 +16,11 @@ export class RuntimeNotReadyError extends Error {
         : profile === 'pytorch'
           ? SETUP_PYTORCH_CLI
           : SETUP_MLX_CLI.replace(' setup mlx', ` setup ${profile}`);
-    super(
-      `${profile} runtime is not set up at ${getVenvPath(profile)}. ` +
-      `Run: ${setupCommand}`
-    );
+    const runtimePath =
+      profile === 'pytorch'
+        ? `${getVenvPath(profile)} or ${getPytorchRuntimePythonDir()}`
+        : getVenvPath(profile);
+    super(`${profile} runtime is not set up at ${runtimePath}. Run: ${setupCommand}`);
     this.name = 'RuntimeNotReadyError';
     this.profile = profile;
     this.setupCommand = setupCommand;

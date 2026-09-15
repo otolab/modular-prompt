@@ -9,7 +9,10 @@ import {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchRuntimePythonDir,
   getPytorchPythonDir,
+  getPytorchTemplateDir,
+  PYTORCH_DEFAULT_VARIANT,
   isRuntimeReady,
 } from './paths-core.mjs';
 
@@ -21,7 +24,10 @@ export {
   getVenvPath,
   getManifestPath,
   getMlxPythonDir,
+  getPytorchRuntimePythonDir,
   getPytorchPythonDir,
+  getPytorchTemplateDir,
+  PYTORCH_DEFAULT_VARIANT,
   isRuntimeReady,
 };
 

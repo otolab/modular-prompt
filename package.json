@@ -23,6 +23,7 @@
     "mlx:test": "cd packages/driver/src/mlx-ml/python && UV_PROJECT_ENVIRONMENT=\"${MODULAR_PROMPT_HOME:-$HOME/.modular-prompt}/runtimes/mlx/.venv\" uv run python test_api_spec.py",
     "setup-mlx": "pnpm --filter @modular-prompt/driver run setup-mlx",
     "setup-pytorch": "pnpm --filter @modular-prompt/driver run setup-pytorch",
+    "sync-pytorch": "pnpm --filter @modular-prompt/driver run runtime:sync-pytorch",
     "copy-docs": "node scripts/copy-package-docs.mjs"
   },
   "devDependencies": {

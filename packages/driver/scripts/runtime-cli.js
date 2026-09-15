@@ -5,6 +5,7 @@
  *
  * setup mlx     — ~/.modular-prompt/runtimes/mlx に venv を作成
  * setup pytorch — ~/.modular-prompt/runtimes/pytorch に cpu-minimal venv を作成
+ * sync pytorch  — PyTorch runtime のコードと依存を更新
  * setup --status
  * cleanup mlx [--yes]
  * cleanup --all [--yes]
@@ -32,13 +33,16 @@ const {
   getRuntimeDir,
   getVenvPath,
   getMlxPythonDir,
-  getPytorchPythonDir,
+  getPytorchRuntimePythonDir,
+  getPytorchTemplateDir,
+  PYTORCH_DEFAULT_VARIANT,
   isRuntimeReady,
 } = await import(runtimeModuleUrl('paths-core.mjs'));
 
 const {
   SETUP_MLX_MONOREPO,
   SETUP_PYTORCH_MONOREPO,
+  SYNC_PYTORCH_CLI,
 } = await import(runtimeModuleUrl('setup-commands-core.mjs'));
 
 const {
@@ -46,6 +50,11 @@ const {
   readManifest,
   writeManifest,
 } = await import(runtimeModuleUrl('manifest-core.mjs'));
+
+const {
+  seedPytorchTemplate,
+  syncPytorchTemplate,
+} = await import(runtimeModuleUrl('pytorch-template-core.mjs'));
 
 function readPackageVersion() {
   try {
@@ -120,17 +129,58 @@ function setupMlx() {
 const PYTORCH_CPU_INDEX = 'https://download.pytorch.org/whl/cpu';
 const PYTORCH_PYTHON_VERSION = '3.12';
 
-function setupPytorch() {
-  const pythonDir = getPytorchPythonDir(packageRoot);
-  if (!existsSync(pythonDir)) {
-    console.error(`❌ PyTorch Python project not found: ${pythonDir}`);
+function resolveVenvPython(venvPath) {
+  return process.platform === 'win32'
+    ? join(venvPath, 'Scripts', 'python.exe')
+    : join(venvPath, 'bin', 'python');
+}
+
+function installPytorchProject(pythonDir, venvPath, env, { installTorch = false } = {}) {
+  const venvPython = resolveVenvPython(venvPath);
+  if (installTorch) {
+    execSync(`uv pip install --python "${venvPython}" "torch==2.9.1" --index-url ${PYTORCH_CPU_INDEX}`, {
+      cwd: pythonDir,
+      stdio: 'inherit',
+      env,
+    });
+  }
+  execSync(`uv pip install --python "${venvPython}" .`, {
+    cwd: pythonDir,
+    stdio: 'inherit',
+    env,
+  });
+}
+
+function writePytorchManifest(previousManifest, variant, packages) {
+  const manifest = {
+    ...(previousManifest ?? {}),
+    profile: 'pytorch',
+    variant,
+    driverVersion,
+    platform: previousManifest?.platform ?? process.platform,
+    pythonVersion: previousManifest?.pythonVersion ?? PYTORCH_PYTHON_VERSION,
+    createdAt: new Date().toISOString(),
+  };
+  if (packages) {
+    manifest.torchVersion = packages.torch;
+    manifest.packages = packages;
+  }
+  writeManifest('pytorch', manifest);
+}
+
+function setupPytorch(variant = PYTORCH_DEFAULT_VARIANT) {
+  const templateDir = getPytorchTemplateDir(packageRoot, variant);
+  if (!existsSync(templateDir)) {
+    console.error(`❌ PyTorch template not found for variant ${variant}: ${templateDir}`);
     process.exit(1);
   }
 
+  const pythonDir = getPytorchRuntimePythonDir();
   const venvPath = getVenvPath('pytorch');
   const runtimeDir = getRuntimeDir('pytorch');
 
-  console.log('🚀 Setting up PyTorch runtime (cpu-minimal)...\n');
+  console.log(`🚀 Setting up PyTorch runtime (${variant})...\n`);
+  console.log(`📁 Template:       ${templateDir}`);
   console.log(`📁 Python project: ${pythonDir}`);
   console.log(`📁 Runtime venv:  ${venvPath}`);
   console.log(`📦 torch index:    ${PYTORCH_CPU_INDEX}\n`);
@@ -144,31 +194,14 @@ function setupPytorch() {
   };
 
   try {
+    seedPytorchTemplate(templateDir, pythonDir);
     execSync(`uv venv --clear --python ${PYTORCH_PYTHON_VERSION}`, { cwd: pythonDir, stdio: 'inherit', env });
-    const venvPython =
-      process.platform === 'win32'
-        ? join(venvPath, 'Scripts', 'python.exe')
-        : join(venvPath, 'bin', 'python');
-    execSync(`uv pip install --python "${venvPython}" "torch==2.9.1" --index-url ${PYTORCH_CPU_INDEX}`, {
-      cwd: pythonDir,
-      stdio: 'inherit',
-      env,
-    });
-    execSync(`uv pip install --python "${venvPython}" -e .`, { cwd: pythonDir, stdio: 'inherit', env });
+    installPytorchProject(pythonDir, venvPath, env, { installTorch: true });
 
     const packages = collectInstalledPackages(pythonDir, venvPath);
-    writeManifest('pytorch', {
-      profile: 'pytorch',
-      variant: 'cpu-minimal',
-      driverVersion,
-      platform: process.platform,
-      pythonVersion: PYTORCH_PYTHON_VERSION,
-      torchVersion: packages?.torch,
-      createdAt: new Date().toISOString(),
-      packages,
-    });
+    writePytorchManifest(null, variant, packages);
 
-    console.log('\n✅ PyTorch runtime setup completed (cpu-minimal).');
+    console.log(`\n✅ PyTorch runtime setup completed (${variant}).`);
     console.log(`   Home: ${getModularPromptHome()}`);
     console.log('   You can now use PyTorchDriver from @modular-prompt/driver');
     const localModelSetupDoc = join(packageRoot, 'docs', 'LOCAL_MODEL_SETUP.md');
@@ -179,6 +212,63 @@ function setupPytorch() {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('❌ Failed to setup PyTorch runtime:', message);
+    process.exit(1);
+  }
+}
+
+function syncPytorch(requestedVariant) {
+  const pythonDir = getPytorchRuntimePythonDir();
+  const venvPath = getVenvPath('pytorch');
+  if (!isRuntimeReady('pytorch')) {
+    console.error(
+      `❌ PyTorch runtime is not ready at ${getRuntimeDir('pytorch')}. ` +
+        'Run: modular-prompt-runtime setup pytorch',
+    );
+    process.exit(1);
+  }
+
+  const manifest = readManifest('pytorch');
+  if (
+    requestedVariant &&
+    manifest?.variant &&
+    requestedVariant !== manifest.variant
+  ) {
+    console.error(
+      `❌ PyTorch runtime variant mismatch: runtime is ${manifest.variant}, ` +
+        `but ${requestedVariant} was requested. Sync without --variant or rerun setup pytorch.`,
+    );
+    process.exit(1);
+  }
+  const variant = manifest?.variant ?? requestedVariant ?? PYTORCH_DEFAULT_VARIANT;
+  const templateDir = getPytorchTemplateDir(packageRoot, variant);
+  if (!existsSync(templateDir)) {
+    console.error(`❌ PyTorch template not found for variant ${variant}: ${templateDir}`);
+    process.exit(1);
+  }
+
+  console.log(`🔄 Syncing PyTorch runtime (${variant})...\n`);
+  console.log(`📁 Template:       ${templateDir}`);
+  console.log(`📁 Python project: ${pythonDir}`);
+  console.log(`📁 Runtime venv:  ${venvPath}\n`);
+
+  ensureUv();
+  const env = {
+    ...process.env,
+    UV_PROJECT_ENVIRONMENT: venvPath,
+  };
+
+  try {
+    syncPytorchTemplate(templateDir, pythonDir);
+    installPytorchProject(pythonDir, venvPath, env);
+
+    const packages = collectInstalledPackages(pythonDir, venvPath);
+    writePytorchManifest(manifest, variant, packages);
+
+    console.log('\n✅ PyTorch runtime sync completed.');
+    console.log(`   Runtime driver version: ${driverVersion}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('❌ Failed to sync PyTorch runtime:', message);
     process.exit(1);
   }
 }
@@ -200,12 +290,18 @@ function printStatus() {
   console.log(`modular-prompt home: ${getModularPromptHome()}\n`);
   for (const profile of RUNTIME_PROFILES) {
     const ready = isRuntimeReady(profile);
-    const manifest = ready ? readManifest(profile) : null;
-    const detail = manifest ? formatManifestDetail(manifest) : '';
+    const manifest = readManifest(profile);
+    const detail = ready && manifest ? formatManifestDetail(manifest) : '';
     const icon = ready ? '✅' : '❌';
     const runtimePath = getRuntimeDir(profile);
     console.log(`${icon} ${profile}: ${ready ? 'ready' : 'not installed'}${detail}`);
     console.log(`   ${runtimePath}`);
+    if (profile === 'pytorch' && manifest && manifest.driverVersion !== driverVersion) {
+      console.log(
+        `   ⚠️ driver version differs (installed ${manifest.driverVersion}, current ${driverVersion}). ` +
+          `Run: ${SYNC_PYTORCH_CLI}`,
+      );
+    }
   }
   const setupHints = [];
   if (!isRuntimeReady('mlx') && process.platform === 'darwin') {
@@ -264,17 +360,33 @@ function printUsage() {
   console.log(`Usage:
   modular-prompt-runtime setup mlx         Set up MLX Python runtime (macOS only)
   modular-prompt-runtime setup pytorch     Set up PyTorch runtime (cpu-minimal)
+  modular-prompt-runtime setup pytorch --variant <variant>
+  modular-prompt-runtime sync pytorch      Sync PyTorch code and dependencies
+  modular-prompt-runtime sync pytorch --variant <variant>
   modular-prompt-runtime setup --status    Show runtime status
   modular-prompt-runtime cleanup mlx       Remove MLX runtime
   modular-prompt-runtime cleanup pytorch   Remove PyTorch runtime
   modular-prompt-runtime cleanup --all     Remove entire ~/.modular-prompt
   modular-prompt-runtime cleanup ... --yes   Skip confirmation
 
-  npm scripts: setup-mlx, setup-pytorch, runtime:status, runtime:cleanup`);
+  npm scripts: setup-mlx, setup-pytorch, runtime:status, runtime:sync-pytorch, runtime:cleanup`);
+}
+
+function parseVariant(args) {
+  const index = args.indexOf('--variant');
+  if (index === -1) {
+    return undefined;
+  }
+  const variant = args[index + 1];
+  if (!variant || variant.startsWith('-')) {
+    throw new Error('Missing value for --variant');
+  }
+  return variant;
 }
 
 async function main() {
-  const [command, target] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const [command, target] = args;
 
   if (!command || command === '--help' || command === '-h') {
     printUsage();
@@ -291,10 +403,20 @@ async function main() {
       return;
     }
     if (target === 'pytorch') {
-      setupPytorch();
+      setupPytorch(parseVariant(args.slice(2)) ?? PYTORCH_DEFAULT_VARIANT);
       return;
     }
     console.error(`Unknown setup target: ${target ?? '(none)'}`);
+    printUsage();
+    process.exit(1);
+  }
+
+  if (command === 'sync') {
+    if (target === 'pytorch') {
+      syncPytorch(parseVariant(args.slice(2)));
+      return;
+    }
+    console.error(`Unknown sync target: ${target ?? '(none)'}`);
     printUsage();
     process.exit(1);
   }
