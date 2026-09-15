@@ -12,6 +12,7 @@ import {
   mergeModelsConfig,
   resolveModelsConfig,
   resolveModelReference,
+  inferProvider,
   resolveModelName,
   resolveDefaultModelFromConfig,
   registerModelsFromConfig,
@@ -384,6 +385,96 @@ models:
       const spec = resolveModelName('raw/model', config, () => 'mlx');
       expect(spec.model).toBe('raw/model');
       expect(spec.provider).toBe('mlx');
+    });
+
+    it('infers the provider from a matching raw model entry', () => {
+      const spec = resolveModelName('raw/model', {
+        models: {
+          pytorch: { provider: 'pytorch', model: 'raw/model' },
+        },
+      });
+
+      expect(spec.provider).toBe('pytorch');
+    });
+
+    it('throws when a raw model provider cannot be inferred', () => {
+      expect(() => resolveModelName('unknown/model', config)).toThrow(
+        /Unable to infer provider.*--provider/,
+      );
+    });
+  });
+
+  describe('inferProvider', () => {
+    it('uses the provider from a matching models entry', () => {
+      expect(inferProvider('mlx-community/org-model', {
+        models: {
+          configured: { provider: 'pytorch', model: 'mlx-community/org-model' },
+        },
+      })).toBe('pytorch');
+    });
+
+    it('rejects conflicting providers regardless of matching entry order', () => {
+      const model = 'org/shared-model';
+      const configurations = [
+        {
+          models: {
+            mlx: { provider: 'mlx', model },
+            pytorch: { provider: 'pytorch', model },
+          },
+        },
+        {
+          models: {
+            pytorch: { provider: 'pytorch', model },
+            mlx: { provider: 'mlx', model },
+          },
+        },
+      ];
+
+      for (const configuration of configurations) {
+        expect(() => inferProvider(model, configuration)).toThrow(
+          /Unable to infer provider uniquely.*--provider/,
+        );
+      }
+    });
+
+    it('infers pytorch from a matching top-level runtime', () => {
+      expect(inferProvider('org/model', {
+        models: {
+          configured: {
+            provider: '',
+            model: 'org/model',
+            runtime: 'pytorch',
+          },
+        },
+      })).toBe('pytorch');
+    });
+
+    it('infers mlx from metadata runtime', () => {
+      expect(inferProvider('org/model', {
+        models: {
+          configured: {
+            provider: '',
+            model: 'org/model',
+            metadata: { runtime: 'mlx-lm' },
+          },
+        },
+      })).toBe('mlx');
+    });
+
+    it('recognizes MLX model name markers', () => {
+      expect(inferProvider('prism-ml/Ternary-Bonsai-1.7B-mlx-2bit')).toBe('mlx');
+      expect(inferProvider('mlx-community/example-4bit')).toBe('mlx');
+    });
+
+    it('keeps test and echo prefixes', () => {
+      expect(inferProvider('test-response')).toBe('test');
+      expect(inferProvider('echo-response')).toBe('echo');
+    });
+
+    it('throws when no provider signal is available', () => {
+      expect(() => inferProvider('org/unknown-model')).toThrow(
+        /Unable to infer provider.*--provider/,
+      );
     });
   });
 

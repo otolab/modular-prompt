@@ -32,7 +32,10 @@ describe('resolveModelSpec', () => {
       },
     };
 
-    const spec = resolveModelSpec(profile, INLINE_MODELS, { model: 'override-model' });
+    const spec = resolveModelSpec(profile, INLINE_MODELS, {
+      model: 'override-model',
+      provider: 'mlx',
+    });
     expect(spec.model).toBe('override-model');
   });
 
@@ -179,8 +182,77 @@ describe('resolveProfileModelSpec with models.yaml', () => {
       },
     };
 
-    const spec = resolveProfileModelSpec(profile, { model: 'cli-model' });
+    const spec = resolveProfileModelSpec(profile, { model: 'cli-model', provider: 'mlx' });
     expect(spec.model).toBe('cli-model');
+  });
+
+  it('infers the provider from a matching raw model entry', () => {
+    const spec = resolveModelSpec(
+      { model: 'my-org/my-pytorch-model' },
+      {
+        models: {
+          pytorch: {
+            provider: 'pytorch',
+            model: 'my-org/my-pytorch-model',
+          },
+        },
+      },
+    );
+
+    expect(spec).toMatchObject({
+      model: 'my-org/my-pytorch-model',
+      provider: 'pytorch',
+    });
+  });
+
+  it('lets an explicit provider resolve an otherwise unknown raw model', () => {
+    const spec = resolveModelSpec(
+      { provider: 'pytorch' },
+      {},
+      { model: 'my-org/unknown-model', provider: 'pytorch' },
+    );
+
+    expect(spec).toMatchObject({
+      model: 'my-org/unknown-model',
+      provider: 'pytorch',
+    });
+  });
+
+  it('lets profile.provider override an inferred provider', () => {
+    const spec = resolveModelSpec(
+      {
+        model: 'mlx-community/model',
+        provider: 'pytorch',
+      },
+      {},
+    );
+
+    expect(spec.provider).toBe('pytorch');
+  });
+
+  it('keeps alias resolution first while allowing an explicit provider override', () => {
+    const spec = resolveModelSpec(
+      {
+        model: 'local-chat',
+        provider: 'pytorch',
+      },
+      {
+        models: {
+          'local-chat': { provider: 'mlx', model: 'configured/model' },
+        },
+      },
+    );
+
+    expect(spec).toMatchObject({
+      model: 'configured/model',
+      provider: 'pytorch',
+    });
+  });
+
+  it('throws when a raw model provider cannot be inferred', () => {
+    expect(() => resolveModelSpec({ model: 'my-org/unknown-model' }, {})).toThrow(
+      /Unable to infer provider.*--provider/,
+    );
   });
 
   it('profile.model resolves alias when defined in merged models', () => {

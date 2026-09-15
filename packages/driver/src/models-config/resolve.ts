@@ -190,13 +190,133 @@ export function resolveModelAlias(
   return entryToModelSpec(entry);
 }
 
+const DRIVER_PROVIDERS: readonly DriverProvider[] = [
+  'openai',
+  'anthropic',
+  'vertexai',
+  'googlegenai',
+  'mlx',
+  'pytorch',
+  'ollama',
+  'vllm',
+  'echo',
+  'test',
+];
+
+function normalizeProvider(value: unknown): DriverProvider | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return DRIVER_PROVIDERS.includes(normalized as DriverProvider)
+    ? normalized as DriverProvider
+    : undefined;
+}
+
+function inferProviderFromRuntime(runtime: unknown): DriverProvider | undefined {
+  if (typeof runtime !== 'string') {
+    return undefined;
+  }
+
+  const normalized = runtime.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized === 'mlx' || normalized.startsWith('mlx-')) {
+    return 'mlx';
+  }
+  if (
+    normalized === 'pytorch'
+    || normalized.startsWith('pytorch-')
+    || normalized === 'torch'
+    || normalized.startsWith('torch-')
+  ) {
+    return 'pytorch';
+  }
+
+  return normalizeProvider(normalized);
+}
+
+function inferProviderFromModelName(model: string): DriverProvider | undefined {
+  // MLX model repositories commonly use either the mlx-community namespace or
+  // an `-mlx-` / `-mlx` marker in the model name.
+  if (/(?:^|[\\/_-])mlx(?:[\\/_-]|$)/i.test(model)) {
+    return 'mlx';
+  }
+  return undefined;
+}
+
+function providerInferenceError(model: string, ambiguous = false): Error {
+  const qualifier = ambiguous ? ' uniquely' : '';
+  return new Error(
+    `Unable to infer provider${qualifier} for model '${model}'. `
+    + 'Specify --provider <provider>, use a model alias, '
+    + 'or configure a single provider for this model in models.yaml.',
+  );
+}
+
+/**
+ * 生 model ID から driver provider を推論する。
+ *
+ * alias の解決は呼び出し側の `resolveModelName()` が先に行う。この helper
+ * は生 ID に対して、merged models の一致エントリ、runtime metadata、
+ * モデル名の既知パターンの順に推論し、判断できない場合は明示指定を促す。
+ */
+export function inferProvider(
+  model: string,
+  config: ModelsConfig = {}
+): DriverProvider {
+  // Keep the test/echo shortcuts stable for local and unit-test drivers.
+  if (model.startsWith('test-')) {
+    return 'test';
+  }
+  if (model.startsWith('echo-')) {
+    return 'echo';
+  }
+
+  const matchingEntries = Object.values(config.models ?? {})
+    .filter(entry => entry.model === model);
+  if (matchingEntries.length > 0) {
+    const matchingProviders = matchingEntries.map(entry =>
+      normalizeProvider(entry.provider)
+      ?? inferProviderFromRuntime(entry.runtime)
+      ?? inferProviderFromRuntime(entry.metadata?.runtime)
+    );
+    const uniqueProviders = new Set(
+      matchingProviders.filter(
+        (provider): provider is DriverProvider => provider !== undefined,
+      ),
+    );
+
+    // More than one exact entry is valid only when every entry resolves to the
+    // same provider. An unresolved entry could hide another provider, so do not
+    // let its position in the config decide the result.
+    if (
+      uniqueProviders.size > 1
+      || (matchingEntries.length > 1
+        && matchingProviders.some(provider => provider === undefined))
+    ) {
+      throw providerInferenceError(model, true);
+    }
+
+    if (uniqueProviders.size === 1 && matchingProviders.every(Boolean)) {
+      return [...uniqueProviders][0];
+    }
+  }
+
+  const modelNameProvider = inferProviderFromModelName(model);
+  if (modelNameProvider) {
+    return modelNameProvider;
+  }
+
+  throw providerInferenceError(model);
+}
+
 /**
  * モデル名を alias または生の model 名として解決する
  */
 export function resolveModelName(
   name: string,
   config: ModelsConfig,
-  inferProvider: (model: string) => DriverProvider
+  providerResolver: (model: string, config: ModelsConfig) => DriverProvider = inferProvider
 ): ModelSpec {
   const byAlias = resolveModelAlias(name, config);
   if (byAlias) {
@@ -205,7 +325,7 @@ export function resolveModelName(
 
   return {
     model: name,
-    provider: inferProvider(name),
+    provider: providerResolver(name, config),
     capabilities: [],
   };
 }

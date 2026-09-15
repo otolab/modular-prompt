@@ -71,6 +71,18 @@ describe('extract model resolution', () => {
     });
   });
 
+  it('uses the provider from a matching models entry for a raw model ID', () => {
+    const model = 'my-org/my-model';
+    expect(resolveModelSpec(model, {
+      models: {
+        configured: { provider: 'mlx', model },
+      },
+    })).toMatchObject({
+      model,
+      provider: 'mlx',
+    });
+  });
+
   it('does not use the first model entry when no model is specified', () => {
     expect(() => resolveModelSpec(undefined, {
       models: {

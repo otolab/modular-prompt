@@ -107,7 +107,7 @@ modular-prompt-extract extract meeting --dry-run '登場人物を列挙'
 | 1 | CLI `-m` | 最優先。alias または生の HF model ID |
 | 2 | user yaml の `models.default` | `-m` 省略時のみ使用。同梱 fallback や先頭エントリ自動選択はなし |
 
-`-m` を省略した場合は、`models.default` が user yaml に明示されているときだけそのモデルを使います。未設定時は MLX を起動せず、`-m` 指定または `models.default` 定義を案内するエラーを返します。create は解決後の生 model ID を store の `manifest.json` に保存し、以降の add/extract はその ID を使います。
+`-m` を省略した場合は、`models.default` が user yaml に明示されているときだけそのモデルを使います。未設定時は MLX を起動せず、`-m` 指定または `models.default` 定義を案内するエラーを返します。`-m` で alias ではなく生の model ID を指定する場合は、models.yaml の一致エントリで `provider: mlx` を設定するか、`mlx-community/...` / `-mlx-` などの既知の MLX model 名パターンを使用してください。provider を推論できない ID は誤った runtime を選ばないようエラーになります（extract は MLX 専用のため CLI に `--provider` はなく、models.yaml で provider を設定します）。create は解決後の生 model ID を store の `manifest.json` に保存し、以降の add/extract はその ID を使います。
 
 ローカルテスト用のモデルは `~/.modular-prompt/models.testing.yaml` に分けて置き、手元の extract 実行では `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定できます。設定ファイルのサンプルと統合テストの convention alias は [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
@@ -203,7 +203,7 @@ try {
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
 | セッション終了 | `session.close()` — デフォルトで handle `release()`。固定 cacheDir を残す場合は `{ releaseCache: false }` |
 
-`cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。モデル設定がない場合はエラーになります。指定する場合は alias または生の HF model ID を使えます。キャッシュ非対応モードは提供しない。
+`cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。モデル設定がない場合はエラーになります。指定する場合は alias または生の HF model ID を使えますが、生 ID の provider を推論できない場合もエラーになります。extract は MLX 専用のため、models.yaml の一致エントリで `provider: mlx` を設定するか、既知の MLX model 名パターンを使用してください。キャッシュ非対応モードは提供しない。
 
 詳細は [プロンプトキャッシュ設計](./docs/CACHE_DESIGN.md) および [API 仕様](./docs/API.md) を参照。
 
@@ -353,7 +353,7 @@ modular-prompt-extract clean --all [-d <cache-dir>]
 
 `add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。`create` は解決後の生 model ID と選択した MLX `backend`（`auto` / `lm` / `vlm` / `optiq`）を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の値を新しい runtime に渡して再開します。backend がない既存 manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache と画像 material 用の vision cache を別 namespace で使用し、VLM incremental prefill は対象外です。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。生 model ID の provider を推論できない場合はエラーになるため、extract では models.yaml の一致エントリに `provider: mlx` を設定してください。`create` は解決後の生 model ID と選択した MLX `backend`（`auto` / `lm` / `vlm` / `optiq`）を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の値を新しい runtime に渡して再開します。backend がない既存 manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache と画像 material 用の vision cache を別 namespace で使用し、VLM incremental prefill は対象外です。
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 
