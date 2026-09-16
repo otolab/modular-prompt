@@ -1,8 +1,9 @@
 import { resolve } from 'node:path';
 import { createExtractSession } from '../create-extract-session.js';
-import { createMlxExtractRuntime } from '../create-mlx-extract-runtime.js';
+import { createExtractRuntime } from '../create-extract-runtime.js';
+import { assertExtractRuntimeMatchesManifest } from '../extract-store.js';
 import { DEFAULT_MAX_TOKENS } from './constants.js';
-import { readManifest } from './manifest.js';
+import { getManifestProvider, readManifest } from './manifest.js';
 import { renderExtractPrompt } from './render-prompt.js';
 import { resolveStoreDir } from './store.js';
 
@@ -37,14 +38,16 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
     return renderExtractPrompt({ materials: manifest.materials }, request);
   }
 
-  const runtime = await createMlxExtractRuntime({
+  const runtime = await createExtractRuntime({
     model: manifest.model,
+    provider: getManifestProvider(manifest),
     cacheDir: storeDir,
     ...(manifest.backend ? { backend: manifest.backend } : {}),
     ...(manifest.maxImageSize !== undefined ? { maxImageSize: manifest.maxImageSize } : {}),
   });
 
   try {
+    assertExtractRuntimeMatchesManifest(runtime, manifest);
     const session = createExtractSession({
       driver: runtime.driver,
       cacheController: runtime.cacheController,

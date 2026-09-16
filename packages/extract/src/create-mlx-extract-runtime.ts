@@ -6,6 +6,7 @@ import {
   type MlxModelDriverOptions,
 } from '@modular-prompt/driver';
 import { createDriver } from './model-resolution.js';
+import type { ExtractRuntime } from './extract-runtime-types.js';
 
 export interface MlxExtractRuntimeOptions {
   /** MLX model ID or alias in models.yaml. Omitted uses user-configured models.default. */
@@ -27,10 +28,8 @@ export interface MlxExtractRuntimeOptions {
  * unsupported.
  * Lifecycle (close) is owned by the caller — not by ExtractSession.
  */
-export interface MlxExtractRuntime {
-  driver: AIDriver;
-  cacheController: PromptCacheController;
-  model: string;
+export interface MlxExtractRuntime extends ExtractRuntime {
+  provider: 'mlx';
   /** Backend selected for this runtime; persisted by extract stores. */
   backend: MlxBackendMode;
   /** VLM image resize limit used by the driver and cache prefill. */
@@ -72,6 +71,7 @@ export async function createMlxExtractRuntime(
   try {
     const resolved = await createDriver(options.model, {
       cacheController,
+      provider: 'mlx',
       backend: options.backend,
       maxImageSize: options.maxImageSize,
     });
@@ -88,6 +88,7 @@ export async function createMlxExtractRuntime(
       driver,
       cacheController,
       model: resolved.spec.model,
+      provider: 'mlx',
       backend: resolved.spec.backend ?? 'auto',
       maxImageSize,
       async close() {

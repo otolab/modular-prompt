@@ -1,5 +1,7 @@
 export { createExtractSession } from './create-extract-session.js';
 export { createMlxExtractRuntime } from './create-mlx-extract-runtime.js';
+export { createPytorchExtractRuntime } from './create-pytorch-extract-runtime.js';
+export { createExtractRuntime } from './create-extract-runtime.js';
 export {
   createDriver,
   resolveMergedModels,
@@ -51,6 +53,15 @@ export type {
   MlxExtractRuntime,
   MlxExtractRuntimeOptions,
 } from './create-mlx-extract-runtime.js';
+export type {
+  PyTorchExtractRuntime,
+  PyTorchExtractRuntimeOptions,
+} from './create-pytorch-extract-runtime.js';
+export type {
+  ExtractRuntime,
+  ExtractProvider,
+} from './extract-runtime-types.js';
+export type { ExtractRuntimeOptions } from './create-extract-runtime.js';
 export type {
   ExtractDriverOptions,
   ExtractDriverResult,

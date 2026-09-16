@@ -16,7 +16,7 @@
 
 | コンポーネント | 生成 | 終了 |
 |--------------|------|------|
-| `driver` + `cacheController` | 呼び出し側（または `createMlxExtractRuntime`） | 呼び出し側（`runtime.close()` 等） |
+| `driver` + `cacheController` | 呼び出し側（または provider runtime factory） | 呼び出し側（`runtime.close()` 等） |
 | `ExtractSession` | `createExtractSession()` | `session.close()` — handle `release()` のみ |
 
 `ExtractSession` は driver / cacheController を **借りる** だけで、所有しない。
@@ -74,6 +74,8 @@ library API では `content: Attachment[]` による画像 material を指定で
 import {
   createExtractSession,
   createMlxExtractRuntime,
+  createPytorchExtractRuntime,
+  createExtractRuntime,
   resolveModelSpec,
   createDriver,
   buildPreviousExtractionsInputs,
@@ -106,8 +108,10 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 |---------|------|------|
 | `createExtractSession` | 関数 | 抽出セッションを生成 |
 | `createMlxExtractRuntime` | 関数 | MLX 用 driver + cacheController バンドル |
+| `createPytorchExtractRuntime` | 関数 | PyTorch 用 driver + cacheController バンドル（text-only） |
+| `createExtractRuntime` | 関数 | 解決済み provider に応じた runtime factory |
 | `resolveModelSpec` | 関数 | models.yaml の alias または生 model ID を extract 用 ModelSpec に解決 |
-| `createDriver` | 関数 | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
+| `createDriver` | 関数 | 解決済み ModelSpec から AIService 経由で MLX / PyTorch driver を生成 |
 | `resolveSessionModules` | 関数 | base (+ domain) モジュールを解決 |
 | `resolveDefaultContainerDir` | 関数 | `MODULAR_PROMPT_HOME` に基づくデフォルト cache container を解決 |
 | `resolveStoreDir` | 関数 | cache コンテナと storename から store ディレクトリを解決 |
@@ -128,10 +132,10 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 | API | 入力 / 出力 | 責務と保証 |
 |-----|-------------|------------|
 | `mergeMaterials(existing, incoming)` | `MaterialInput[]` → merged `MaterialInput[]` | `id`（省略時は `title`）で順序を保ってマージ。同一 id・同一内容はスキップし、内容差分はエラー |
-| `prepareExtractCache({ cacheDir, model, backend?, maxImageSize?, materials })` | `Promise<{ model, backend, maxImageSize? }>`（解決済み model/backend） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
-| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, backend, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
+| `prepareExtractCache({ cacheDir, model, provider?, backend?, maxImageSize?, materials })` | `Promise<{ model, provider, backend?, maxImageSize? }>`（解決済み model/provider） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
+| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, provider, backend?, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
 
-`appendToExtractStore` は `manifest.model`、`manifest.backend`（未指定時は `auto` fallback）、および保存済み `maxImageSize` を使い、成功時だけ `updatedAt`、materials、解決済み backend、画像 resize 条件を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
+`appendToExtractStore` は `manifest.provider`（未指定の legacy manifest は MLX）、`manifest.model`、`manifest.backend`（MLX のみ。未指定時は `auto` fallback）、および保存済み `maxImageSize` を使い、provider + model の不一致を検証します。成功時だけ `updatedAt`、materials、解決済み provider/backend、画像 resize 条件を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
 
 ---
 
@@ -156,9 +160,28 @@ function createMlxExtractRuntime(
 
 runtime の `backend` プロパティは実際に driver へ渡した選択値であり、extract store の manifest に保存されます。backend のない既存 manifest は `auto` として再開します。
 
-`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、models.yaml の MLX backend 指定を保持する。backend 未指定時は `auto` としてモデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` の場合、画像なしの text-only exact KV cache と、画像 material を含む vision cache を固定 cacheDir に別 namespace で永続化できる。画像付き cache は text-only VLM / LM cache と非互換で、VLM incremental prefill は対象外。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。生の model ID を指定する場合は、models.yaml の一致エントリで `provider: mlx` を設定するか、既知の MLX model 名パターンを使用してください。provider を推論できない ID はエラーになります（extract は MLX 専用のため provider は models.yaml で設定します）。
+`createMlxExtractRuntime` は AIService 経由でモデルを解決・生成し、models.yaml の MLX backend 指定を保持する。backend 未指定時は `auto` としてモデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` の場合、画像なしの text-only exact KV cache と、画像 material を含む vision cache を固定 cacheDir に別 namespace で永続化できる。画像付き cache は text-only VLM / LM cache と非互換で、VLM incremental prefill は対象外。モデル指定を省略した場合は user の `~/.modular-prompt/models.yaml` にある `models.default` を使用する。同梱モデルや `models` の先頭エントリへの fallback はなく、モデル未設定時は driver 作成前にエラーになる。生の model ID を指定する場合は、models.yaml の一致エントリで `provider: mlx` を設定するか、既知の MLX model 名パターンを使用してください。provider を推論できない ID はエラーになります。
 
-`createDriver(model, { cacheController, backend?, maxImageSize? })` は runtime 内部で使用する低レベル helper で、戻り値は `{ driver, spec }`。`spec.model` は alias 解決後の生 model ID である。
+## `createPytorchExtractRuntime(options)`
+
+```typescript
+function createPytorchExtractRuntime(
+  options: PyTorchExtractRuntimeOptions
+): Promise<PyTorchExtractRuntime>
+```
+
+| プロパティ | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `model` | `string` | — | PyTorch (Transformers) モデルの alias または生の HF model ID。省略時は user models.yaml の `models.default` から解決 |
+| `cacheDir` | `string` | — | 固定キャッシュディレクトリ。省略時は managed temp dir |
+
+PyTorch runtime は `PyTorchCacheController` と `PyTorchDriver` を共有し、`getCapabilities()` で cache binding を完了してから返します。現状の PyTorch backend は text-only のため、MLX の `backend` / `maxImageSize` は渡されません。`runtime.close()` は driver と cache controller を解放します。
+
+## `createExtractRuntime(options)`
+
+`createExtractRuntime({ model, provider?, cacheDir?, backend?, maxImageSize? })` は alias / raw model の解決結果に応じて MLX または PyTorch runtime を生成します。`provider` を指定した場合は models.yaml の alias/provider と一致することを検証し、raw model ID の provider を明示できます。PyTorch では `backend` / `maxImageSize` は無視されます。
+
+`createDriver(model, { provider?, cacheController, backend?, maxImageSize? })` は runtime 内部で使用する低レベル helper で、戻り値は `{ driver, spec }`。`spec.model` は alias 解決後の生 model ID である。
 
 ---
 
@@ -228,7 +251,7 @@ CLI の `clean <storename>` で store 単位、`clean --all` で cache container
 CLI の `create` / `add` は各入力ファイルを UTF-8 の文字列として `MaterialInput.content` に格納します。画像ファイルを `Attachment` に変換する CLI 経路はなく、CLI 画像 material は Phase 3 の対象外です。画像 material の縦切りは library API の `MaterialInput.content: Attachment[]` を使用してください。
 
 ```bash
-modular-prompt-extract create <storename> [-m <model>] [--dry-run] <files...>
+modular-prompt-extract create <storename> [-m <model>] [--provider <mlx|pytorch>] [--dry-run] <files...>
 modular-prompt-extract add <storename> [--dry-run] <files...>
 modular-prompt-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
 modular-prompt-extract list
@@ -251,7 +274,7 @@ modular-prompt-extract clean --all -d ~/.modular-prompt/extract-cache
 
 `add <storename> [--dry-run] <files...>` は既存 store の manifest にファイルを追記し、manifest の model で prepare cue を実行する。既存 cache を staging store に複製してから incremental prefill と manifest 更新を行い、成功時にだけ store を入れ替える。prefill または manifest 更新が失敗した場合は元の store を保持する。同じ絶対パス `id` の同一内容はスキップし、内容が異なる場合は `clean` + `create` を案内してエラーにする。
 
-`add --dry-run` はマージ後の compile 済みプロンプトを表示し、MLX の起動・KV cache の書き込み・manifest の更新を行わない。`add` では `-m` と `--max-tokens` は指定できない。
+`add --dry-run` はマージ後の compile 済みプロンプトを表示し、driver の起動・KV cache の書き込み・manifest の更新を行わない。`add` では `-m`、`--provider`、`--max-tokens` は指定できない。create の `--provider` は `mlx` または `pytorch` を受け付け、以降の add/extract は manifest に保存された provider を使用する。
 
 これは破壊的変更であり、旧 CLI 引数形式と旧レイアウト（container 直下の `manifest.json` と cache files）はサポートしない。旧デフォルト `./.extract-cache` の自動検出・自動移行も行わない。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って、新しいデフォルトまたは `-d` で指定した store container へ移動する。
 

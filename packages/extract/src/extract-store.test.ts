@@ -15,8 +15,8 @@ const { createRuntimeMock } = vi.hoisted(() => ({
   createRuntimeMock: vi.fn(),
 }));
 
-vi.mock('./create-mlx-extract-runtime.js', () => ({
-  createMlxExtractRuntime: createRuntimeMock,
+vi.mock('./create-extract-runtime.js', () => ({
+  createExtractRuntime: createRuntimeMock,
 }));
 
 describe('mergeMaterials', () => {
@@ -54,6 +54,7 @@ describe('appendToExtractStore', () => {
       driver: new TestDriver({ responses: ['prepared'] }),
       cacheController: tracking.controller,
       model: 'test-model',
+      provider: 'mlx',
       backend: 'auto',
       close: runtimeClose,
     }));
@@ -99,14 +100,22 @@ describe('appendToExtractStore', () => {
       version: 1,
       storename: 'vlm-store',
       model: 'resolved-vlm-model',
+      provider: 'mlx',
       backend: 'vlm',
       maxImageSize: 512,
       materials: [{ id: '/docs/one.txt', title: 'one.txt', content: 'one' }],
       createdAt: '2026-01-01T00:00:00.000Z',
     });
 
-    const runtimeArgs: Array<{ backend?: string; cacheDir?: string; model?: string; maxImageSize?: number }> = [];
+    const runtimeArgs: Array<{
+      provider?: string;
+      backend?: string;
+      cacheDir?: string;
+      model?: string;
+      maxImageSize?: number;
+    }> = [];
     createRuntimeMock.mockImplementationOnce(async (args: {
+      provider?: string;
       backend?: string;
       cacheDir?: string;
       model?: string;
@@ -117,6 +126,7 @@ describe('appendToExtractStore', () => {
         driver: new TestDriver({ responses: ['prepared'] }),
         cacheController: tracking.controller,
         model: 'resolved-vlm-model',
+        provider: 'mlx',
         backend: 'vlm',
         close: runtimeClose,
       };
@@ -136,6 +146,53 @@ describe('appendToExtractStore', () => {
     })]);
     expect(result.backend).toBe('vlm');
     await expect(readManifest(storeDir)).resolves.toMatchObject({ backend: 'vlm' });
+  });
+
+  it('records a PyTorch provider and rejects a provider-mismatched runtime', async () => {
+    const storeDir = join(tempDir, 'pytorch-store');
+    await mkdir(storeDir, { recursive: true });
+    await writeManifest(storeDir, {
+      version: 1,
+      storename: 'pytorch-store',
+      model: 'pytorch-model',
+      provider: 'pytorch',
+      materials: [{ id: '/docs/one.txt', title: 'one.txt', content: 'one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    createRuntimeMock.mockImplementationOnce(async () => ({
+      driver: new TestDriver({ responses: ['prepared'] }),
+      cacheController: tracking.controller,
+      model: 'pytorch-model',
+      provider: 'pytorch',
+      close: runtimeClose,
+    }));
+
+    const result = await appendToExtractStore({
+      storeDir,
+      storename: 'pytorch-store',
+      incomingMaterials: [{ id: '/docs/two.txt', title: 'two.txt', content: 'two' }],
+    });
+    expect(result.provider).toBe('pytorch');
+    expect(result.backend).toBeUndefined();
+    await expect(readManifest(storeDir)).resolves.toMatchObject({ provider: 'pytorch' });
+
+    createRuntimeMock.mockImplementationOnce(async () => ({
+      driver: new TestDriver({ responses: ['should not commit'] }),
+      cacheController: tracking.controller,
+      model: 'pytorch-model',
+      provider: 'mlx',
+      backend: 'auto',
+      close: runtimeClose,
+    }));
+    const originalManifest = await readFile(join(storeDir, 'manifest.json'), 'utf-8');
+
+    await expect(appendToExtractStore({
+      storeDir,
+      storename: 'pytorch-store',
+      incomingMaterials: [{ id: '/docs/three.txt', title: 'three.txt', content: 'three' }],
+    })).rejects.toThrow(/provider mismatch/);
+    expect(await readFile(join(storeDir, 'manifest.json'), 'utf-8')).toBe(originalManifest);
   });
 
   it('rejects an empty required cache handle and preserves the existing store', async () => {
@@ -173,6 +230,7 @@ describe('appendToExtractStore', () => {
       }),
       cacheController: emptyCacheController,
       model: 'test-model',
+      provider: 'mlx',
       close: runtimeClose,
     }));
 
@@ -243,6 +301,7 @@ describe('appendToExtractStore', () => {
         driver: new TestDriver({ responses: ['prepared'] }),
         cacheController: incrementalController,
         model: 'test-model',
+        provider: 'mlx',
         close: firstRuntimeClose,
       };
     });
@@ -280,6 +339,7 @@ describe('appendToExtractStore', () => {
       driver: new TestDriver({ responses: ['available after commit'] }),
       cacheController: postCommitController,
       model: 'test-model',
+      provider: 'mlx',
       close: postCommitRuntimeClose,
       requestedCacheDir: cacheDir,
     }));

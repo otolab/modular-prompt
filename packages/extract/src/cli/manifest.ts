@@ -2,6 +2,7 @@ import { readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { MlxBackendMode } from '@modular-prompt/driver';
 import type { MaterialInput } from '../extract-elements.js';
+import type { ExtractProvider } from '../extract-runtime-types.js';
 import { MANIFEST_FILENAME } from './constants.js';
 
 export interface ExtractCacheManifest {
@@ -9,6 +10,8 @@ export interface ExtractCacheManifest {
   /** Store name for self-describing cache directories. */
   storename?: string;
   model: string;
+  /** Provider that owns the persisted cache format. Missing means legacy MLX. */
+  provider?: ExtractProvider;
   /** MLX backend selected when the store was prepared. Missing means `auto` for legacy stores. */
   backend?: MlxBackendMode;
   /** VLM image resize limit used to prepare the persisted cache. */
@@ -20,6 +23,15 @@ export interface ExtractCacheManifest {
 
 function isMlxBackend(value: unknown): value is MlxBackendMode {
   return value === 'auto' || value === 'lm' || value === 'vlm' || value === 'optiq';
+}
+
+export function isExtractProvider(value: unknown): value is ExtractProvider {
+  return value === 'mlx' || value === 'pytorch';
+}
+
+/** Resolve the provider of a manifest, preserving compatibility with MLX stores created before v1 provider metadata. */
+export function getManifestProvider(manifest: ExtractCacheManifest): ExtractProvider {
+  return manifest.provider ?? 'mlx';
 }
 
 export function manifestPath(cacheDir: string): string {
@@ -42,6 +54,7 @@ export async function readManifest(cacheDir: string): Promise<ExtractCacheManife
     parsed.version !== 1
     || !parsed.model
     || !Array.isArray(parsed.materials)
+    || (parsed.provider !== undefined && !isExtractProvider(parsed.provider))
     || (parsed.backend !== undefined && !isMlxBackend(parsed.backend))
     || (parsed.maxImageSize !== undefined
       && (typeof parsed.maxImageSize !== 'number'

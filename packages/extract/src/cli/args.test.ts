@@ -40,6 +40,24 @@ describe('cli argument parser', () => {
     });
   });
 
+  it('parses an explicit PyTorch provider for create', () => {
+    expect(parseArgs([
+      'create',
+      'meeting',
+      '--provider',
+      'pytorch',
+      '-m',
+      'local-pytorch',
+      'notes.txt',
+    ])).toEqual({
+      command: 'create',
+      model: 'local-pytorch',
+      provider: 'pytorch',
+      storename: 'meeting',
+      positional: ['notes.txt'],
+    });
+  });
+
   it('takes the first positional argument after add as the storename', () => {
     expect(parseArgs([
       'add',
@@ -109,5 +127,12 @@ describe('cli argument parser', () => {
       .toThrow(/only valid with create/);
     expect(() => parseArgs(['add', 'meeting', '--max-tokens', '10', 'notes.txt']))
       .toThrow(/only valid with extract/);
+    expect(() => parseArgs(['extract', 'meeting', '--provider', 'pytorch', 'query']))
+      .toThrow(/only valid with create/);
+  });
+
+  it('rejects an unknown extract provider', () => {
+    expect(() => parseArgs(['create', 'meeting', '--provider', 'cuda', 'notes.txt']))
+      .toThrow(/provider must be either/);
   });
 });

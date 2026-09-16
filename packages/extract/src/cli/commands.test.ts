@@ -16,8 +16,8 @@ const { createRuntimeMock, createSessionMock, writeManifestMock } = vi.hoisted((
   writeManifestMock: vi.fn(),
 }));
 
-vi.mock('../create-mlx-extract-runtime.js', () => ({
-  createMlxExtractRuntime: createRuntimeMock,
+vi.mock('../create-extract-runtime.js', () => ({
+  createExtractRuntime: createRuntimeMock,
 }));
 
 vi.mock('../create-extract-session.js', () => ({
@@ -44,6 +44,7 @@ describe('cli store commands', () => {
       driver: {},
       cacheController: {},
       model: model ?? 'resolved-default-model',
+      provider: 'mlx',
       backend: 'auto',
       close: vi.fn().mockResolvedValue(undefined),
     }));
@@ -64,6 +65,7 @@ describe('cli store commands', () => {
       driver: {},
       cacheController: {},
       model: 'resolved-vlm-model',
+      provider: 'mlx',
       backend: 'vlm',
       close: vi.fn().mockResolvedValue(undefined),
     }));
@@ -81,6 +83,55 @@ describe('cli store commands', () => {
     });
   });
 
+  it('creates and reopens a PyTorch store through the provider-aware runtime', async () => {
+    const firstFile = join(tempDir, 'pytorch-first.txt');
+    const secondFile = join(tempDir, 'pytorch-second.txt');
+    await writeFile(firstFile, 'PyTorch first corpus', 'utf-8');
+    await writeFile(secondFile, 'PyTorch second corpus', 'utf-8');
+
+    const runtimeArgs: unknown[] = [];
+    createRuntimeMock.mockImplementation(async (args: { model?: string; provider?: string }) => {
+      runtimeArgs.push(args);
+      return {
+        driver: {},
+        cacheController: {},
+        model: args.model ?? 'pytorch-model',
+        provider: args.provider ?? 'pytorch',
+        close: vi.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    await runCreateCommand({
+      cacheDir: tempDir,
+      storename: 'pytorch-store',
+      model: 'pytorch-model',
+      provider: 'pytorch',
+      files: [firstFile],
+    });
+
+    const storeDir = join(tempDir, 'pytorch-store');
+    await expect(readManifest(storeDir)).resolves.toMatchObject({
+      model: 'pytorch-model',
+      provider: 'pytorch',
+    });
+
+    await runAddCommand({
+      cacheDir: tempDir,
+      storename: 'pytorch-store',
+      files: [secondFile],
+    });
+    await expect(runExtractCommand({
+      cacheDir: tempDir,
+      storename: 'pytorch-store',
+      query: 'Summarize the corpus',
+    })).resolves.toBe('mock extraction');
+
+    expect(runtimeArgs.slice(1)).toEqual([
+      expect.objectContaining({ provider: 'pytorch' }),
+      expect.objectContaining({ provider: 'pytorch', cacheDir: storeDir }),
+    ]);
+  });
+
   it('passes a persisted backend to a new extract runtime', async () => {
     const storeDir = join(tempDir, 'vlm-store');
     await mkdir(storeDir, { recursive: true });
@@ -88,6 +139,7 @@ describe('cli store commands', () => {
       version: 1,
       storename: 'vlm-store',
       model: 'resolved-vlm-model',
+      provider: 'mlx',
       backend: 'vlm',
       maxImageSize: 512,
       materials: [{ title: 'doc', content: 'VLM corpus' }],
@@ -102,6 +154,7 @@ describe('cli store commands', () => {
 
     expect(createRuntimeMock).toHaveBeenCalledWith({
       model: 'resolved-vlm-model',
+      provider: 'mlx',
       backend: 'vlm',
       cacheDir: storeDir,
       maxImageSize: 512,
@@ -119,6 +172,7 @@ describe('cli store commands', () => {
       driver: {},
       cacheController: {},
       model: 'resolved-vlm-model',
+      provider: 'mlx',
       backend: 'vlm',
       close: createClose,
     }));
@@ -145,6 +199,7 @@ describe('cli store commands', () => {
         driver: {},
         cacheController: {},
         model: 'resolved-vlm-model',
+        provider: 'mlx',
         backend: 'vlm',
         close: addClose,
       };
@@ -172,6 +227,7 @@ describe('cli store commands', () => {
         driver: {},
         cacheController: {},
         model: 'resolved-vlm-model',
+        provider: 'mlx',
         backend: 'vlm',
         close: extractClose,
       };
@@ -184,6 +240,7 @@ describe('cli store commands', () => {
     })).resolves.toBe('mock extraction');
     expect(extractRuntimeArgs).toEqual({
       model: 'resolved-vlm-model',
+      provider: 'mlx',
       backend: 'vlm',
       cacheDir: storeDir,
     });
@@ -240,11 +297,13 @@ describe('cli store commands', () => {
 
     expect(createRuntimeMock).toHaveBeenNthCalledWith(1, {
       model: 'meeting-model',
+      provider: 'mlx',
       backend: 'auto',
       cacheDir: join(tempDir, 'meeting'),
     });
     expect(createRuntimeMock).toHaveBeenNthCalledWith(2, {
       model: 'contract-model',
+      provider: 'mlx',
       backend: 'auto',
       cacheDir: join(tempDir, 'contract'),
     });

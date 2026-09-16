@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStoreDir, validateStorename } from './store.js';
+import { isKvCacheFile, resolveStoreDir, validateStorename } from './store.js';
 
 describe('store paths', () => {
   it('resolves a store below the container', () => {
@@ -18,5 +18,12 @@ describe('store paths', () => {
 
   it.each(['create', 'add', 'extract', 'list', 'clean'])('rejects reserved storename %s', (storename) => {
     expect(() => validateStorename(storename)).toThrow(/reserved/);
+  });
+
+  it('recognizes persisted MLX and PyTorch cache files', () => {
+    expect(isKvCacheFile('cache.safetensors.zip')).toBe(true);
+    expect(isKvCacheFile('cache.safetensors.zip.meta.json')).toBe(false);
+    expect(isKvCacheFile('cache.pytorch-cache')).toBe(true);
+    expect(isKvCacheFile('cache.pytorch-cache.meta.json')).toBe(false);
   });
 });

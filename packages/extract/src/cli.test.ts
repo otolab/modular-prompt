@@ -133,6 +133,36 @@ describe('cli/manifest', () => {
     await expect(readManifest(tempDir)).rejects.toThrow(/Invalid manifest/);
   });
 
+  it('accepts persisted MLX and PyTorch providers', async () => {
+    for (const provider of ['mlx', 'pytorch'] as const) {
+      const manifest = {
+        version: 1 as const,
+        model: `${provider}-model`,
+        provider,
+        materials: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+      await writeManifest(tempDir, manifest);
+      await expect(readManifest(tempDir)).resolves.toEqual(manifest);
+    }
+  });
+
+  it('rejects an unknown persisted provider', async () => {
+    await writeFile(
+      manifestPath(tempDir),
+      JSON.stringify({
+        version: 1,
+        model: 'test-model',
+        provider: 'cuda',
+        materials: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+      'utf-8',
+    );
+
+    await expect(readManifest(tempDir)).rejects.toThrow(/Invalid manifest/);
+  });
+
   it('rejects an invalid persisted image resize limit', async () => {
     await writeFile(
       manifestPath(tempDir),

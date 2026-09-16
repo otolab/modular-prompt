@@ -20,7 +20,7 @@ function printHelp(): void {
   console.log(`modular-prompt-extract v${packageJson.version}
 
 Usage:
-  modular-prompt-extract create <storename> [-d <cache-dir>] [-m <model>] [--dry-run] <files...>
+  modular-prompt-extract create <storename> [-d <cache-dir>] [-m <model>] [--provider <mlx|pytorch>] [--dry-run] <files...>
   modular-prompt-extract add <storename> [-d <cache-dir>] [--dry-run] <files...>
   modular-prompt-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
   modular-prompt-extract list [-d <cache-dir>]
@@ -36,9 +36,10 @@ Commands:
 
 Options:
   -d, --cache-dir <path>   Store container directory (default: ${resolveDefaultContainerDir()})
-  -m, --model <model>      MLX model alias from models.yaml or raw model id
+  -m, --model <model>      Model alias from models.yaml or raw model id
+  --provider <provider>    Extract provider for create (mlx or pytorch)
   --max-tokens <n>         Max tokens for extract (default: ${DEFAULT_MAX_TOKENS})
-  --dry-run                Compile and print full prompt text (no MLX / no cache write)
+  --dry-run                Compile and print full prompt text (no driver / no cache write)
   --all                    Remove the entire cache container (clean only)
   -h, --help               Show help
 
@@ -51,9 +52,8 @@ Note:
   If no model is configured, specify -m <model-id-or-alias> or define models.default
   in the user models.yaml.
   MLX backend follows models.yaml (backend: auto by default; lm/vlm may be
-  selected explicitly). Text-only LM/VLM prompt caches and image-bearing VLM
-  caches are persisted in separate store namespaces; VLM incremental prefill
-  is not supported.
+  selected explicitly). PyTorch extract is text-only and uses device/venvPath
+  from models.yaml driverOptions. Store manifests persist provider and model.
 `);
 }
 
@@ -75,6 +75,7 @@ async function main(): Promise<void> {
       cacheDir,
       storename: parsed.storename!,
       model: parsed.model,
+      provider: parsed.provider,
       files: parsed.positional,
       dryRun: parsed.dryRun,
     });

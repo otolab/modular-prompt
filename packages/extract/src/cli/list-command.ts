@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { isKvCacheFile } from './store.js';
-import { manifestExists, readManifest } from './manifest.js';
+import { getManifestProvider, manifestExists, readManifest } from './manifest.js';
 
 export interface ListCommandOptions {
   /** Container directory containing one subdirectory per store. */
@@ -11,6 +11,7 @@ export interface ListCommandOptions {
 export interface StoreSummary {
   storename: string;
   model: string;
+  provider: 'mlx' | 'pytorch';
   materialTitles: string[];
   createdAt: string;
   updatedAt?: string;
@@ -52,6 +53,7 @@ export async function listStores(cacheDir: string): Promise<StoreSummary[]> {
     summaries.push({
       storename: manifest.storename ?? storename,
       model: manifest.model,
+      provider: getManifestProvider(manifest),
       materialTitles: manifest.materials.map((material) => material.title),
       createdAt: manifest.createdAt,
       updatedAt: manifest.updatedAt,
@@ -69,6 +71,7 @@ function formatSummary(summary: StoreSummary): string {
   const lines = [
     `Store: ${summary.storename}`,
     `  Model: ${summary.model}`,
+    `  Provider: ${summary.provider}`,
     `  Materials: ${summary.materialTitles.length}${materials}`,
     `  Created: ${summary.createdAt}`,
   ];

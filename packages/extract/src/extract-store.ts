@@ -3,11 +3,13 @@ import { cp, mkdtemp, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { createExtractSession } from './create-extract-session.js';
-import { createMlxExtractRuntime } from './create-mlx-extract-runtime.js';
+import { createExtractRuntime } from './create-extract-runtime.js';
 import type { MlxBackendMode } from '@modular-prompt/driver';
 import type { MaterialInput } from './extract-elements.js';
+import type { ExtractProvider, ExtractRuntime } from './extract-runtime-types.js';
 import { CACHE_PREPARE_CUE } from './cli/constants.js';
 import {
+  getManifestProvider,
   manifestExists,
   readManifest,
   writeManifest,
@@ -20,6 +22,8 @@ export interface PrepareExtractCacheOptions {
   cacheDir: string;
   /** MLX model alias or resolved model ID. */
   model?: string;
+  /** Extract provider. Missing lets model resolution select it. */
+  provider?: ExtractProvider;
   /** Persisted/configured MLX backend. Missing preserves the `auto` fallback. */
   backend?: MlxBackendMode;
   /** VLM image resize limit; omitted uses the model configuration or 768. */
@@ -30,13 +34,14 @@ export interface PrepareExtractCacheOptions {
 
 export interface PreparedExtractCache {
   model: string;
-  backend: MlxBackendMode;
+  provider: ExtractProvider;
+  backend?: MlxBackendMode;
   /** VLM image resize limit used during preparation, when available. */
   maxImageSize?: number;
 }
 
 async function closeRuntimePreservingError(
-  runtime: Awaited<ReturnType<typeof createMlxExtractRuntime>>,
+  runtime: ExtractRuntime,
   operationError: unknown,
 ): Promise<void> {
   try {
@@ -52,16 +57,18 @@ async function closeRuntimePreservingError(
  * Prepare the persistent corpus cache and release all runtime resources.
  *
  * The caller owns the manifest transaction. This operation only creates or
- * extends the cache in `cacheDir` and returns the model/backend resolved by MLX.
+ * extends the cache in `cacheDir` and returns the resolved model/provider
+ * (plus MLX-only backend/image settings when applicable).
  */
 export async function prepareExtractCache(
   options: PrepareExtractCacheOptions,
 ): Promise<PreparedExtractCache> {
-  const runtime = await createMlxExtractRuntime({
+  const runtime = await createExtractRuntime({
     model: options.model,
-    backend: options.backend,
+    ...(options.provider !== undefined ? { provider: options.provider } : {}),
+    ...(options.backend !== undefined ? { backend: options.backend } : {}),
     cacheDir: options.cacheDir,
-    maxImageSize: options.maxImageSize,
+    ...(options.maxImageSize !== undefined ? { maxImageSize: options.maxImageSize } : {}),
   });
   let operationError: unknown;
 
@@ -82,8 +89,9 @@ export async function prepareExtractCache(
     await session.close({ releaseCache: false });
     return {
       model: runtime.model,
-      backend: runtime.backend ?? 'auto',
-      maxImageSize: runtime.maxImageSize,
+      provider: runtime.provider ?? 'mlx',
+      ...(runtime.backend !== undefined ? { backend: runtime.backend } : {}),
+      ...(runtime.maxImageSize !== undefined ? { maxImageSize: runtime.maxImageSize } : {}),
     };
   } catch (error: unknown) {
     operationError = error;
@@ -184,8 +192,28 @@ export interface AppendToExtractStoreOptions {
 export interface AppendToExtractStoreResult {
   manifest: ExtractCacheManifest;
   model: string;
-  backend: MlxBackendMode;
+  provider: ExtractProvider;
+  backend?: MlxBackendMode;
   addedMaterials: number;
+}
+
+export function assertExtractRuntimeMatchesManifest(
+  runtime: Pick<ExtractRuntime, 'model' | 'provider'>,
+  manifest: ExtractCacheManifest,
+): void {
+  const expectedProvider = getManifestProvider(manifest);
+  if (runtime.provider !== expectedProvider) {
+    throw new Error(
+      `Extract store provider mismatch: manifest has '${expectedProvider}', `
+      + `runtime resolved '${runtime.provider}'`,
+    );
+  }
+  if (runtime.model !== manifest.model) {
+    throw new Error(
+      `Extract store model mismatch: manifest has '${manifest.model}', `
+      + `runtime resolved '${runtime.model}'`,
+    );
+  }
 }
 
 async function replaceStoreWithStaging(
@@ -244,17 +272,24 @@ export async function appendToExtractStore(
     const prepared = await prepareExtractCache({
       cacheDir: stagingDir,
       model: previousManifest.model,
-      backend: previousManifest.backend,
+      provider: getManifestProvider(previousManifest),
+      ...(previousManifest.backend !== undefined
+        ? { backend: previousManifest.backend }
+        : {}),
       ...(previousManifest.maxImageSize !== undefined
         ? { maxImageSize: previousManifest.maxImageSize }
         : {}),
       materials,
     });
+    assertExtractRuntimeMatchesManifest(prepared, previousManifest);
+    const manifestWithoutBackend = { ...previousManifest };
+    delete manifestWithoutBackend.backend;
     const nextManifest: ExtractCacheManifest = {
-      ...previousManifest,
+      ...manifestWithoutBackend,
       model: prepared.model,
-      backend: prepared.backend,
+      provider: prepared.provider,
       materials,
+      ...(prepared.backend !== undefined ? { backend: prepared.backend } : {}),
       ...(prepared.maxImageSize !== undefined
         ? { maxImageSize: prepared.maxImageSize }
         : {}),
@@ -267,6 +302,7 @@ export async function appendToExtractStore(
     return {
       manifest: nextManifest,
       model: prepared.model,
+      provider: prepared.provider,
       backend: prepared.backend,
       addedMaterials: materials.length - previousManifest.materials.length,
     };
