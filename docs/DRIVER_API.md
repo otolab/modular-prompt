@@ -86,7 +86,7 @@ close(): Promise<void>
 
 ### PyTorchProcess の KV cache
 
-`PyTorchProcess` は、`PyTorchDriver` の自動 cache 管理を構成する低レベルの LIP 操作として、text-only Transformers LM の KV cache を扱えます。`memory://` ref は Python 子プロセス内だけで有効です。通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で cache と `.meta.json` を保存できます。
+`PyTorchProcess` は、`PyTorchDriver` の自動 cache 管理を構成する低レベルの LIP 操作として、text-only Transformers LM の KV cache を扱えます。`memory://` ref は Python 子プロセス内だけで有効です。`cpu-minimal` backend では通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で cache と `.meta.json` を保存できます。CUDA backend は process-local cache のみを使用し、cache ファイルを作成しません。
 
 ```typescript
 import { PyTorchProcess } from '@modular-prompt/driver';
@@ -122,12 +122,15 @@ await pytorch.exit();
 
 - `cachePrefill()` の結果には `cache_write_tokens`（prefill で新規に書き込んだ token 数）が含まれ、`PyTorchProcess.cachePrefill()` からそのまま参照できます。同じ値は最初の cache 利用時の stream meta にも付与されますが、同じ prefill 操作を後続 generate の書き込みとして重複計上するものではありません。
 - `memory://` ref は同じ Python 子プロセスの registry にだけ存在します。プロセス終了・`exit()`・restart 後は cache miss になり、`generate` は full prompt の cold path にフォールバックします。
-- ファイル cache の `.meta.json` には `token_count`、`prefix_offsets`、`prefix_hashes`、`model_id`、dtype、device、layout が記録されます。モデル・dtype・device が現在の backend と一致しない cache は安全のため読み込まず、cold path にフォールバックします。
+- `cpu-minimal` のファイル cache の `.meta.json` には `token_count`、`prefix_offsets`、`prefix_hashes`、`model_id`、dtype、device、layout が記録されます。モデル・dtype・device が現在の backend と一致しない cache は安全のため読み込まず、cold path にフォールバックします。
+- CUDA backend は cache ref と KV state を Python process-local registry に保持し、ファイルを作成しません。incremental prefill / prefix metadata を受け付けず、controller は plain prefill にフォールバックします。プロセス終了・restart 後は cache miss になります。
 - PyTorch の cache 形式は MLX / provider の形式と互換ではありません。VLM / 画像入力の cache は現在の PyTorch backend では無効です。
 
 ### PyTorchDriver の PromptCacheController
 
-`PyTorchDriver` に `PyTorchCacheController` を指定すると、`LocalInferenceDriver` の通常の cache lifecycle に PyTorch の `cachePrefill()` / `generate()` を接続できます。`cache: true`（または省略時の既定値）で cacheable prefix を自動作成し、prefill・再利用の結果は `QueryResult.usage.cacheReadTokens` / `cacheWriteTokens` に反映されます。固定 `cacheDir` を指定すると、`cache-index.json` と backend 固有の `pytorch_kv_v1` cache を再起動後も再利用できます。
+`PyTorchDriver` に `PyTorchCacheController` を指定すると、`LocalInferenceDriver` の通常の cache lifecycle に PyTorch の `cachePrefill()` / `generate()` を接続できます。`cache: true`（または省略時の既定値）で cacheable prefix を自動作成し、prefill・再利用の結果は `QueryResult.usage.cacheReadTokens` / `cacheWriteTokens` に反映されます。固定 `cacheDir` の `cache-index.json` と `pytorch_kv_v1` cache をプロセス再起動後に再利用できるのは `cpu-minimal` backend です。CUDA backend は process-local のため restart 後に再利用できません。
+
+固定 `cacheDir` は一つの PyTorch runtime variant / device 専用です。index は runtime identity を区別しないため、`cpu-minimal` と CUDA で同じ固定 `cacheDir` を共有することは禁止します。runtime ごとに別のディレクトリを指定してください。
 
 ```typescript
 import {
@@ -148,7 +151,7 @@ console.log(result.usage?.cacheWriteTokens);
 await driver.close();
 ```
 
-PyTorch の現行 backend は VLM・画像入力をサポートしないため、そのモデルでは controller は bind されず cache は無効になります。PyTorch cache は MLX cache と相互運用しません。
+PyTorch の現行 backend は VLM・画像入力をサポートしないため、そのモデルでは controller は bind されず cache は無効になります。`cpu-minimal` の cache は固定 `cacheDir` で永続化できますが、CUDA の cache は process-local です。PyTorch cache は MLX cache と相互運用しません。
 
 ## 型定義
 
@@ -228,7 +231,7 @@ interface QueryResult {
 - `promptTokens` はキャッシュ分を差し引く前のプロバイダ報告値です
 - `cacheReadTokens` / `cacheWriteTokens` はプロンプトキャッシュ対応ドライバーが任意で付与します（未取得時は省略または 0）
 - MLX ドライバーは `prompt_tokens` / `generation_tokens` をマッピングし、KV キャッシュ利用時は `cacheReadTokens` を付与します
-- PyTorch の低レベル `cachePrefill()` は操作結果の `cache_write_tokens` を返します。`PyTorchCacheController` 経由の `PyTorchDriver` では、同一 query の新規 prefill 分を `cacheWriteTokens`、実際に load できた cache の token 数を `cacheReadTokens` として `QueryResult.usage` に反映します
+- PyTorch の低レベル `cachePrefill()` は操作結果の `cache_write_tokens` を返します。`PyTorchCacheController` 経由の `PyTorchDriver` では、同一 query の新規 prefill 分を `cacheWriteTokens`、実際に load できた cache の token 数を `cacheReadTokens` として `QueryResult.usage` に反映します。CPU の disk hit と CUDA の process-local hit のどちらもこの契約に従います
 
 ### StreamResult
 

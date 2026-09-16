@@ -24,7 +24,7 @@ PromptCacheControllerは、プロンプトキャッシュのライフサイク�
 
 対応実装:
 - **MlxCacheController** - KVキャッシュファイルを管理（Apple Silicon最適化）
-- **PyTorchCacheController** - PyTorch backend 固有の KV キャッシュファイルを管理
+- **PyTorchCacheController** - cpu-minimal の KV キャッシュファイルと CUDA の process-local KV cache を管理
 - **GoogleGenAICacheController** - GoogleGenAI APIのキャッシュ機能を管理
 
 ## 対象読者
@@ -120,7 +120,8 @@ export interface CacheHandle {
 キャッシュの一意な参照。
 - MlxCacheController (LM): ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
 - MlxCacheController (VLM): `mlx-vlm` exact snapshot のファイルパス（text-only の例: `/tmp/mlx-prompt-cache-abc123/def456.vlm.safetensors/exact_<hash>.safetensors`、画像ありは `.vlm-vision.safetensors` namespace）
-- PyTorchCacheController (LM): backend 固有のファイルパス（例: `/tmp/pytorch-prompt-cache-abc123/def456.pytorch-cache`）
+- PyTorchCacheController (cpu-minimal LM): backend 固有のファイルパス（例: `/tmp/pytorch-prompt-cache-abc123/def456.pytorch-cache`）
+- PyTorchCacheController (CUDA LM): Python process-local の `memory://` ref
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
 
 #### mlx-vlm 0.7.0（Phase 2–3）
@@ -266,6 +267,8 @@ interface CacheIndexEntry {
 }
 ```
 
+PyTorch の index の `backend: 'pytorch'` は cache 形式だけを示し、runtime variant / device は区別しません。そのため固定 `cacheDir` は一つの `cpu-minimal` runtime または CUDA runtime 専用とし、CPU と CUDA で共有することは禁止します。runtime ごとに別の固定ディレクトリを指定してください。CUDA はそもそも cache ファイルを作らず process-local registry を使用するため、プロセス再起動後の disk hit はありません。
+
 **incremental prefillフロー**:
 
 1. 新しい`prepare()`呼び出し
@@ -278,17 +281,19 @@ interface CacheIndexEntry {
 ### TransformersLmBackend（PyTorch）
 
 PyTorch の Transformers LM は、MLX とは互換でない backend 固有の
-`pytorch_kv_v1` 形式を使用します。
+`pytorch_kv_v1` 形式を使用します。保存形態は runtime variant により異なります。
 
-- cache 本体は `torch.save` の payload として指定された cache path に保存
-- payload には KV state と、load 時の prefix 検証に使う token IDs を保存
-- `<cache path>.meta.json` には `layout`、`token_count`、`prefix_offsets`、
+- `cpu-minimal` は cache 本体を `torch.save` の payload として指定された cache path に保存
+- `cpu-minimal` の payload には KV state と、load 時の prefix 検証に使う token IDs を保存
+- `cpu-minimal` の `<cache path>.meta.json` には `layout`、`token_count`、`prefix_offsets`、
   `prefix_hashes`、`model_id`、`dtype`、`device` を保存
-- load 時に layout、token 数、prompt prefix、model ID、dtype、device を検証し、
+- `cpu-minimal` の load 時に layout、token 数、prompt prefix、model ID、dtype、device を検証し、
   不一致・破損・欠損は cache miss として cold path に戻す
-- `base_cache_path` と `trim_to_tokens` を指定した場合は、base cache を clone・trim
+- `cpu-minimal` で `base_cache_path` と `trim_to_tokens` を指定した場合は、base cache を clone・trim
   して suffix だけを prefill し、新しい cache と meta を保存
-- `memory://` ref は Phase 1 互換の process-local cache として扱い、ファイルを作成しない
+- CUDA は `memory://` 相当の process-local registry に KV state を保持し、ファイルを作成しない。
+  incremental prefill / prefix metadata を拒否するため controller は plain prefill にフォールバックし、
+  プロセス終了・restart 後は cache miss になる
 
 PyTorch の cache payload は Transformers の legacy tuple と `Cache` の KV layer を
 扱います。`Cache` の trim は clone に対して論理 token 数を更新し、static cache の容量は
@@ -302,14 +307,14 @@ PyTorch の cache は MLX / provider 間で共有しません。
 cache key を作ります。`PyTorchDriver` の `cacheController` に渡すと、
 `LocalInferenceDriver` の `onCapabilitiesLoaded` 後に backend process へ bind されます。
 
-- cache 本体は `<key>.pytorch-cache`、sidecar は `.meta.json` とし、index には
-  `backend: 'pytorch'` を記録する
+- `cpu-minimal` の cache 本体は `<key>.pytorch-cache`、sidecar は `.meta.json` とし、index には
+  `backend: 'pytorch'` を記録する。CUDA はファイルを作らず process-local ref を使う
 - 固定 `cacheDir` では index の相対 path とファイルロックを使い、release 済みの
-  PyTorch entry だけを `close()` 時に削除する
+  `cpu-minimal` entry だけを `close()` 時に削除する。固定 `cacheDir` を CPU/CUDA 間で共有してはならない
 - managed directory（`cacheDir` 未指定）は process 終了時に一時ディレクトリを削除する
-- CPU backend の prefix metadata が利用できる場合は、要素と token prefix を照合して
-  incremental prefill を行う。CUDA backend がこの metadata を拒否する場合は plain prefill
-  にフォールバックする
+- CPU/minimal backend の prefix metadata が利用できる場合は、要素と token prefix を照合して
+  incremental prefill を行う。CUDA backend はこの metadata と incremental prefill を拒否するため plain
+  prefill にフォールバックする。CUDA の cache は restart 後に再利用しない
 - VLM / 画像入力では controller を bind せず、cache を無効にする
 
 ### GoogleGenAICacheController
