@@ -1,9 +1,15 @@
 import { LocalInferenceDriver } from '../local-inference/driver.js';
 import type { InferenceCapabilities } from '../local-inference/protocol.js';
 import type { FormatterOptions } from '../formatter/types.js';
+import type { PromptCacheController } from '../cache-controller.js';
 import type { PyTorchQueryOptions } from './pytorch-options.js';
 import { PyTorchProcess } from './process/index.js';
 import { pytorchLocalInferenceAdapters } from './pytorch-local-inference-adapters.js';
+import {
+  bindPytorchCacheOnCapabilitiesLoaded,
+  createPytorchCacheSupport,
+} from './pytorch-cache-support.js';
+import { PyTorchCacheController } from './pytorch-cache-controller.js';
 
 export interface PyTorchModelCapabilities {
   methods: InferenceCapabilities['methods'];
@@ -25,6 +31,8 @@ export interface PyTorchDriverConfig {
   venvPath?: string;
   /** PYTORCH_DEVICE（例: cpu, cuda）。未指定時は template の既定値（cpu/cuda） */
   device?: string;
+  /** 外部で生成したキャッシュコントローラー */
+  cacheController?: PromptCacheController;
 }
 
 /**
@@ -32,11 +40,17 @@ export interface PyTorchDriverConfig {
  * 共通ロジックは LocalInferenceDriver に委譲する。
  */
 export class PyTorchDriver extends LocalInferenceDriver {
+  private cacheControllerRaw?: PromptCacheController;
+  private readonly cacheBindingState = { bound: false };
+
   constructor(config: PyTorchDriverConfig) {
     const process = new PyTorchProcess(config.model, {
       venvPath: config.venvPath,
       device: config.device,
     });
+    const cacheSupport = config.cacheController
+      ? createPytorchCacheSupport(config.cacheController)
+      : undefined;
 
     super({
       model: config.model,
@@ -45,7 +59,23 @@ export class PyTorchDriver extends LocalInferenceDriver {
       formatterOptions: config.formatterOptions,
       defaultOptions: config.defaultOptions,
       loggerPrefix: 'PyTorch',
+      cache: cacheSupport,
+      onCapabilitiesLoaded: async (runtimeInfo, ctx) => {
+        if (!cacheSupport) return;
+        await bindPytorchCacheOnCapabilitiesLoaded(
+          cacheSupport,
+          this.cacheBindingState,
+          runtimeInfo,
+          ctx,
+          () => {
+            this.queryLogger.log.info('PyTorch cache is disabled for this model');
+            this.disableCacheSupport();
+          },
+        );
+      },
     });
+
+    this.cacheControllerRaw = config.cacheController;
   }
 
   get defaultOptions(): Partial<PyTorchQueryOptions> {
@@ -75,5 +105,32 @@ export class PyTorchDriver extends LocalInferenceDriver {
       },
       chatRestrictions: runtimeInfo.chat_restrictions,
     };
+  }
+
+  override async close(): Promise<void> {
+    this.logCacheStats();
+    await super.close();
+  }
+
+  private logCacheStats(): void {
+    if (!(this.cacheControllerRaw instanceof PyTorchCacheController)) return;
+    const stats = this.cacheControllerRaw.getStats();
+    if (stats.totalQueries === 0) return;
+
+    const queryBreakdown =
+      stats.incremental + stats.fresh > 0
+        ? ` (incremental ${stats.incremental}, fresh ${stats.fresh})`
+        : '';
+    const parts: string[] = [`cache stats: ${stats.totalQueries} queries${queryBreakdown}`];
+    if (stats.totalPromptTokens > 0) {
+      const reusedRate = ((stats.prefillReusedTokens / stats.totalPromptTokens) * 100).toFixed(0);
+      parts.push(
+        `prompt ${stats.totalPromptTokens} tokens, ${stats.prefillReusedTokens} reused (${reusedRate}%)`,
+      );
+    }
+    if (stats.cacheGrowthTokens > 0) {
+      parts.push(`cache +${stats.cacheGrowthTokens} tokens`);
+    }
+    this.queryLogger.log.verbose(parts.join(' | '));
   }
 }

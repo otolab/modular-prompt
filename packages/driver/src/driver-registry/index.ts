@@ -20,4 +20,5 @@ export type {
   DriverFactory,
   MlxBackendMode,
   MlxModelDriverOptions,
+  PyTorchModelDriverOptions,
 } from './types.js';

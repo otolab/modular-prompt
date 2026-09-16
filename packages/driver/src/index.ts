@@ -124,6 +124,10 @@ export {
   PyTorchProcess,
 } from './pytorch/process/index.js';
 
+export {
+  PyTorchCacheController,
+} from './pytorch/pytorch-cache-controller.js';
+
 export type { PyTorchQueryOptions } from './pytorch/pytorch-options.js';
 
 // Local Inference Protocol (LIP)
@@ -241,6 +245,7 @@ export type {
   DriverFactory,
   MlxBackendMode,
   MlxModelDriverOptions,
+  PyTorchModelDriverOptions,
 } from './driver-registry/index.js';
 
 // User models.yaml (+ overlay via models-config API)

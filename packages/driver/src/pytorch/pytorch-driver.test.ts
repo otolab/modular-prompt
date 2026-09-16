@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 import { PyTorchDriver } from './pytorch-driver.js';
+import { PyTorchCacheController } from './pytorch-cache-controller.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
 
 const CUDA_UNAVAILABLE_ERROR =
@@ -26,7 +28,10 @@ const pytorchMocks = vi.hoisted(() => {
       getCapabilities: vi.fn().mockResolvedValue(capabilities),
       getStatus: vi.fn().mockReturnValue({ modelName: 'gpt2' }),
       render: vi.fn(),
+      tokenize: vi.fn(),
+      cachePrefill: vi.fn(),
       generate: vi.fn(),
+      cancelActiveRequest: vi.fn(),
       exit: vi.fn(),
     },
   };
@@ -42,7 +47,10 @@ describe('PyTorchDriver', () => {
     pytorchMocks.process.getCapabilities.mockReset().mockResolvedValue(pytorchMocks.capabilities);
     pytorchMocks.process.getStatus.mockReset().mockReturnValue({ modelName: 'gpt2' });
     pytorchMocks.process.render.mockReset();
+    pytorchMocks.process.tokenize.mockReset();
+    pytorchMocks.process.cachePrefill.mockReset();
     pytorchMocks.process.generate.mockReset();
+    pytorchMocks.process.cancelActiveRequest.mockReset();
     pytorchMocks.process.exit.mockReset();
   });
 
@@ -91,5 +99,70 @@ describe('PyTorchDriver', () => {
     };
     await expect(driver.query(prompt)).rejects.toThrow(CUDA_UNAVAILABLE_ERROR);
     expect(pytorchMocks.process.generate).not.toHaveBeenCalled();
+  });
+
+  it('binds PyTorchCacheController and maps cache usage through the query result', async () => {
+    const cacheController = new PyTorchCacheController();
+    const driver = new PyTorchDriver({
+      model: 'gpt2',
+      cacheController,
+    });
+    pytorchMocks.process.getCapabilities.mockResolvedValueOnce({
+      ...pytorchMocks.capabilities,
+      methods: [...pytorchMocks.capabilities.methods, 'cache_prefill'],
+      model_kind: 'lm',
+      features: {
+        ...pytorchMocks.capabilities.features,
+        apply_chat_template: true,
+        chat_template: {
+          supported_roles: ['system', 'user', 'assistant'],
+          constraints: {},
+        },
+      },
+    });
+    pytorchMocks.process.render.mockResolvedValue({
+      formatted_prompt: 'rendered-prompt',
+      error: null,
+    });
+    pytorchMocks.process.tokenize.mockResolvedValue({
+      token_ids: [1, 2, 3],
+      token_count: 3,
+      error: null,
+    });
+    pytorchMocks.process.cachePrefill.mockResolvedValue({
+      token_count: 3,
+      cache_write_tokens: 3,
+    });
+    pytorchMocks.process.generate.mockResolvedValue(
+      Readable.from([
+        'answer\x1e__META__:{"prompt_tokens":5,"generation_tokens":2,"cache_loaded":true,"cache_read_tokens":3,"cache_write_tokens":3}',
+      ]),
+    );
+
+    const result = await driver.query({
+      instructions: [{ type: 'text', content: 'System prompt' }],
+      data: [],
+      output: [],
+    }, { cache: true });
+
+    expect(result.content).toBe('answer');
+    expect(result.usage).toMatchObject({
+      promptTokens: 5,
+      completionTokens: 2,
+      totalTokens: 7,
+      cacheReadTokens: 3,
+      cacheWriteTokens: 3,
+    });
+    expect(pytorchMocks.process.cachePrefill).toHaveBeenCalledOnce();
+    expect(pytorchMocks.process.generate).toHaveBeenCalledWith(
+      'rendered-prompt',
+      expect.any(Object),
+      undefined,
+      undefined,
+      expect.stringContaining('.pytorch-cache'),
+      undefined,
+    );
+
+    await driver.close();
   });
 });

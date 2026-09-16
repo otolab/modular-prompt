@@ -4,12 +4,19 @@
  */
 
 import type { DriverRegistry } from './registry.js';
-import type { ModelSpec, DriverProvider, MlxModelDriverOptions, MlxBackendMode } from './types.js';
+import type {
+  ModelSpec,
+  DriverProvider,
+  MlxModelDriverOptions,
+  MlxBackendMode,
+  PyTorchModelDriverOptions,
+} from './types.js';
 import type { AIDriver } from '../types.js';
 import { logger } from '@modular-prompt/utils';
 
 // 個別ドライバーのインポート（型安全性のため）
 import type { PyTorchDriver } from '../pytorch/pytorch-driver.js';
+import { PyTorchCacheController } from '../pytorch/pytorch-cache-controller.js';
 import type { MlxDriver } from '../mlx-ml/mlx-driver.js';
 import type { OpenAIDriver } from '../openai/openai-driver.js';
 import type { AnthropicDriver } from '../anthropic/anthropic-driver.js';
@@ -98,11 +105,17 @@ export function registerStandardDriverFactories(
   if (drivers.PyTorchDriver) {
     const Driver = drivers.PyTorchDriver;
     registry.registerFactory('pytorch', (spec: ModelSpec) => {
+      const driverOpts = spec.driverOptions as PyTorchModelDriverOptions | undefined;
+      const cacheController = driverOpts?.cacheController
+        ?? (driverOpts?.cacheDir
+          ? new PyTorchCacheController({ cacheDir: driverOpts.cacheDir })
+          : undefined);
       return new Driver({
         model: spec.model,
         defaultOptions: validateAndClampMaxTokens(spec, spec.defaultOptions),
-        venvPath: spec.metadata?.venvPath as string | undefined,
-        device: spec.metadata?.device as string | undefined,
+        venvPath: driverOpts?.venvPath ?? (spec.metadata?.venvPath as string | undefined),
+        device: driverOpts?.device ?? (spec.metadata?.device as string | undefined),
+        cacheController,
       });
     });
   }
