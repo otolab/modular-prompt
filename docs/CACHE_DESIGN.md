@@ -11,6 +11,7 @@
 - [retain / release ヒント機構](#retain--release-ヒント機構)
 - [実装](#実装)
   - [MlxCacheController](#mlxcachecontroller)
+  - [PyTorchCacheController](#pytorchcachecontroller)
   - [GoogleGenAICacheController](#googlegenaicachecontroller)
 - [ファイルロック機構](#ファイルロック機構)
 - [Incremental Prefillとsupersedes](#incremental-prefillとsupersedes)
@@ -23,6 +24,7 @@ PromptCacheControllerは、プロンプトキャッシュのライフサイク�
 
 対応実装:
 - **MlxCacheController** - KVキャッシュファイルを管理（Apple Silicon最適化）
+- **PyTorchCacheController** - PyTorch backend 固有の KV キャッシュファイルを管理
 - **GoogleGenAICacheController** - GoogleGenAI APIのキャッシュ機能を管理
 
 ## 対象読者
@@ -73,7 +75,7 @@ export interface CachePrepareParams {
 **動作**:
 - メモリキャッシュから即座に除外（再利用候補から外れる）
 - ファイルやAPIリソースの削除タイミングは実装依存
-- MlxCacheController: `close()`時にrelease済みエントリを削除
+- MlxCacheController / PyTorchCacheController: `close()`時にrelease済みエントリを削除
 - GoogleGenAICacheController: 即座にAPIサーバー側リソースを削除
 
 **パラメータ**:
@@ -86,7 +88,7 @@ export interface CachePrepareParams {
 **動作**:
 - インフライトリクエストの完了を待つ
 - 管理対象キャッシュの削除
-- release済みエントリの実際の削除（MlxCacheController）
+- release済みエントリの実際の削除（MlxCacheController / PyTorchCacheController）
 
 **戻り値**: `Promise<void>`
 
@@ -118,6 +120,7 @@ export interface CacheHandle {
 キャッシュの一意な参照。
 - MlxCacheController (LM): ファイルパス（例: `/tmp/mlx-prompt-cache-abc123/def456.safetensors.zip`）
 - MlxCacheController (VLM): `mlx-vlm` exact snapshot のファイルパス（text-only の例: `/tmp/mlx-prompt-cache-abc123/def456.vlm.safetensors/exact_<hash>.safetensors`、画像ありは `.vlm-vision.safetensors` namespace）
+- PyTorchCacheController (LM): backend 固有のファイルパス（例: `/tmp/pytorch-prompt-cache-abc123/def456.pytorch-cache`）
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
 
 #### mlx-vlm 0.7.0（Phase 2–3）
@@ -210,7 +213,7 @@ incremental prefillで置き換えられた元キャッシュのref。
 
 ### release()を呼んでも
 
-**MlxCacheController**:
+**MlxCacheController / PyTorchCacheController**:
 - ファイルは即座に削除されない
 - `cache-index.json`のエントリに`hint: 'release'`が記録される
 - `close()`時にrelease済みエントリのファイルが削除される
@@ -257,8 +260,8 @@ interface CacheIndexEntry {
   createdAt: string;
   hint?: 'retain' | 'release';
   /** キャッシュ形式の backend（省略時は旧 LM エントリ） */
-  backend?: 'lm' | 'vlm';
-  /** VLM APC snapshot の cacheDir 相対 path（LM では省略） */
+  backend?: 'lm' | 'vlm' | 'pytorch';
+  /** backend cache の cacheDir 相対 path（必要な backend のみ） */
   path?: string;
 }
 ```
@@ -291,6 +294,23 @@ PyTorch の cache payload は Transformers の legacy tuple と `Cache` の KV l
 扱います。`Cache` の trim は clone に対して論理 token 数を更新し、static cache の容量は
 維持します。元の cache ref は変更されません。
 PyTorch の cache は MLX / provider 間で共有しません。
+
+#### PyTorchCacheController
+
+`PyTorchCacheController` は上記の `cache_prefill` / `generate` 契約を
+`PromptCacheController` に適合させ、要素・tools・formatter・reasoning の組み合わせから
+cache key を作ります。`PyTorchDriver` の `cacheController` に渡すと、
+`LocalInferenceDriver` の `onCapabilitiesLoaded` 後に backend process へ bind されます。
+
+- cache 本体は `<key>.pytorch-cache`、sidecar は `.meta.json` とし、index には
+  `backend: 'pytorch'` を記録する
+- 固定 `cacheDir` では index の相対 path とファイルロックを使い、release 済みの
+  PyTorch entry だけを `close()` 時に削除する
+- managed directory（`cacheDir` 未指定）は process 終了時に一時ディレクトリを削除する
+- CPU backend の prefix metadata が利用できる場合は、要素と token prefix を照合して
+  incremental prefill を行う。CUDA backend がこの metadata を拒否する場合は plain prefill
+  にフォールバックする
+- VLM / 画像入力では controller を bind せず、cache を無効にする
 
 ### GoogleGenAICacheController
 
@@ -356,9 +376,9 @@ try {
 
 ## Incremental Prefillとsupersedes
 
-MlxCacheControllerは、既存キャッシュをベースに差分のみをprefillする「incremental prefill」をサポートします。
+MlxCacheController と PyTorchCacheController（LM）は、既存キャッシュをベースに差分のみをprefillする「incremental prefill」をサポートします。PyTorch の CUDA runtime のように backend が incremental metadata を受け付けない場合は plain prefill にフォールバックします。
 
-ただしこれは LM (`.safetensors.zip`) のみです。VLM の text-only (`exact_cache_v1`) と画像付き (`vision_cache_v1`) は Phase 2–3 でも完全一致の disk hit / fresh prefill に限定し、`findBestBase()`、`base_cache_path`、`trim_to_tokens`、prefix reuse は no-op とします。
+MLX VLM の text-only (`exact_cache_v1`) と画像付き (`vision_cache_v1`) は完全一致の disk hit / fresh prefill に限定し、`findBestBase()`、`base_cache_path`、`trim_to_tokens`、prefix reuse は no-op とします。PyTorch VLM / 画像入力の cache は現行 backend で無効です。
 
 ### フロー
 

@@ -73,7 +73,28 @@ if (result.logEntries) {
 
 ### PyTorchProcess の KV キャッシュ
 
-`PyTorchProcess` の低レベル API では、Transformers の text-only LM に対して、KV キャッシュを prefill して suffix を生成できます。`memory://` ref は同一 Python プロセス内だけで有効です。通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で KV と `.meta.json` を永続化できます。`PyTorchDriver` の `PromptCacheController` との連携は後続の #383 の対象です。
+`PyTorchProcess` の低レベル API では、Transformers の text-only LM に対して、KV キャッシュを prefill して suffix を生成できます。`memory://` ref は同一 Python プロセス内だけで有効です。通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で KV と `.meta.json` を永続化できます。
+
+`PyTorchDriver` に `PyTorchCacheController` を渡すと、`cache: true` のクエリでキャッシュ可能な instructions/data の prefix を自動的に prefill・再利用できます。固定の `cacheDir` を指定した controller はプロセス再起動後も同じ backend の cache を再利用し、`QueryResult.usage` の `cacheReadTokens` / `cacheWriteTokens` に backend が報告した利用量を反映します。現在の PyTorch backend では VLM・画像入力の cache は無効です。
+
+```typescript
+import {
+  PyTorchCacheController,
+  PyTorchDriver,
+} from '@modular-prompt/driver';
+
+const driver = new PyTorchDriver({
+  model: 'your-transformers-model',
+  cacheController: new PyTorchCacheController({
+    cacheDir: '/path/to/pytorch-cache',
+  }),
+});
+
+const result = await driver.query(prompt, { cache: true });
+console.log(result.usage?.cacheReadTokens);
+console.log(result.usage?.cacheWriteTokens);
+await driver.close();
+```
 
 ```typescript
 import { PyTorchProcess } from '@modular-prompt/driver';
@@ -113,7 +134,7 @@ try {
 
 `cachePrefill()` の結果には prefill した `token_count` と `cache_write_tokens` が含まれ、同じ参照を最初に使う `generate()` の LIP meta にも write 数が一度だけ通知されます。キャッシュを使った生成では `cache_read_tokens` と `cache_write_tokens`、実際に参照を読み込めたかどうかは `cache_loaded` で確認できます。
 
-prefill に渡した prompt の token 列は、`generate()` に渡す rendered prompt の先頭と一致している必要があります。`memory://` ref は `PyTorchProcess` または Python 子プロセスの終了・再起動で失われますが、ファイル cache は同じ model ID・dtype・device の backend から再利用できます。不一致や破損したファイルは cache miss として full prompt の cold path にフォールバックします。`baseCachePath` と `trimToTokens` を指定した `cachePrefill()` では、base cache を trim して suffix だけを prefill できます。`cacheTrimTokens` を指定した `generate()` の trim は生成用 clone に適用され、同じ cache ref の元 state は保持されます。`PyTorchDriver` の自動 cache と `QueryResult.usage` への prefill 結合は #383 の対象です。
+prefill に渡した prompt の token 列は、`generate()` に渡す rendered prompt の先頭と一致している必要があります。`memory://` ref は `PyTorchProcess` または Python 子プロセスの終了・再起動で失われますが、ファイル cache は同じ model ID・dtype・device の backend から再利用できます。不一致や破損したファイルは cache miss として full prompt の cold path にフォールバックします。`baseCachePath` と `trimToTokens` を指定した `cachePrefill()` では、base cache を trim して suffix だけを prefill できます。`cacheTrimTokens` を指定した `generate()` の trim は生成用 clone に適用され、同じ cache ref の元 state は保持されます。`PyTorchCacheController` はこの低レベル API を `PromptCacheController` のライフサイクルに接続し、同一 query の prefill 増分を `cacheWriteTokens` として報告します。
 
 ## 主な機能
 
@@ -244,7 +265,7 @@ for await (const _ of stream) { /* consume */ }
 const final = await result;
 if (final.usage) {
   console.log(final.usage.promptTokens, final.usage.completionTokens);
-  console.log(final.usage.cacheReadTokens);   // MLX + KV キャッシュ時
+  console.log(final.usage.cacheReadTokens);   // MLX/PyTorch + KV キャッシュ時
   console.log(final.usage.cacheWriteTokens);  // 同一クエリ内の新規 prefill 時
 }
 ```

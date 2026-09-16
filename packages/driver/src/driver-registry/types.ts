@@ -65,8 +65,20 @@ export interface MlxModelDriverOptions {
   cacheController?: PromptCacheController;
 }
 
+/** PyTorch ドライバー固有オプション */
+export interface PyTorchModelDriverOptions {
+  /** 外部 venv パス */
+  venvPath?: string;
+  /** PyTorch の実行デバイス（例: cpu, cuda） */
+  device?: string;
+  /** KVキャッシュディレクトリ。指定するとプロンプトキャッシュを永続化する */
+  cacheDir?: string;
+  /** 外部で生成した KV cache controller */
+  cacheController?: PromptCacheController;
+}
+
 /** ドライバー固有オプションのunion（将来拡張） */
-export type ModelDriverOptions = MlxModelDriverOptions;
+export type ModelDriverOptions = MlxModelDriverOptions | PyTorchModelDriverOptions;
 
 /**
  * モデル仕様（code-bugsのModelSpecと同等）

@@ -7,6 +7,7 @@
 - [インターフェース](#インターフェース)
 - [利用可能なドライバー](#利用可能なドライバー)
 - [PyTorchProcess の KV cache](#pytorchprocess-の-kv-cache)
+- [PyTorchDriver の PromptCacheController](#pytorchdriver-の-promptcachecontroller)
 - [型定義](#型定義)
 - [推論キャンセル（AbortSignal）](#推論キャンセルabortsignal)
 - [トークン使用量（usage）](#トークン使用量usage)
@@ -85,7 +86,7 @@ close(): Promise<void>
 
 ### PyTorchProcess の KV cache
 
-`PyTorchProcess` は、`PyTorchDriver` の自動 cache 管理とは別に、低レベルの LIP 操作として text-only Transformers LM の KV cache を扱えます。`memory://` ref は Python 子プロセス内だけで有効です。通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で cache と `.meta.json` を保存できます。
+`PyTorchProcess` は、`PyTorchDriver` の自動 cache 管理を構成する低レベルの LIP 操作として、text-only Transformers LM の KV cache を扱えます。`memory://` ref は Python 子プロセス内だけで有効です。通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で cache と `.meta.json` を保存できます。
 
 ```typescript
 import { PyTorchProcess } from '@modular-prompt/driver';
@@ -122,7 +123,32 @@ await pytorch.exit();
 - `cachePrefill()` の結果には `cache_write_tokens`（prefill で新規に書き込んだ token 数）が含まれ、`PyTorchProcess.cachePrefill()` からそのまま参照できます。同じ値は最初の cache 利用時の stream meta にも付与されますが、同じ prefill 操作を後続 generate の書き込みとして重複計上するものではありません。
 - `memory://` ref は同じ Python 子プロセスの registry にだけ存在します。プロセス終了・`exit()`・restart 後は cache miss になり、`generate` は full prompt の cold path にフォールバックします。
 - ファイル cache の `.meta.json` には `token_count`、`prefix_offsets`、`prefix_hashes`、`model_id`、dtype、device、layout が記録されます。モデル・dtype・device が現在の backend と一致しない cache は安全のため読み込まず、cold path にフォールバックします。
-- PyTorch の cache 形式は MLX / provider の形式と互換ではありません。VLM / 画像入力および `PyTorchCacheController` / `PyTorchDriver` の自動連携はそれぞれ別スコープです。
+- PyTorch の cache 形式は MLX / provider の形式と互換ではありません。VLM / 画像入力の cache は現在の PyTorch backend では無効です。
+
+### PyTorchDriver の PromptCacheController
+
+`PyTorchDriver` に `PyTorchCacheController` を指定すると、`LocalInferenceDriver` の通常の cache lifecycle に PyTorch の `cachePrefill()` / `generate()` を接続できます。`cache: true`（または省略時の既定値）で cacheable prefix を自動作成し、prefill・再利用の結果は `QueryResult.usage.cacheReadTokens` / `cacheWriteTokens` に反映されます。固定 `cacheDir` を指定すると、`cache-index.json` と backend 固有の `pytorch_kv_v1` cache を再起動後も再利用できます。
+
+```typescript
+import {
+  PyTorchCacheController,
+  PyTorchDriver,
+} from '@modular-prompt/driver';
+
+const driver = new PyTorchDriver({
+  model: 'Qwen/Qwen2.5-0.5B-Instruct',
+  cacheController: new PyTorchCacheController({
+    cacheDir: '/path/to/pytorch-cache',
+  }),
+});
+
+const result = await driver.query(prompt, { cache: true });
+console.log(result.usage?.cacheReadTokens);
+console.log(result.usage?.cacheWriteTokens);
+await driver.close();
+```
+
+PyTorch の現行 backend は VLM・画像入力をサポートしないため、そのモデルでは controller は bind されず cache は無効になります。PyTorch cache は MLX cache と相互運用しません。
 
 ## 型定義
 
@@ -202,7 +228,7 @@ interface QueryResult {
 - `promptTokens` はキャッシュ分を差し引く前のプロバイダ報告値です
 - `cacheReadTokens` / `cacheWriteTokens` はプロンプトキャッシュ対応ドライバーが任意で付与します（未取得時は省略または 0）
 - MLX ドライバーは `prompt_tokens` / `generation_tokens` をマッピングし、KV キャッシュ利用時は `cacheReadTokens` を付与します
-- PyTorch の低レベル `cachePrefill()` は操作結果の `cache_write_tokens` を返し、同じ ref を最初に使う `generate` の stream meta にも write 数を一度だけ返します。`PyTorchDriver` の自動 cache と `QueryResult.usage` への prefill 結合は #383 で扱います
+- PyTorch の低レベル `cachePrefill()` は操作結果の `cache_write_tokens` を返します。`PyTorchCacheController` 経由の `PyTorchDriver` では、同一 query の新規 prefill 分を `cacheWriteTokens`、実際に load できた cache の token 数を `cacheReadTokens` として `QueryResult.usage` に反映します
 
 ### StreamResult
 
@@ -335,9 +361,10 @@ driver は `promptTokens` を「非キャッシュ入力」に分解しません
 |---|---|---|
 | OpenAI / Anthropic / VertexAI / GoogleGenAI | ✅ | 未対応（省略） |
 | MlxDriver | ✅ | ✅（KV キャッシュ利用時） |
+| PyTorchDriver | ✅ | ✅（`PyTorchCacheController` 利用時） |
 | その他 | 状況により異なる | 未対応 |
 
-MLX では Python 側の `prompt_tokens` / `generation_tokens` をマッピングし、`cacheReadTokens` は KV ヒット分、`cacheWriteTokens` は同一クエリ内の `prepare()` による新規 prefill 分を報告します。PyTorch の `cache_write_tokens` は低レベル `cachePrefill()` の操作結果と、同じ ref を最初に使う後続 generate の stream meta に返されますが、同じ prefill を重ねて報告しません。
+MLX では Python 側の `prompt_tokens` / `generation_tokens` をマッピングし、`cacheReadTokens` は KV ヒット分、`cacheWriteTokens` は同一クエリ内の `prepare()` による新規 prefill 分を報告します。PyTorch も同じ usage 契約に従い、`PyTorchCacheController` の `prepare()` による新規 prefill 分と、Python stream meta が報告する実際の cache load token 数をマッピングします。cache load に失敗して `cache_loaded: false` になった場合、`cacheReadTokens` はその query では算入されません。
 
 ## 共通ユーティリティ（query-utils）
 
