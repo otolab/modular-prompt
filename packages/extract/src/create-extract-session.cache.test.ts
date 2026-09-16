@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PromptModule } from '@modular-prompt/core';
-import type { CacheHandle, PromptCacheController } from '@modular-prompt/driver';
+import type { AIDriver, CacheHandle, PromptCacheController } from '@modular-prompt/driver';
 import { partitionPrompt, TestDriver } from '@modular-prompt/driver';
 import {
   prepareSessionCache,
@@ -184,6 +184,43 @@ describe('createExtractSession cache integration', () => {
     expect(tracking.releases).toContain('cache-1');
     expect(tracking.releases).toContain('cache-2');
     expect(tracking.controller.close).not.toHaveBeenCalled();
+  });
+
+  it('forwards cache usage from the driver to ExtractResult', async () => {
+    const driver: AIDriver = {
+      query: async () => ({
+        content: 'cached result',
+        usage: {
+          promptTokens: 120,
+          completionTokens: 8,
+          totalTokens: 128,
+          cacheReadTokens: 96,
+          cacheWriteTokens: 24,
+        },
+        finishReason: 'stop',
+      }),
+      streamQuery: async () => {
+        throw new Error('streamQuery is not used in this test');
+      },
+      close: async () => {},
+    };
+    const tracking = createMockCacheController();
+
+    const session = createExtractSession({
+      driver,
+      baseModule,
+      corpus,
+      cacheController: tracking.controller,
+      model: 'test-model',
+    });
+
+    const result = await session.extract({ cue: 'List characters' });
+
+    expect(result.usage).toMatchObject({
+      cacheReadTokens: 96,
+      cacheWriteTokens: 24,
+    });
+    await session.close();
   });
 
   it('keeps best-effort query behavior when cache preparation returns an empty handle', async () => {

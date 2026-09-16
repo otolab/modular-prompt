@@ -126,7 +126,7 @@ models:
     model: mlx-community/YourModel-4bit
 ```
 
-PyTorch (Transformers) の text-only extract は、次のように `driverOptions.device` / `venvPath` を設定できます。CUDA の場合は driver 側の runtime 構成に従います。
+PyTorch (Transformers) の text-only extract は、次のように `driverOptions.device` を設定できます。`venvPath` は外部 venv を使う場合だけ指定し、省略時は driver 管理の既定 runtime を使用します。CUDA の場合は driver 側の runtime 構成に従います。
 
 ```yaml
 models:
@@ -135,7 +135,6 @@ models:
     model: meta-llama/Llama-3.2-3B-Instruct
     driverOptions:
       device: cuda
-      venvPath: ~/.modular-prompt/runtimes/pytorch/.venv
 ```
 
 モデルが設定されていない構成では、`-m <model-id-or-alias>` を指定するか、user yaml に `models.default` を定義してください。
@@ -227,7 +226,7 @@ await pytorchRuntime.close();
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
 | セッション終了 | `session.close()` — デフォルトで handle `release()`。固定 cacheDir を残す場合は `{ releaseCache: false }` |
 
-`cacheController` は **必須**。`createMlxExtractRuntime` / `createPytorchExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。provider を明示的に選ぶ場合は `createExtractRuntime({ model, provider })` を使えます。モデル設定がない場合や provider を推論できない生 ID はエラーになります。PyTorch runtime は text-only で、`driverOptions.device` / `venvPath` は models.yaml から渡されます。キャッシュ非対応モードは提供しない。
+`cacheController` は **必須**。`createMlxExtractRuntime` / `createPytorchExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。provider を明示的に選ぶ場合は `createExtractRuntime({ model, provider })` を使えます。モデル設定がない場合や provider を推論できない生 ID はエラーになります。PyTorch runtime は text-only で、`driverOptions.device` / `venvPath` は models.yaml から渡されます。固定 `cacheDir` は PyTorch の runtime variant / device ごとに分け、CPU と CUDA などで共有しないでください（manifest は provider と model を検証します）。キャッシュ非対応モードは提供しない。
 
 詳細は [プロンプトキャッシュ設計](./docs/CACHE_DESIGN.md) および [API 仕様](./docs/API.md) を参照。
 
