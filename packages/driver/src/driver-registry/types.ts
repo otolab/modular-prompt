@@ -71,7 +71,10 @@ export interface PyTorchModelDriverOptions {
   venvPath?: string;
   /** PyTorch の実行デバイス（例: cpu, cuda） */
   device?: string;
-  /** cpu-minimal runtime の KV キャッシュディレクトリ。指定時は CPU のプロンプトキャッシュを永続化する（CUDA では永続化されない） */
+  /**
+   * KV キャッシュディレクトリ。ディスク永続化は `cpu-minimal` runtime のみ。
+   * CUDA は process-local（再起動後は再利用されない）。CPU/CUDA や runtime variant/device 間で同じ `cacheDir` を共有しないこと。
+   */
   cacheDir?: string;
   /** 外部で生成した KV cache controller */
   cacheController?: PromptCacheController;
