@@ -25,6 +25,13 @@ const integrationOptions = {
   temperature: 0,
 };
 
+function createCacheFormatterOptions() {
+  // Output is generated after the contextual suffix.  Do not put its header
+  // into the prefetched prefix, otherwise the real runtime cannot reuse the
+  // cache when the suffix is present.
+  return { alwaysIncludeOutputHeader: false };
+}
+
 function createCachePrompt(immutableData: string[]): CompiledPrompt {
   return {
     instructions: [
@@ -36,7 +43,12 @@ function createCachePrompt(immutableData: string[]): CompiledPrompt {
     ],
     data: [
       ...immutableData.map((content) => ({
-        type: 'text' as const,
+        // Keep a user message in the cacheable prefix.  The model-specific
+        // processor adds a fallback user message to system-only prefixes;
+        // that would make the prefill token sequence differ from the full
+        // query prefix used by the real runtime.
+        type: 'message' as const,
+        role: 'user' as const,
         content,
         cacheHint: 'immutable' as const,
       })),
@@ -115,6 +127,7 @@ describe.skipIf(shouldSkipCpuCache)('PyTorch CPU cache integration', () => {
         model: integrationModel,
         device: 'cpu',
         defaultOptions: integrationOptions,
+        formatterOptions: createCacheFormatterOptions(),
         cacheController: controller,
       });
 
@@ -125,10 +138,6 @@ describe.skipIf(shouldSkipCpuCache)('PyTorch CPU cache integration', () => {
       expect(memoryHit.usage?.cacheReadTokens ?? 0).toBeGreaterThan(0);
       expect(memoryHit.usage?.cacheWriteTokens ?? 0).toBe(0);
 
-      const incremental = await driver.query(extendedPrompt, { cache: true });
-      expectCacheUsage(incremental);
-      expect(controller.getStats().incremental).toBeGreaterThan(0);
-
       await driver.close();
       driver = undefined;
 
@@ -137,12 +146,17 @@ describe.skipIf(shouldSkipCpuCache)('PyTorch CPU cache integration', () => {
         model: integrationModel,
         device: 'cpu',
         defaultOptions: integrationOptions,
+        formatterOptions: createCacheFormatterOptions(),
         cacheController: restartedController,
       });
       const diskHit = await restartedDriver.query(basePrompt, { cache: true });
       expect(diskHit.usage?.cacheReadTokens ?? 0).toBeGreaterThan(0);
       expect(diskHit.usage?.cacheWriteTokens ?? 0).toBe(0);
       expect(restartedController.getStats().diskHit).toBeGreaterThan(0);
+
+      const incremental = await restartedDriver.query(extendedPrompt, { cache: true });
+      expectCacheUsage(incremental);
+      expect(restartedController.getStats().incremental).toBeGreaterThan(0);
     } finally {
       await restartedDriver?.close();
       await driver?.close();
@@ -164,6 +178,7 @@ describe.skipIf(shouldSkipCudaCache)('PyTorch CUDA cache integration', () => {
         model: integrationModel,
         device: 'cuda',
         defaultOptions: integrationOptions,
+        formatterOptions: createCacheFormatterOptions(),
         cacheController: controller,
       });
 
@@ -179,6 +194,7 @@ describe.skipIf(shouldSkipCudaCache)('PyTorch CUDA cache integration', () => {
         model: integrationModel,
         device: 'cuda',
         defaultOptions: integrationOptions,
+        formatterOptions: createCacheFormatterOptions(),
         cacheController: restartedController,
       });
       const afterRestart = await restartedDriver.query(prompt, { cache: true });
