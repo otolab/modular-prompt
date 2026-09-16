@@ -234,6 +234,39 @@ describe('PyTorchCacheController', () => {
     }
   });
 
+  it('does not reuse a released cache after prepare with a fixed cache directory', async () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), 'pytorch-cache-release-test-'));
+    const params = {
+      model: 'test-model',
+      instructions: [{ type: 'text' as const, content: 'released' }],
+    };
+    const persistentProcess = createPersistentMockProcess();
+    const releaseController = new PyTorchCacheController({ cacheDir });
+    try {
+      await releaseController.bind(persistentProcess as never, {});
+      const first = await releaseController.prepare(params);
+      releaseController.release(first.ref);
+
+      const second = await releaseController.prepare(params);
+
+      expect(second.ref).not.toBe(first.ref);
+      expect(persistentProcess.cachePrefill).toHaveBeenCalledTimes(2);
+      expect(persistentProcess.cachePrefill.mock.calls[1]?.[0]).toBe(second.ref);
+
+      releaseController.release(second.ref);
+      await releaseController.prepare({
+        ...params,
+        data: [{ type: 'text', content: 'new suffix' }],
+      });
+
+      expect(persistentProcess.cachePrefill).toHaveBeenCalledTimes(3);
+      expect(persistentProcess.cachePrefill.mock.calls[2]?.[2]).toBeUndefined();
+    } finally {
+      await releaseController.close();
+      rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
   it('passes a compatible persistent cache as the incremental prefill base', async () => {
     const cacheDir = mkdtempSync(join(tmpdir(), 'pytorch-cache-incremental-test-'));
     const persistentProcess = createPersistentMockProcess();

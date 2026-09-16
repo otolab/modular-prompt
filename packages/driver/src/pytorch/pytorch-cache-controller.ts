@@ -283,9 +283,29 @@ export class PyTorchCacheController implements PromptCacheController {
     return join(this.cacheDir, `${cacheKey}${CACHE_FILE_EXTENSION}`);
   }
 
+  private generateFreshCachePath(cacheKey: string): string {
+    const deterministicPath = this.generateCachePath(cacheKey);
+    const releasedPath = this.cacheIndex.entries.some(
+      (entry) =>
+        entry.key === cacheKey
+        && entry.backend === PYTORCH_BACKEND
+        && entry.hint === 'release'
+        && this.getEntryCachePath(entry) === deterministicPath,
+    );
+    if (!releasedPath) return deterministicPath;
+
+    return join(
+      this.cacheDir,
+      `${cacheKey}-${randomBytes(6).toString('hex')}${CACHE_FILE_EXTENSION}`,
+    );
+  }
+
   private getIndexedCachePath(cacheKey: string): string | undefined {
     const indexedPath = this.cacheIndex.entries.find(
-      (entry) => entry.key === cacheKey && entry.backend === PYTORCH_BACKEND,
+      (entry) =>
+        entry.key === cacheKey
+        && entry.backend === PYTORCH_BACKEND
+        && entry.hint !== 'release',
     )?.path;
     if (!indexedPath) return undefined;
     if (indexedPath.startsWith('memory://')) return indexedPath;
@@ -551,7 +571,10 @@ export class PyTorchCacheController implements PromptCacheController {
 
   private addToIndex(params: CachePrepareParams, cacheKey: string, cachePath: string): void {
     const existing = this.cacheIndex.entries.find(
-      (entry) => entry.key === cacheKey && entry.backend === PYTORCH_BACKEND,
+      (entry) =>
+        entry.key === cacheKey
+        && entry.backend === PYTORCH_BACKEND
+        && entry.hint !== 'release',
     );
     if (existing) {
       existing.backend = PYTORCH_BACKEND;
@@ -661,7 +684,7 @@ export class PyTorchCacheController implements PromptCacheController {
       && existsSync(indexedPath + '.meta.json')
       && this.readMetaTokenCount(indexedPath) > 0
       ? indexedPath
-      : this.generateCachePath(cacheKey);
+      : this.generateFreshCachePath(cacheKey);
     let effectiveCachePath = cachePath;
     const elementHashes = this.computeElementHashes(params);
     let supersededRef: string | undefined;
