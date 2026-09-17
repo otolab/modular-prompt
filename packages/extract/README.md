@@ -39,7 +39,7 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 
 `type`・`cacheHint`・`partOf` は正規化層が付与する。呼び出し側で指定する必要はない。
 
-## クイックスタート（MLX）
+## クイックスタート（MLX / PyTorch）
 
 ### CLI
 
@@ -50,6 +50,10 @@ pnpm --filter @modular-prompt/extract build
 
 # 1. 入力ファイルから meeting store を作成（デフォルト: ~/.modular-prompt/extract-cache）
 node packages/extract/bin/modular-prompt-extract.js create meeting -m 'your-mlx-model' docs/*.txt
+
+# PyTorch モデルを使う場合は provider を明示できる（models.yaml の provider でも自動判定）
+node packages/extract/bin/modular-prompt-extract.js create meeting-pytorch \
+  -m 'local-pytorch' --provider pytorch docs/*.txt
 
 # 2. 既存 store にファイルを追加（incremental prefill）
 node packages/extract/bin/modular-prompt-extract.js add meeting docs/day2.txt
@@ -66,14 +70,15 @@ node packages/extract/bin/modular-prompt-extract.js clean meeting
 
 | コマンド | 説明 |
 |---------|------|
-| `create <storename> [-d <container>] [-m <alias-or-model-id>] [files...]` | corpus を読み込み KV cache を準備。`manifest.json` を `<container>/<storename>/` に保存 |
+| `create <storename> [-d <container>] [-m <alias-or-model-id>] [--provider <mlx\|pytorch>] [files...]` | corpus を読み込み KV cache を準備。provider と model を含む `manifest.json` を `<container>/<storename>/` に保存 |
 | `add <storename> [-d <container>] [files...]` | 既存 store の corpus にファイルを追記し、KV cache を incremental prefill で拡張 |
 | `extract <storename> [-d <container>] [query...]` | 指定 store のキャッシュ済み corpus に対して抽出。query が cue になる |
 | `list [-d <container>]` | コンテナ内の全 store と manifest/KV のサマリを表示 |
 | `clean <storename> [-d <container>]` | 指定 store の manifest + KV キャッシュを再帰削除。存在しない store は no-op |
 | `clean --all [-d <container>]` | コンテナ全体を再帰削除。存在しないコンテナは no-op |
 | `extract <storename> --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
-| `--dry-run` | MLX を起動せず、compile 済みプロンプト全文を stdout に出力 |
+| `--provider <mlx\|pytorch>` | create で provider を明示。省略時は models.yaml / model alias から解決 |
+| `--dry-run` | driver を起動せず、compile 済みプロンプト全文を stdout に出力 |
 
 `list` は各 store の model、materials 数・タイトル、作成日時、KV cache の有無を表示します。
 
@@ -82,6 +87,7 @@ CLI の `create` / `add` は入力ファイルを UTF-8 の文字列として読
 ```text
 Store: meeting
   Model: mlx-community/SomeModel-4bit
+  Provider: mlx
   Materials: 2 (notes.txt, meeting.md)
   Created: 2026-09-07T03:00:00.000Z
   Updated: 2026-09-07T04:00:00.000Z
@@ -107,7 +113,7 @@ modular-prompt-extract extract meeting --dry-run '登場人物を列挙'
 | 1 | CLI `-m` | 最優先。alias または生の HF model ID |
 | 2 | user yaml の `models.default` | `-m` 省略時のみ使用。同梱 fallback や先頭エントリ自動選択はなし |
 
-`-m` を省略した場合は、`models.default` が user yaml に明示されているときだけそのモデルを使います。未設定時は MLX を起動せず、`-m` 指定または `models.default` 定義を案内するエラーを返します。`-m` で alias ではなく生の model ID を指定する場合は、models.yaml の一致エントリで `provider: mlx` を設定するか、`mlx-community/...` / `-mlx-` などの既知の MLX model 名パターンを使用してください。provider を推論できない ID は誤った runtime を選ばないようエラーになります（extract は MLX 専用のため CLI に `--provider` はなく、models.yaml で provider を設定します）。create は解決後の生 model ID を store の `manifest.json` に保存し、以降の add/extract はその ID を使います。
+`-m` を省略した場合は、`models.default` が user yaml に明示されているときだけそのモデルを使います。未設定時は driver を起動せず、`-m` 指定または `models.default` 定義を案内するエラーを返します。モデル alias に `provider: mlx` または `provider: pytorch` を設定すると provider を自動判定できます。provider を推論できない生 model ID は、`create --provider mlx` / `create --provider pytorch` のように明示してください。create は解決後の生 model ID と provider を store の `manifest.json` に保存し、以降の add/extract は manifest の provider + model を検証して同じ cache runtime を使います。provider の異なる store は cache 形式が非互換のため開けません。
 
 ローカルテスト用のモデルは `~/.modular-prompt/models.testing.yaml` に分けて置き、手元の extract 実行では `MODULAR_PROMPT_MODELS_PROFILE=testing` を指定できます。設定ファイルのサンプルと統合テストの convention alias は [ローカルモデルセットアップガイド](./docs/LOCAL_MODEL_SETUP.md) を参照してください。
 
@@ -120,9 +126,20 @@ models:
     model: mlx-community/YourModel-4bit
 ```
 
+PyTorch (Transformers) の text-only extract は、次のように `driverOptions.device` を設定できます。`venvPath` は外部 venv を使う場合だけ指定し、省略時は driver 管理の既定 runtime を使用します。CUDA の場合は driver 側の runtime 構成に従います。
+
+```yaml
+models:
+  local-pytorch:
+    provider: pytorch
+    model: meta-llama/Llama-3.2-3B-Instruct
+    driverOptions:
+      device: cuda
+```
+
 モデルが設定されていない構成では、`-m <model-id-or-alias>` を指定するか、user yaml に `models.default` を定義してください。
 
-**MLX バックエンドは models.yaml の指定に従う**。未指定時は `auto` で、モデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` を指定した VLM 判定モデルは、画像なしの text-only exact KV cache に加えて、画像 material を含む prompt の vision cache もディスクへ保存して extract session 間で再利用できる。画像あり VLM cache は text-only VLM / LM の store とは別 namespace・非互換で、VLM の incremental prefill は対象外。
+**MLX バックエンドは models.yaml の指定に従う**。未指定時は `auto` で、モデル種別に応じて `mlx-lm` / `mlx-vlm` を選択する。`backend: 'vlm'` を指定した VLM 判定モデルは、画像なしの text-only exact KV cache に加えて、画像 material を含む prompt の vision cache もディスクへ保存して extract session 間で再利用できる。画像あり VLM cache は text-only VLM / LM の store とは別 namespace・非互換で、VLM の incremental prefill は対象外。PyTorch runtime は現状 text-only で、MLX の `backend` / `maxImageSize` は無視されます。
 
 ```yaml
 models:
@@ -139,6 +156,7 @@ models:
 import {
   createExtractSession,
   createMlxExtractRuntime,
+  createPytorchExtractRuntime,
 } from '@modular-prompt/extract';
 
 const runtime = await createMlxExtractRuntime({
@@ -169,6 +187,11 @@ try {
 } finally {
   await runtime.close();
 }
+
+// PyTorch の場合も同じ ExtractSession API を使う
+const pytorchRuntime = await createPytorchExtractRuntime({ model: 'local-pytorch' });
+// pytorchRuntime.driver / pytorchRuntime.cacheController を同じように session へ渡す
+await pytorchRuntime.close();
 ```
 
 ## キャッシュの意図と制約
@@ -203,7 +226,7 @@ try {
 | driver / cacheController の終了 | 呼び出し側の責務（`runtime.close()` 等） |
 | セッション終了 | `session.close()` — デフォルトで handle `release()`。固定 cacheDir を残す場合は `{ releaseCache: false }` |
 
-`cacheController` は **必須**。`createMlxExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。モデル設定がない場合はエラーになります。指定する場合は alias または生の HF model ID を使えますが、生 ID の provider を推論できない場合もエラーになります。extract は MLX 専用のため、models.yaml の一致エントリで `provider: mlx` を設定するか、既知の MLX model 名パターンを使用してください。キャッシュ非対応モードは提供しない。
+`cacheController` は **必須**。`createMlxExtractRuntime` / `createPytorchExtractRuntime` の `model` は省略でき、CLI と同じ user models.yaml の `models.default` 解決を行います。provider を明示的に選ぶ場合は `createExtractRuntime({ model, provider })` を使えます。モデル設定がない場合や provider を推論できない生 ID はエラーになります。PyTorch runtime は text-only で、`driverOptions.device` / `venvPath` は models.yaml から渡されます。固定 `cacheDir` は PyTorch の runtime variant / device ごとに分け、CPU と CUDA などで共有しないでください（manifest は provider と model を検証します）。キャッシュ非対応モードは提供しない。
 
 詳細は [プロンプトキャッシュ設計](./docs/CACHE_DESIGN.md) および [API 仕様](./docs/API.md) を参照。
 
@@ -316,8 +339,10 @@ console.log(result.structured); // schema に沿った JSON
 |---------|------|
 | `createExtractSession` | 抽出セッションを生成 |
 | `createMlxExtractRuntime` | MLX 用 driver + cacheController バンドル |
+| `createPytorchExtractRuntime` | PyTorch 用 driver + cacheController バンドル（text-only） |
+| `createExtractRuntime` | 解決済み provider に応じた runtime factory |
 | `resolveModelSpec` | alias または生 model ID から extract 用 ModelSpec を解決 |
-| `createDriver` | 解決済み ModelSpec から AIService 経由で MLX driver を生成 |
+| `createDriver` | 解決済み ModelSpec から AIService 経由で MLX / PyTorch driver を生成 |
 | `resolveDefaultContainerDir` | `MODULAR_PROMPT_HOME` に基づくデフォルト cache container を解決 |
 | `resolveStoreDir` | cache コンテナと storename から store ディレクトリを解決 |
 | `validateStorename` | storename の形式と予約語を検証 |
@@ -337,7 +362,7 @@ console.log(result.structured); // schema に沿った JSON
 ```bash
 pnpm --filter @modular-prompt/extract build
 
-modular-prompt-extract create meeting [-d <cache-dir>] [-m <alias-or-model-id>] file1.txt file2.txt
+modular-prompt-extract create meeting [-d <cache-dir>] [-m <alias-or-model-id>] [--provider <mlx|pytorch>] file1.txt file2.txt
 modular-prompt-extract add meeting [-d <cache-dir>] file3.txt
 modular-prompt-extract create contract [-d <cache-dir>] [-m <alias-or-model-id>] contract.pdf
 modular-prompt-extract extract meeting [-d <cache-dir>] '抽出したい内容の指示'
@@ -349,11 +374,11 @@ modular-prompt-extract clean --all [-d <cache-dir>]
 
 `<storename>` は create/add/extract/clean の positional 第1引数で必須です（`clean --all` を除く）。`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致し、`create`・`add`・`extract`・`list`・`clean` は使用できません。`-d` は store コンテナを指定し、create は `<container>/<storename>/` にキャッシュと `manifest.json` を保存します。既存 store に対する create は失敗するため、`modular-prompt-extract clean <storename>`（必要に応じて `-d <container>`）で削除してから再実行します。
 
-`add <storename> files...` は manifest の model を使って既存 store に資料を追加します。新しいファイルは絶対パスを `id` として追記され、同じ `id`・同じ内容の再追加はスキップされます。同じ `id` の内容が変わっている場合は、キャッシュとの不整合を避けるためエラーになります。その場合は `clean` してから `create` し直してください。`add --dry-run` は MLX を起動せず、マージ後のプロンプトを表示します。
+`add <storename> files...` は manifest の provider + model を検証して既存 store に資料を追加します。新しいファイルは絶対パスを `id` として追記され、同じ `id`・同じ内容の再追加はスキップされます。同じ `id` の内容が変わっている場合は、キャッシュとの不整合を避けるためエラーになります。その場合は `clean` してから `create` し直してください。`add --dry-run` は driver を起動せず、マージ後のプロンプトを表示します。
 
 `add` は既存 store を直接上書きしません。staging store で必須 cache prepare と manifest 書き込みを完了してから store ディレクトリを入れ替えるため、空 handle を含む prefill の失敗、または manifest 更新の失敗時は既存の corpus と KV cache が保持されます。通常の `createExtractSession` / `extract` は引き続き cache prepare の失敗を best-effort で扱います。
 
-`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。生 model ID の provider を推論できない場合はエラーになるため、extract では models.yaml の一致エントリに `provider: mlx` を設定してください。`create` は解決後の生 model ID と選択した MLX `backend`（`auto` / `lm` / `vlm` / `optiq`）を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の値を新しい runtime に渡して再開します。backend がない既存 manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache と画像 material 用の vision cache を別 namespace で使用し、VLM incremental prefill は対象外です。
+`-m` は models.yaml の alias（`default` など）または生の HF model ID を受け付けます。省略時は user の `~/.modular-prompt/models.yaml` にある `models.default` から解決します。モデルが未設定の場合は明示的な `-m` または `models.default` が必要です。生 model ID の provider を推論できない場合は `--provider mlx` / `--provider pytorch` を指定してください。`create` は解決後の生 model ID と provider を store 内の `manifest.json` に保存し、`extract` と `add` は manifest の provider + model を検証して再開します。backend がない既存 MLX manifest は `auto` として扱うため、従来どおりモデル種別の自動判定になります。VLM は text-only cache と画像 material 用の vision cache を別 namespace で使用し、VLM incremental prefill は対象外です。PyTorch は現状 text-only です。
 
 ### 旧 CLI / キャッシュレイアウトからの移行
 

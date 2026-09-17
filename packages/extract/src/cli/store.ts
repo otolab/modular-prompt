@@ -38,5 +38,5 @@ export async function storeExists(storeDir: string): Promise<boolean> {
 
 /** Return whether the store contains at least one persisted KV cache archive. */
 export function isKvCacheFile(filename: string): boolean {
-  return filename.endsWith('.safetensors.zip');
+  return filename.endsWith('.safetensors.zip') || filename.endsWith('.pytorch-cache');
 }

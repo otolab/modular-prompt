@@ -37,7 +37,10 @@ export async function runAddCommand(options: AddCommandOptions): Promise<string 
   });
 
   console.error(`Cache extended: ${storeDir}`);
-  console.error(`Materials: ${result.manifest.materials.length} file(s), model: ${result.model}`);
+  console.error(
+    `Materials: ${result.manifest.materials.length} file(s), model: ${result.model}, provider: ${result.provider}`
+      + (result.backend !== undefined ? `, backend: ${result.backend}` : ''),
+  );
 }
 
 // Keep the merge operation discoverable next to the CLI entry point while the

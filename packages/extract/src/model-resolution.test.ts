@@ -83,6 +83,38 @@ describe('extract model resolution', () => {
     });
   });
 
+  it('accepts a PyTorch model alias and preserves its driver options', () => {
+    const model = 'meta-llama/Llama-3.2-3B-Instruct';
+    expect(resolveModelSpec('local-pytorch', {
+      models: {
+        'local-pytorch': {
+          provider: 'pytorch',
+          model,
+          driverOptions: { device: 'cuda', venvPath: '/tmp/pytorch-venv' },
+        },
+      },
+    })).toMatchObject({
+      model,
+      provider: 'pytorch',
+      driverOptions: { device: 'cuda', venvPath: '/tmp/pytorch-venv' },
+    });
+  });
+
+  it('allows an explicit provider for an otherwise ambiguous raw model ID', () => {
+    expect(resolveModelSpec('meta-llama/Llama-3.2-3B-Instruct', {}, 'pytorch')).toMatchObject({
+      model: 'meta-llama/Llama-3.2-3B-Instruct',
+      provider: 'pytorch',
+    });
+  });
+
+  it('rejects an explicit provider that disagrees with an alias', () => {
+    expect(() => resolveModelSpec('local-mlx', {
+      models: {
+        'local-mlx': { provider: 'mlx', model: 'mlx-community/model' },
+      },
+    }, 'pytorch')).toThrow(/provider mismatch/);
+  });
+
   it('does not use the first model entry when no model is specified', () => {
     expect(() => resolveModelSpec(undefined, {
       models: {

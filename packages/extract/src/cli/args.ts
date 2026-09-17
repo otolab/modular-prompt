@@ -1,4 +1,5 @@
 import { validateStorename } from './store.js';
+import type { ExtractProvider } from '../extract-runtime-types.js';
 
 export type CliCommand = 'create' | 'add' | 'extract' | 'list' | 'clean' | 'help';
 
@@ -6,6 +7,7 @@ export interface ParsedArgs {
   command?: CliCommand;
   cacheDir?: string;
   model?: string;
+  provider?: ExtractProvider;
   maxTokens?: number;
   dryRun?: boolean;
   all?: boolean;
@@ -29,6 +31,13 @@ function parseMaxTokens(value: string): number {
   return parsed;
 }
 
+function parseProvider(value: string): ExtractProvider {
+  if (value === 'mlx' || value === 'pytorch') {
+    return value;
+  }
+  throw new Error('--provider must be either mlx or pytorch');
+}
+
 function validateCommandOptions(result: ParsedArgs): void {
   if (result.all && result.command !== 'clean') {
     throw new Error('--all is only valid with clean');
@@ -38,6 +47,9 @@ function validateCommandOptions(result: ParsedArgs): void {
   }
   if ((result.command === 'extract' || result.command === 'add') && result.model !== undefined) {
     throw new Error('--model is only valid with create');
+  }
+  if (result.command !== 'create' && result.provider !== undefined) {
+    throw new Error('--provider is only valid with create');
   }
   if (result.command === 'list') {
     if (result.model !== undefined || result.maxTokens !== undefined || result.dryRun) {
@@ -103,6 +115,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
     if (!optionsEnded && (arg === '-m' || arg === '--model')) {
       result.model = requireOptionValue(argv, index, arg, 'a model id');
+      index += 2;
+      continue;
+    }
+
+    if (!optionsEnded && arg === '--provider') {
+      result.provider = parseProvider(requireOptionValue(argv, index, arg, 'mlx or pytorch'));
       index += 2;
       continue;
     }

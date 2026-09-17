@@ -45,6 +45,7 @@ describe('cli/list', () => {
 
     expect(output).toContain('Store: contract');
     expect(output).toContain('  Model: mlx-community/ContractModel-4bit');
+    expect(output).toContain('  Provider: mlx');
     expect(output).toContain('  Materials: 1 (contract.pdf)');
     expect(output).toContain('  KV cache: missing');
     expect(output).toContain('Store: meeting');
