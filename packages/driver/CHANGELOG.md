@@ -1,5 +1,32 @@
 # @modular-prompt/driver
 
+## 0.17.0
+
+### Minor Changes
+
+- 53c16ef: PyTorch runtime に CUDA template variant を追加し、`setup pytorch --variant cuda --cuda <version>` で CUDA 対応 torch wheel を選択できるようにしました。runtime manifest と status に variant、CUDA バージョン、torch バージョン、CUDA の利用可否を表示します。
+
+  Closes #378
+
+- a6f8863: PyTorch (Transformers) LIP バックエンドで、同一プロセス内の KV キャッシュを `cache_prefill` と `generate` から利用できるようにしました。ディスク永続化と `PyTorchCacheController` 連携は後続フェーズで対応します。
+- ac3b536: PyTorch (Transformers) LIP バックエンドで KV キャッシュを `pytorch_kv_v1` 形式としてディスクに永続化し、メタデータ検証と incremental prefill に対応しました。
+- 8948f1f: PyTorchDriver に PyTorchCacheController を接続し、PromptCacheController のライフサイクルと `cacheReadTokens` / `cacheWriteTokens` usage を利用できるようにしました。
+- f244e65: MLX VLM の text-only KV prompt cache を `mlx-vlm` の `exact_cache_v1` 形式でディスク永続化し、extract runtime が `auto` / `vlm` backend の判定モデルを利用できるようにしました。LM の cache archive とは形式を分離しています。
+- 220ccfa: MLX の mlx-vlm バックエンドで、テキスト専用・同一 Python プロセス内の KV prompt cache を利用できるようにしました。
+- 59fe98f: MLX VLM の画像付きプロンプトで vision feature reuse と VLM prompt/KV cache の永続化を利用できるようにしました。画像 cache は text-only cache および LM cache zip と別 namespace で管理します。
+
+### Patch Changes
+
+- b973aa7: MLX VLM の依存を `mlx-vlm==0.7.0` に更新し、text-only インメモリ prompt cache 経路を追従しました。
+- 48cee09: `@modular-prompt/driver` インストール時にドキュメント記載の `modular-prompt-runtime` コマンドを利用できるよう bin を追加。既存の `modular-runtime` は後方互換のエイリアスとして維持。
+- 7a1591d: 公開 npm パッケージ向けに docs を `docs/packages/` に集約し、publish 時に `packages/*/docs/` へコピーする。README の `./docs/` リンク整備、`simple-chat --check` の models.yaml 表示、runtime 未セットアップ時メッセージの公開利用者向け修正を含む（#340）。
+- 0c3a836: 生の model ID に対する provider 解決を共通化し、merged models の一致エントリ・runtime metadata・既知のモデル名パターンを利用できるようにしました。provider を推論できない場合は、誤った runtime を選ばず `--provider <provider>` の明示指定を促すエラーを返します。
+
+  Closes #373
+
+- 0cd7e94: PyTorch cpu-minimal runtime の Transformers を `>=5.14.0`（互換する `safetensors==0.8.0`）に更新し、`qwen3_5` モデルを利用できるようにしました。既存の PyTorch runtime 利用者は `setup-pytorch` を再実行し、必要に応じて runtime 側の依存制約を更新してから sync してください。
+- 2fcdd1c: PyTorch runtime をパッケージ内の template と `~/.modular-prompt/runtimes/pytorch/` の runtime に分離しました。既存ユーザーは `setup-pytorch` を再実行して runtime 側の Python プロジェクトを seed してください。runtime 側の `pyproject.toml` を編集したあとは `modular-prompt-runtime sync pytorch` でコードと依存を更新できます。
+
 ## 0.16.0
 
 ### Minor Changes
