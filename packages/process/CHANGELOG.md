@@ -1,25 +1,5 @@
 # @modular-prompt/process
 
-## 0.5.10
-
-### Patch Changes
-
-- 7a1591d: 公開 npm パッケージ向けに docs を `docs/packages/` に集約し、publish 時に `packages/*/docs/` へコピーする。README の `./docs/` リンク整備、`simple-chat --check` の models.yaml 表示、runtime 未セットアップ時メッセージの公開利用者向け修正を含む（#340）。
-- Updated dependencies [b973aa7]
-- Updated dependencies [48cee09]
-- Updated dependencies [7a1591d]
-- Updated dependencies [0c3a836]
-- Updated dependencies [53c16ef]
-- Updated dependencies [a6f8863]
-- Updated dependencies [ac3b536]
-- Updated dependencies [8948f1f]
-- Updated dependencies [0cd7e94]
-- Updated dependencies [2fcdd1c]
-- Updated dependencies [f244e65]
-- Updated dependencies [220ccfa]
-- Updated dependencies [59fe98f]
-  - @modular-prompt/driver@1.0.0
-
 ## 0.5.9
 
 ### Patch Changes
