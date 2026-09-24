@@ -1,5 +1,36 @@
 # @modular-prompt/simple-chat
 
+## 1.0.0
+
+### Major Changes
+
+- 47401bb: 同梱 MLX モデルへの暗黙の fallback を廃止し、モデル未指定時は明示的なエラーを返すようにしました。`-m`、profile/workflow、または user `models.default` でモデルを指定してください。
+
+  Closes #365
+
+### Patch Changes
+
+- 7a1591d: 公開 npm パッケージ向けに docs を `docs/packages/` に集約し、publish 時に `packages/*/docs/` へコピーする。README の `./docs/` リンク整備、`simple-chat --check` の models.yaml 表示、runtime 未セットアップ時メッセージの公開利用者向け修正を含む（#340）。
+- 0c3a836: 生の model ID に対する provider 解決を共通化し、merged models の一致エントリ・runtime metadata・既知のモデル名パターンを利用できるようにしました。provider を推論できない場合は、誤った runtime を選ばず `--provider <provider>` の明示指定を促すエラーを返します。
+
+  Closes #373
+
+- Updated dependencies [b973aa7]
+- Updated dependencies [48cee09]
+- Updated dependencies [7a1591d]
+- Updated dependencies [0c3a836]
+- Updated dependencies [53c16ef]
+- Updated dependencies [a6f8863]
+- Updated dependencies [ac3b536]
+- Updated dependencies [8948f1f]
+- Updated dependencies [0cd7e94]
+- Updated dependencies [2fcdd1c]
+- Updated dependencies [f244e65]
+- Updated dependencies [220ccfa]
+- Updated dependencies [59fe98f]
+  - @modular-prompt/driver@1.0.0
+  - @modular-prompt/process@0.5.10
+
 ## 0.5.1
 
 ### Patch Changes
