@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GoogleGenAICacheController } from './google-genai-cache-controller.js';
 import { GoogleGenAIDriver } from './google-genai-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
-import type { PromptCacheController } from '../cache-controller.js';
+import type { CacheHandle, PromptCacheController } from '../cache-controller.js';
 
 vi.mock('@google/genai', () => {
   return {
@@ -378,6 +378,50 @@ describe('GoogleGenAIDriver with CacheController', () => {
     expect(config.systemInstruction[0].text).toContain('Current time');
   });
 
+  it('should prefer an externally prepared cacheHandle without preparing again', async () => {
+    const externalHandle: CacheHandle = {
+      ref: 'cachedContents/external',
+      includes: { instructions: true, dataElementCount: 1, tools: false },
+    };
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Static rule' },
+        { type: 'text', content: 'Current time is 12:00', cacheHint: 'contextual' },
+      ],
+      data: [
+        { type: 'material', id: 'm1', title: 'Doc', content: 'stable' },
+        { type: 'chunk', partOf: 'doc', content: 'volatile' },
+      ],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await driver.query(prompt, { cache: false, cacheHandle: externalHandle });
+
+    expect(mockController.prepare).not.toHaveBeenCalled();
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
+    const callArgs = generateContent.mock.calls[0][0];
+    expect(callArgs.config.cachedContent).toBe('cachedContents/external');
+    expect(callArgs.config.systemInstruction).toHaveLength(1);
+    expect(callArgs.config.systemInstruction[0].text).toContain('Current time');
+    expect(callArgs.contents).toHaveLength(2);
+  });
+
+  it('should not prepare when cache is explicitly disabled without a handle', async () => {
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'Static rule' }],
+      data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'stable' }],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    await driver.query(prompt, { cache: false });
+
+    expect(mockController.prepare).not.toHaveBeenCalled();
+    const generateContent = (driver as unknown as { client: { models: { generateContent: vi.Mock } } }).client.models.generateContent;
+    const config = generateContent.mock.calls[0][0].config;
+    expect(config.cachedContent).toBeUndefined();
+    expect(config.systemInstruction).toHaveLength(1);
+  });
+
   it('should work with streamQuery', async () => {
     const prompt: CompiledPrompt = {
       instructions: [{ type: 'text', content: 'system' }],
@@ -394,6 +438,29 @@ describe('GoogleGenAIDriver with CacheController', () => {
     const generateContentStream = (driver as unknown as { client: { models: { generateContentStream: vi.Mock } } }).client.models.generateContentStream;
     const config = generateContentStream.mock.calls[0][0].config;
     expect(config.cachedContent).toBe('cachedContents/abc');
+  });
+
+  it('should reuse an external cacheHandle in streamQuery without preparing again', async () => {
+    const externalHandle: CacheHandle = {
+      ref: 'cachedContents/external-stream',
+      includes: { instructions: true, dataElementCount: 1, tools: false },
+    };
+    const prompt: CompiledPrompt = {
+      instructions: [{ type: 'text', content: 'system' }],
+      data: [{ type: 'material', id: 'm1', title: 'Doc', content: 'stable' }],
+      output: [{ type: 'text', content: 'go' }],
+    };
+
+    const { result } = await driver.streamQuery(prompt, {
+      cache: false,
+      cacheHandle: externalHandle,
+    });
+    await result;
+
+    expect(mockController.prepare).not.toHaveBeenCalled();
+    const generateContentStream = (driver as unknown as { client: { models: { generateContentStream: vi.Mock } } }).client.models.generateContentStream;
+    const config = generateContentStream.mock.calls[0][0].config;
+    expect(config.cachedContent).toBe('cachedContents/external-stream');
   });
 
   it('should fall back to sending all instructions when cache excludes them', async () => {

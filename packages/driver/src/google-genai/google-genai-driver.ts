@@ -95,38 +95,29 @@ export class GoogleGenAIDriver implements AIDriver {
     contents: Content[];
     cacheHandle: CacheHandle | null;
   }> {
-    if (this.cacheController) {
-      const partition = partitionPrompt(prompt);
-      const hasCacheableContent =
-        partition.cacheable.instructions.length > 0 ||
-        partition.cacheable.data.length > 0 ||
-        (mergedOptions.tools && mergedOptions.tools.length > 0);
+    const partition = partitionPrompt(prompt);
+    const hasCacheableContent =
+      partition.cacheable.instructions.length > 0 ||
+      partition.cacheable.data.length > 0 ||
+      (mergedOptions.tools && mergedOptions.tools.length > 0);
 
-      if (hasCacheableContent) {
-        const handle = await this.cacheController.prepare({
-          model,
-          instructions: partition.cacheable.instructions,
-          data: partition.cacheable.data,
-          tools: mergedOptions.tools,
-          readOnly: mergedOptions.cache === 'read-only',
-        });
-
-        const instructionsForRequest = handle.includes.instructions
-          ? partition.volatile.instructions
-          : [...partition.cacheable.instructions, ...partition.volatile.instructions];
-        const uncachedInstructionParts = instructionsForRequest.length > 0
-          ? instructionsForRequest.map(el => elementToPart(el))
-          : undefined;
-
-        const dataForRequest = handle.includes.dataElementCount >= partition.cacheable.data.length
-          ? partition.volatile.data
-          : [...partition.cacheable.data, ...partition.volatile.data];
-        const volatileElements = [...dataForRequest, ...partition.volatile.output];
-        const contents = volatileElements.length > 0
-          ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
-          : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
-        return { systemInstructionParts: uncachedInstructionParts, contents, cacheHandle: handle };
+    // A handle prepared by a caller (for example, an extract session) is the
+    // source of truth.  In particular, do not call prepare() again when the
+    // caller also sets cache: false to opt out of driver-side preparation.
+    if (mergedOptions.cacheHandle) {
+      if (mergedOptions.cacheHandle.ref) {
+        return this.buildCachedPromptPayload(partition, mergedOptions.cacheHandle);
       }
+    } else if (this.cacheController && mergedOptions.cache !== false && hasCacheableContent) {
+      const handle = await this.cacheController.prepare({
+        model,
+        instructions: partition.cacheable.instructions,
+        data: partition.cacheable.data,
+        tools: mergedOptions.tools,
+        readOnly: mergedOptions.cache === 'read-only',
+      });
+
+      return this.buildCachedPromptPayload(partition, handle);
     }
 
     const systemInstructionParts = prompt.instructions?.map(el => elementToPart(el));
@@ -135,6 +126,32 @@ export class GoogleGenAIDriver implements AIDriver {
       ? mergeToolResultContents(allDataElements.map(el => elementToContent(el)))
       : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
     return { systemInstructionParts, contents, cacheHandle: null };
+  }
+
+  private buildCachedPromptPayload(
+    partition: ReturnType<typeof partitionPrompt>,
+    handle: CacheHandle,
+  ): {
+    systemInstructionParts: ReturnType<typeof elementToPart>[] | undefined;
+    contents: Content[];
+    cacheHandle: CacheHandle;
+  } {
+    const instructionsForRequest = handle.includes.instructions
+      ? partition.volatile.instructions
+      : [...partition.cacheable.instructions, ...partition.volatile.instructions];
+    const uncachedInstructionParts = instructionsForRequest.length > 0
+      ? instructionsForRequest.map(el => elementToPart(el))
+      : undefined;
+
+    const dataForRequest = handle.includes.dataElementCount >= partition.cacheable.data.length
+      ? partition.volatile.data
+      : [...partition.cacheable.data, ...partition.volatile.data];
+    const volatileElements = [...dataForRequest, ...partition.volatile.output];
+    const contents = volatileElements.length > 0
+      ? mergeToolResultContents(volatileElements.map(el => elementToContent(el)))
+      : [{ parts: [{ text: 'Please process according to the instructions.' }] }];
+
+    return { systemInstructionParts: uncachedInstructionParts, contents, cacheHandle: handle };
   }
 
   private buildGenerationConfig(

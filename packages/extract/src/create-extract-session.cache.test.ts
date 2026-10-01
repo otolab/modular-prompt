@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { PromptModule } from '@modular-prompt/core';
 import type { AIDriver, CacheHandle, PromptCacheController } from '@modular-prompt/driver';
-import { partitionPrompt, TestDriver } from '@modular-prompt/driver';
+import {
+  GoogleGenAICacheController,
+  GoogleGenAIDriver,
+  partitionPrompt,
+  TestDriver,
+} from '@modular-prompt/driver';
 import {
   prepareSessionCache,
   releaseSessionCache,
@@ -184,6 +189,55 @@ describe('createExtractSession cache integration', () => {
     expect(tracking.releases).toContain('cache-1');
     expect(tracking.releases).toContain('cache-2');
     expect(tracking.controller.close).not.toHaveBeenCalled();
+  });
+
+  it('prepares a Google GenAI cache only from the extract session', async () => {
+    const createCache = vi.fn(async () => ({ name: 'cachedContents/extract-session' }));
+    const deleteCache = vi.fn(async () => ({}));
+    const cacheClient = {
+      caches: {
+        create: createCache,
+        delete: deleteCache,
+      },
+    } as unknown as ConstructorParameters<typeof GoogleGenAICacheController>[0];
+    const cacheController = new GoogleGenAICacheController(cacheClient);
+    const prepare = vi.spyOn(cacheController, 'prepare');
+
+    const driver = new GoogleGenAIDriver({
+      apiKey: 'test-api-key',
+      model: 'gemini-2.5-flash',
+      cacheController,
+    });
+    const googleClient = (driver as unknown as {
+      client: { models: { generateContent: ReturnType<typeof vi.fn> } };
+    }).client;
+    googleClient.models.generateContent = vi.fn().mockResolvedValue({
+      text: 'extracted',
+      candidates: [{ finishReason: 'STOP' }],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 },
+    });
+
+    const session = createExtractSession({
+      driver,
+      baseModule,
+      corpus,
+      cacheController,
+      model: 'gemini-2.5-flash',
+    });
+
+    await session.extract({ cue: 'List characters' });
+    await session.extract({
+      cue: 'List locations',
+      inputs: inputChunk('Focus on places'),
+    });
+
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(googleClient.models.generateContent).toHaveBeenCalledTimes(2);
+    for (const [request] of googleClient.models.generateContent.mock.calls) {
+      expect(request.config.cachedContent).toBe('cachedContents/extract-session');
+    }
+
+    await session.close();
   });
 
   it('forwards cache usage from the driver to ExtractResult', async () => {
