@@ -71,16 +71,25 @@ node packages/extract/bin/modular-prompt-extract.js clean meeting
 | コマンド | 説明 |
 |---------|------|
 | `create <storename> [-d <container>] [-m <alias-or-model-id>] [--provider <mlx\|pytorch>] [files...]` | corpus を読み込み KV cache を準備。provider と model を含む `manifest.json` を `<container>/<storename>/` に保存 |
-| `add <storename> [-d <container>] [files...]` | 既存 store の corpus にファイルを追記し、KV cache を incremental prefill で拡張 |
-| `extract <storename> [-d <container>] [query...]` | 指定 store のキャッシュ済み corpus に対して抽出。query が cue になる |
+| `add <storename> [-d <container>] [--auto-rebuild-cache\|--no-auto-rebuild-cache] [files...]` | 既存 store の corpus にファイルを追記し、KV cache を incremental prefill で拡張。incremental のベースが無い場合は既定で full prefill にフォールバック |
+| `extract <storename> [-d <container>] [--auto-rebuild-cache\|--no-auto-rebuild-cache] [query...]` | 指定 store の corpus に対して抽出。KV cache が無い・不整合な場合は既定で manifest から再生成してから実行 |
 | `list [-d <container>]` | コンテナ内の全 store と manifest/KV のサマリを表示 |
 | `clean <storename> [-d <container>]` | 指定 store の manifest + KV キャッシュを再帰削除。存在しない store は no-op |
 | `clean --all [-d <container>]` | コンテナ全体を再帰削除。存在しないコンテナは no-op |
 | `extract <storename> --max-tokens <n>` | 最大生成トークン数（デフォルト: 8000） |
 | `--provider <mlx\|pytorch>` | create で provider を明示。省略時は models.yaml / model alias から解決 |
+| `--auto-rebuild-cache` / `--no-auto-rebuild-cache` | add/extract の KV cache 自動再生成を明示的に有効化 / 無効化 |
 | `--dry-run` | driver を起動せず、compile 済みプロンプト全文を stdout に出力 |
 
-`list` は各 store の model、materials 数・タイトル、作成日時、KV cache の有無を表示します。
+`list` は各 store の model、materials 数・タイトル、作成日時、KV cache の有無を表示します。`KV cache: missing` は manifest が残っていれば復旧可能な状態で、通常は次の `extract` または `add` が自動再生成します。
+
+### KV cache の再生成と opt-out
+
+`create` は store と `manifest.json` を作るために必須です。KV cache は manifest から再生成できる透過的な派生データなので、cache file の削除や `cache-index.json` の不整合だけで store 全体を作り直す必要はありません。
+
+既定では `extract` が KV cache の欠損・破損・index が指す実体の欠損を検知すると、manifest の全 materials で full prefill を行い、次の抽出を継続します。再生成時だけ stderr に warning を出し、成功した cache は store に保存されます。`add` も incremental のベースが無い場合は同じ full prefill にフォールバックします。ベースが存在する場合の `add` は従来どおり incremental prefill です。
+
+自動再生成を止める場合は `--no-auto-rebuild-cache`、または `MODULAR_PROMPT_EXTRACT_AUTO_REBUILD_CACHE=false`（`0` / `no` / `off` も可）を指定します。環境変数が OFF の環境で一時的に有効化する場合は `--auto-rebuild-cache` を使えます。ライブラリでは `createExtractSession({ autoRebuildCache: false, ... })` を指定できます。既定値は `true` で、CLI 引数（指定時）が環境変数より優先されます。OFF の `extract` は既存 cache の read-only hit を使い、miss は cache を作らず uncached query にフォールバックします。OFF の `add` は incremental base が無い場合に明示エラーで停止し、manifest と既存 cache を変更しません。
 
 CLI の `create` / `add` は入力ファイルを UTF-8 の文字列として読み込みます。画像ファイルを `Attachment` に変換する機能はなく、CLI の画像 material は Phase 3 の対象外です。画像を corpus に含める場合は library API の `MaterialInput.content: Attachment[]` を使用してください。MLX VLM の画像入力・画像 cache が受け付けるのは local file path のみで、URL や data URI は未対応です。
 

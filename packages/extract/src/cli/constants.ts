@@ -17,3 +17,29 @@ export const CACHE_PREPARE_CUE = '（cache prepare）';
 
 /** `extract --max-tokens` 省略時のデフォルト。 */
 export const DEFAULT_MAX_TOKENS = 8000;
+
+/** Environment variable that disables automatic KV cache regeneration. */
+export const AUTO_REBUILD_CACHE_ENV = 'MODULAR_PROMPT_EXTRACT_AUTO_REBUILD_CACHE';
+
+/** Resolve the automatic cache rebuild setting with CLI/config precedence. */
+export function resolveAutoRebuildCache(configValue?: boolean): boolean {
+  if (configValue !== undefined) {
+    return configValue;
+  }
+
+  const environmentValue = process.env[AUTO_REBUILD_CACHE_ENV];
+  if (environmentValue === undefined) {
+    return true;
+  }
+
+  if (/^(?:0|false|no|off)$/i.test(environmentValue.trim())) {
+    return false;
+  }
+  if (/^(?:1|true|yes|on)$/i.test(environmentValue.trim())) {
+    return true;
+  }
+
+  throw new Error(
+    `${AUTO_REBUILD_CACHE_ENV} must be one of true/false, 1/0, yes/no, or on/off`,
+  );
+}

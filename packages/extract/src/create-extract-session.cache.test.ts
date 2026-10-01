@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { PromptModule } from '@modular-prompt/core';
 import type { AIDriver, CacheHandle, PromptCacheController } from '@modular-prompt/driver';
 import { partitionPrompt, TestDriver } from '@modular-prompt/driver';
@@ -252,6 +252,41 @@ describe('createExtractSession cache integration', () => {
       text: 'query succeeded without cache',
     });
     expect(queryCount).toBe(1);
+    await session.close();
+  });
+
+  it('uses read-only cache preparation when automatic rebuild is disabled', async () => {
+    const receivedOptions: Array<{ cache?: boolean | 'read-only' }> = [];
+    const driver = new TestDriver({
+      responses: (_prompt, options) => {
+        receivedOptions.push({ cache: options?.cache });
+        return 'uncached result';
+      },
+    });
+    const prepare = vi.fn(async () => ({
+      ref: '',
+      includes: { instructions: false, dataElementCount: 0, tools: false },
+    }));
+    const cacheController: PromptCacheController = {
+      prepare,
+      release: () => {},
+      close: async () => {},
+    };
+
+    const session = createExtractSession({
+      driver,
+      baseModule,
+      corpus,
+      cacheController,
+      model: 'test-model',
+      autoRebuildCache: false,
+    });
+
+    await expect(session.extract({ cue: 'List characters' })).resolves.toMatchObject({
+      text: 'uncached result',
+    });
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ readOnly: true }));
+    expect(receivedOptions).toEqual([{ cache: 'read-only' }]);
     await session.close();
   });
 

@@ -43,6 +43,12 @@ export interface ExtractSessionOptions<TContext = ExtractContext> {
   /** Output schema (Phase 3: structured output). Accepted at session creation. */
   schema?: object;
   /**
+   * Automatically create a missing disk cache. Existing cache hits remain
+   * usable when this is false; misses fall back to an uncached query.
+   * Defaults to true.
+   */
+  autoRebuildCache?: boolean;
+  /**
    * Cache preparation policy. Normal sessions are best-effort; store
    * preparation uses `required` so an empty cache handle cannot be committed.
    */

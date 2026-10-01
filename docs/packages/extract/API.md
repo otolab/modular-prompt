@@ -133,7 +133,8 @@ const storeDir = resolveStoreDir(resolveDefaultContainerDir(), 'meeting');
 |-----|-------------|------------|
 | `mergeMaterials(existing, incoming)` | `MaterialInput[]` → merged `MaterialInput[]` | `id`（省略時は `title`）で順序を保ってマージ。同一 id・同一内容はスキップし、内容差分はエラー |
 | `prepareExtractCache({ cacheDir, model, provider?, backend?, maxImageSize?, materials })` | `Promise<{ model, provider, backend?, maxImageSize? }>`（解決済み model/provider） | prepare cue で corpus を KV prefill し、session/runtime を close。manifest は変更しない |
-| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now? })` | `Promise<{ manifest, model, provider, backend?, addedMaterials }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
+| `ensureStoreKvCache({ storeDir, storename, manifest?, autoRebuildCache? })` | `Promise<{ status, rebuilt }>` | extract 前に cache-index と cache 実体を検査し、必要なら staging store で manifest から full prefill。manifest は変更しない |
+| `appendToExtractStore({ storeDir, storename, incomingMaterials, existingManifest?, now?, autoRebuildCache? })` | `Promise<{ manifest, model, provider, backend?, addedMaterials, cacheRebuilt }>` | 既存 store を staging に複製して incremental prefill と manifest 更新を行い、成功時に rename 交換。incremental base が無い場合は既定で full prefill にフォールバックし、`autoRebuildCache: false` なら明示エラーで停止する。prefill / manifest / runtime の失敗時は元の corpus・manifest・KV を保持 |
 
 `appendToExtractStore` は `manifest.provider`（未指定の legacy manifest は MLX）、`manifest.model`、`manifest.backend`（MLX のみ。未指定時は `auto` fallback）、および保存済み `maxImageSize` を使い、provider + model の不一致を検証します。成功時だけ `updatedAt`、materials、解決済み provider/backend、画像 resize 条件を反映します。`readExtractStoreManifest` は store の存在と manifest を検証し、存在しない store には `create` を案内するエラーを返します。ライブラリ層のマージ、prefill、失敗時保全は `src/extract-store.test.ts` で CLI から独立して検証しています。
 
@@ -204,6 +205,7 @@ function createExtractSession<TContext = ExtractContext>(
 | `domainModule` | `PromptModule<TContext>` | — | base の上に merge |
 | `corpus` | `ExtractCorpus` | ✅ | セッション固定 corpus |
 | `schema` | `object` | — | JSON Schema（structured output） |
+| `autoRebuildCache` | `boolean` | — | 欠損 cache を自動作成するか（既定 `true`）。`false` では既存 cache の read-only hit のみ利用し、miss は cache を作らず uncached query にフォールバック |
 | `cachePreparation` | `'best-effort' \| 'required'` | — | 通常は `best-effort`（省略時）。`required` は空 handle をエラーにして driver query を実行しない |
 | `maxImageSize` | `number` | — | VLM 画像キャッシュの正規化に使う最大辺。driver の設定と一致させる。runtime 経由では自動設定 |
 
@@ -252,8 +254,8 @@ CLI の `create` / `add` は各入力ファイルを UTF-8 の文字列として
 
 ```bash
 modular-prompt-extract create <storename> [-m <model>] [--provider <mlx|pytorch>] [--dry-run] <files...>
-modular-prompt-extract add <storename> [--dry-run] <files...>
-modular-prompt-extract extract <storename> [--max-tokens <n>] [--dry-run] <query...>
+modular-prompt-extract add <storename> [--auto-rebuild-cache|--no-auto-rebuild-cache] [--dry-run] <files...>
+modular-prompt-extract extract <storename> [--max-tokens <n>] [--auto-rebuild-cache|--no-auto-rebuild-cache] [--dry-run] <query...>
 modular-prompt-extract list
 modular-prompt-extract clean <storename>
 modular-prompt-extract clean --all
@@ -272,9 +274,11 @@ modular-prompt-extract clean --all -d ~/.modular-prompt/extract-cache
 
 `<storename>` は create/add/extract/clean の positional 第1引数として必須（`clean --all` を除く）で、`[a-zA-Z0-9][a-zA-Z0-9_-]*` に一致する必要がある。`create`、`add`、`extract`、`list`、`clean` は予約語である。
 
-`add <storename> [--dry-run] <files...>` は既存 store の manifest にファイルを追記し、manifest の model で prepare cue を実行する。既存 cache を staging store に複製してから incremental prefill と manifest 更新を行い、成功時にだけ store を入れ替える。prefill または manifest 更新が失敗した場合は元の store を保持する。同じ絶対パス `id` の同一内容はスキップし、内容が異なる場合は `clean` + `create` を案内してエラーにする。
+`add <storename> [--dry-run] <files...>` は既存 store の manifest にファイルを追記し、manifest の model で prepare cue を実行する。既存 cache を staging store に複製してから incremental prefill と manifest 更新を行い、成功時にだけ store を入れ替える。incremental base が無い場合は既定で full prefill にフォールバックし、再生成時だけ stderr に warning を出す。`--no-auto-rebuild-cache` を指定すると、その場合は明示エラーで停止する。prefill または manifest 更新が失敗した場合は元の store を保持する。同じ絶対パス `id` の同一内容はスキップし、内容が異なる場合は `clean` + `create` を案内してエラーにする。
 
 `add --dry-run` はマージ後の compile 済みプロンプトを表示し、driver の起動・KV cache の書き込み・manifest の更新を行わない。`add` では `-m`、`--provider`、`--max-tokens` は指定できない。create の `--provider` は `mlx` または `pytorch` を受け付け、以降の add/extract は manifest に保存された provider を使用する。
+
+`create` は store と `manifest.json` を作るために必須です。KV cache は manifest から再生成できる派生データであり、`extract` は欠損・破損・`cache-index.json` が指す実体の欠損を検知すると既定で full prefill を行ってから抽出を続けます。`list` の `KV cache: missing` はこの復旧対象を示します。`MODULAR_PROMPT_EXTRACT_AUTO_REBUILD_CACHE=false`（`0` / `no` / `off` も可）または `--no-auto-rebuild-cache` で自動再生成を無効化できます。環境変数が OFF のときに一時的に有効化する場合は `--auto-rebuild-cache` を指定します。CLI 引数が環境変数より優先され、既定値は有効です。ライブラリの `ExtractSessionOptions.autoRebuildCache: false` では既存 cache の read-only hit を利用し、miss は cache を作らず uncached query にフォールバックします。
 
 これは破壊的変更であり、旧 CLI 引数形式と旧レイアウト（container 直下の `manifest.json` と cache files）はサポートしない。旧デフォルト `./.extract-cache` の自動検出・自動移行も行わない。既存データを利用する場合は、[README の旧 CLI / キャッシュレイアウトからの手動移行手順](./README.md#旧-cli--キャッシュレイアウトからの移行)に従って、新しいデフォルトまたは `-d` で指定した store container へ移動する。
 
