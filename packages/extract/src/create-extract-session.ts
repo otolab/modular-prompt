@@ -60,6 +60,7 @@ export function createExtractSession<TContext = ExtractContext>(
         cacheState,
         {
           required: options.cachePreparation === 'required',
+          ...(options.autoRebuildCache === false ? { readOnly: true } : {}),
           maxImageSize: options.maxImageSize,
         },
       );
@@ -76,7 +77,9 @@ export function createExtractSession<TContext = ExtractContext>(
             cache: false as const,
             cacheHandle: cacheState.handle,
           }
-        : request.options;
+        : options.autoRebuildCache === false
+          ? { ...request.options, cache: 'read-only' as const }
+          : request.options;
 
       const queryResult = await driver.query(compiled, queryOptions);
 

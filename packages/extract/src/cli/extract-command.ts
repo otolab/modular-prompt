@@ -1,11 +1,14 @@
 import { resolve } from 'node:path';
 import { createExtractSession } from '../create-extract-session.js';
 import { createExtractRuntime } from '../create-extract-runtime.js';
-import { assertExtractRuntimeMatchesManifest } from '../extract-store.js';
-import { DEFAULT_MAX_TOKENS } from './constants.js';
+import {
+  assertExtractRuntimeMatchesManifest,
+  ensureStoreKvCache,
+} from '../extract-store.js';
+import { DEFAULT_MAX_TOKENS, resolveAutoRebuildCache } from './constants.js';
 import { getManifestProvider, readManifest } from './manifest.js';
 import { renderExtractPrompt } from './render-prompt.js';
-import { resolveStoreDir } from './store.js';
+import { formatKvCacheRebuildWarning, resolveStoreDir } from './store.js';
 
 export interface ExtractCommandOptions {
   /** Container directory containing one subdirectory per store. */
@@ -14,6 +17,8 @@ export interface ExtractCommandOptions {
   query: string;
   maxTokens?: number;
   dryRun?: boolean;
+  /** Automatically rebuild a missing/inconsistent store cache. Defaults to true. */
+  autoRebuildCache?: boolean;
 }
 
 export async function runExtractCommand(options: ExtractCommandOptions): Promise<string> {
@@ -38,6 +43,17 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
     return renderExtractPrompt({ materials: manifest.materials }, request);
   }
 
+  const autoRebuildCache = resolveAutoRebuildCache(options.autoRebuildCache);
+  const cacheResult = await ensureStoreKvCache({
+    storeDir,
+    storename: options.storename,
+    manifest,
+    autoRebuildCache,
+  });
+  if (cacheResult.rebuilt) {
+    console.error(formatKvCacheRebuildWarning(options.storename, manifest.materials.length));
+  }
+
   const runtime = await createExtractRuntime({
     model: manifest.model,
     provider: getManifestProvider(manifest),
@@ -54,6 +70,7 @@ export async function runExtractCommand(options: ExtractCommandOptions): Promise
       model: runtime.model,
       maxImageSize: runtime.maxImageSize,
       corpus: { materials: manifest.materials },
+      autoRebuildCache,
     });
 
     const result = await session.extract(request);

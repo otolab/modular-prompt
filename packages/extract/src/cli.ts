@@ -21,8 +21,8 @@ function printHelp(): void {
 
 Usage:
   modular-prompt-extract create <storename> [-d <cache-dir>] [-m <model>] [--provider <mlx|pytorch>] [--dry-run] <files...>
-  modular-prompt-extract add <storename> [-d <cache-dir>] [--dry-run] <files...>
-  modular-prompt-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--dry-run] <query...>
+  modular-prompt-extract add <storename> [-d <cache-dir>] [--auto-rebuild-cache|--no-auto-rebuild-cache] [--dry-run] <files...>
+  modular-prompt-extract extract <storename> [-d <cache-dir>] [--max-tokens <n>] [--auto-rebuild-cache|--no-auto-rebuild-cache] [--dry-run] <query...>
   modular-prompt-extract list [-d <cache-dir>]
   modular-prompt-extract clean <storename> [-d <cache-dir>]
   modular-prompt-extract clean --all [-d <cache-dir>]
@@ -39,6 +39,8 @@ Options:
   -m, --model <model>      Model alias from models.yaml or raw model id
   --provider <provider>    Extract provider for create (mlx or pytorch)
   --max-tokens <n>         Max tokens for extract (default: ${DEFAULT_MAX_TOKENS})
+  --auto-rebuild-cache      Enable KV cache regeneration (add/extract; default)
+  --no-auto-rebuild-cache   Do not regenerate a missing KV cache (add/extract)
   --dry-run                Compile and print full prompt text (no driver / no cache write)
   --all                    Remove the entire cache container (clean only)
   -h, --help               Show help
@@ -91,6 +93,7 @@ async function main(): Promise<void> {
       storename: parsed.storename!,
       files: parsed.positional,
       dryRun: parsed.dryRun,
+      autoRebuildCache: parsed.autoRebuildCache,
     });
     if (typeof output === 'string') {
       process.stdout.write(`${output}\n`);
@@ -105,6 +108,7 @@ async function main(): Promise<void> {
       query: parsed.positional.join(' '),
       maxTokens: parsed.maxTokens,
       dryRun: parsed.dryRun,
+      autoRebuildCache: parsed.autoRebuildCache,
     });
     process.stdout.write(`${text}\n`);
     return;

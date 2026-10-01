@@ -18,6 +18,8 @@ export interface CacheLifecycleState {
 export interface PrepareSessionCacheOptions {
   /** Reject an empty cache handle instead of falling back to an uncached query. */
   required?: boolean;
+  /** Only use existing cache entries; never create a new one. */
+  readOnly?: boolean;
   /** Image resize limit used by a VLM cache prefill. */
   maxImageSize?: number;
 }
@@ -86,6 +88,7 @@ export async function prepareSessionCache<TContext>(
       ...cacheable.data,
     ]),
     maxImageSize: options.maxImageSize,
+    ...(options.readOnly !== undefined ? { readOnly: options.readOnly } : {}),
   });
 
   if (!newHandle.ref) {

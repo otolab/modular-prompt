@@ -8,6 +8,7 @@ import { runCleanCommand } from './clean-command.js';
 import { runExtractCommand } from './extract-command.js';
 import { readManifest } from './manifest.js';
 import { storeExists } from './store.js';
+import { AUTO_REBUILD_CACHE_ENV } from './constants.js';
 import type * as ManifestModule from './manifest.js';
 
 const { createRuntimeMock, createSessionMock, writeManifestMock } = vi.hoisted(() => ({
@@ -31,6 +32,31 @@ vi.mock('./manifest.js', async () => {
   );
   return { ...actual, writeManifest: writeManifestMock };
 });
+
+async function writeHealthyVlmCache(storeDir: string, namespace: string): Promise<{
+  cachePath: string;
+  indexPath: string;
+}> {
+  const namespaceDir = join(storeDir, namespace);
+  const cachePath = join(namespaceDir, 'exact_snapshot.safetensors');
+  const indexPath = join(storeDir, 'cache-index.json');
+  await mkdir(namespaceDir, { recursive: true });
+  await writeFile(cachePath, 'healthy-vlm-cache', 'utf-8');
+  await writeFile(`${cachePath}.meta.json`, JSON.stringify({ token_count: 12 }), 'utf-8');
+  await writeFile(
+    indexPath,
+    JSON.stringify({
+      version: 1,
+      entries: [{
+        key: 'vlm-cache',
+        backend: 'vlm',
+        path: `${namespace}/exact_snapshot.safetensors`,
+      }],
+    }),
+    'utf-8',
+  );
+  return { cachePath, indexPath };
+}
 
 describe('cli store commands', () => {
   let tempDir: string;
@@ -128,6 +154,10 @@ describe('cli store commands', () => {
 
     expect(runtimeArgs.slice(1)).toEqual([
       expect.objectContaining({ provider: 'pytorch' }),
+      expect.objectContaining({
+        provider: 'pytorch',
+        cacheDir: expect.stringContaining('.pytorch-store.rebuild-'),
+      }),
       expect.objectContaining({ provider: 'pytorch', cacheDir: storeDir }),
     ]);
   });
@@ -159,6 +189,202 @@ describe('cli store commands', () => {
       cacheDir: storeDir,
       maxImageSize: 512,
     });
+  });
+
+  it('rebuilds a manifest-only store before extract and reports a warning', async () => {
+    const storeDir = join(tempDir, 'meeting');
+    await mkdir(storeDir, { recursive: true });
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'meeting',
+      model: 'meeting-model',
+      materials: [{ title: 'notes.txt', content: 'meeting notes' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(runExtractCommand({
+        cacheDir: tempDir,
+        storename: 'meeting',
+        query: 'List people',
+      })).resolves.toBe('mock extraction');
+      expect(errorSpy).toHaveBeenCalledWith(
+        "warning: KV cache missing for store 'meeting'; rebuilt cache from manifest (1 materials).",
+      );
+      expect(createRuntimeMock).toHaveBeenCalledTimes(2);
+      expect(createSessionMock.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+        autoRebuildCache: true,
+      }));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('does not rebuild a missing cache when extract opt-out is enabled', async () => {
+    const storeDir = join(tempDir, 'meeting');
+    await mkdir(storeDir, { recursive: true });
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'meeting',
+      model: 'meeting-model',
+      materials: [{ title: 'notes.txt', content: 'meeting notes' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(runExtractCommand({
+        cacheDir: tempDir,
+        storename: 'meeting',
+        query: 'List people',
+        autoRebuildCache: false,
+      })).resolves.toBe('mock extraction');
+      expect(createRuntimeMock).toHaveBeenCalledTimes(1);
+      expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+        autoRebuildCache: false,
+      }));
+      expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('warning:'));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('uses the environment opt-out when no command config is supplied', async () => {
+    const storeDir = join(tempDir, 'meeting');
+    await mkdir(storeDir, { recursive: true });
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'meeting',
+      model: 'meeting-model',
+      materials: [{ title: 'notes.txt', content: 'meeting notes' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const previousValue = process.env[AUTO_REBUILD_CACHE_ENV];
+    process.env[AUTO_REBUILD_CACHE_ENV] = 'false';
+
+    try {
+      await runExtractCommand({
+        cacheDir: tempDir,
+        storename: 'meeting',
+        query: 'List people',
+      });
+      expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+        autoRebuildCache: false,
+      }));
+    } finally {
+      if (previousValue === undefined) {
+        delete process.env[AUTO_REBUILD_CACHE_ENV];
+      } else {
+        process.env[AUTO_REBUILD_CACHE_ENV] = previousValue;
+      }
+    }
+  });
+
+  it('rejects add without rebuilding when its incremental base is missing', async () => {
+    const storeDir = join(tempDir, 'meeting');
+    const filePath = join(tempDir, 'day2.txt');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(filePath, 'day two', 'utf-8');
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'meeting',
+      model: 'meeting-model',
+      materials: [{ title: 'day1.txt', content: 'day one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const originalManifest = await readFile(join(storeDir, 'manifest.json'), 'utf-8');
+
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'meeting',
+      files: [filePath],
+      autoRebuildCache: false,
+    })).rejects.toThrow(/automatic KV cache rebuild is disabled/i);
+    expect(createRuntimeMock).not.toHaveBeenCalled();
+    expect(await readFile(join(storeDir, 'manifest.json'), 'utf-8')).toBe(originalManifest);
+  });
+
+  it.each([
+    ['text-only VLM', 'cache.vlm.safetensors'],
+    ['vision VLM', 'cache.vlm-vision.safetensors'],
+  ])('rebuilds a healthy %s cache on add and reports a warning', async (_label, namespace) => {
+    const storeDir = join(tempDir, 'vlm-store');
+    const filePath = join(tempDir, 'day2.txt');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(filePath, 'day two', 'utf-8');
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'vlm-store',
+      model: 'vlm-model',
+      provider: 'mlx',
+      backend: 'vlm',
+      materials: [{ title: 'day1.txt', content: 'day one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await writeHealthyVlmCache(storeDir, namespace);
+    createRuntimeMock.mockImplementationOnce(async () => ({
+      driver: {},
+      cacheController: {},
+      model: 'vlm-model',
+      provider: 'mlx',
+      backend: 'vlm',
+      close: vi.fn().mockResolvedValue(undefined),
+    }));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(runAddCommand({
+        cacheDir: tempDir,
+        storename: 'vlm-store',
+        files: [filePath],
+      })).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith(
+        "warning: KV cache missing for store 'vlm-store'; rebuilt cache from manifest (2 materials).",
+      );
+      await expect(readManifest(storeDir)).resolves.toMatchObject({
+        materials: expect.arrayContaining([
+          expect.objectContaining({ title: 'day1.txt', content: 'day one' }),
+          expect.objectContaining({ title: 'day2.txt', content: 'day two' }),
+        ]),
+      });
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['text-only VLM', 'cache.vlm.safetensors'],
+    ['vision VLM', 'cache.vlm-vision.safetensors'],
+  ])('rejects add without rebuilding a healthy %s cache when opt-out is enabled', async (_label, namespace) => {
+    const storeDir = join(tempDir, 'vlm-store');
+    const filePath = join(tempDir, 'day2.txt');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(filePath, 'day two', 'utf-8');
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'vlm-store',
+      model: 'vlm-model',
+      provider: 'mlx',
+      backend: 'vlm',
+      materials: [{ title: 'day1.txt', content: 'day one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const { cachePath, indexPath } = await writeHealthyVlmCache(storeDir, namespace);
+    const originalManifest = await readFile(join(storeDir, 'manifest.json'), 'utf-8');
+    const originalIndex = await readFile(indexPath, 'utf-8');
+    const originalCache = await readFile(cachePath, 'utf-8');
+
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'vlm-store',
+      files: [filePath],
+      autoRebuildCache: false,
+    })).rejects.toThrow(/automatic KV cache rebuild is disabled.*incremental base/i);
+    expect(createRuntimeMock).not.toHaveBeenCalled();
+    expect(await readFile(join(storeDir, 'manifest.json'), 'utf-8')).toBe(originalManifest);
+    expect(await readFile(indexPath, 'utf-8')).toBe(originalIndex);
+    expect(await readFile(cachePath, 'utf-8')).toBe(originalCache);
   });
 
   it('reuses the manifest backend across create close, add staging, and extract restart', async () => {
@@ -220,7 +446,19 @@ describe('cli store commands', () => {
 
     createRuntimeMock.mockReset();
     const extractClose = vi.fn().mockResolvedValue(undefined);
+    const rebuildClose = vi.fn().mockResolvedValue(undefined);
     let extractRuntimeArgs: unknown;
+    createRuntimeMock.mockImplementationOnce(async () => {
+      // The first runtime is used for the automatic full prefill.
+      return {
+        driver: {},
+        cacheController: {},
+        model: 'resolved-vlm-model',
+        provider: 'mlx',
+        backend: 'vlm',
+        close: rebuildClose,
+      };
+    });
     createRuntimeMock.mockImplementationOnce(async (args: unknown) => {
       extractRuntimeArgs = args;
       return {
@@ -245,6 +483,7 @@ describe('cli store commands', () => {
       cacheDir: storeDir,
     });
     expect(extractClose).toHaveBeenCalledOnce();
+    expect(rebuildClose).toHaveBeenCalledOnce();
   });
 
   it('keeps multiple creates and extracts isolated by storename', async () => {
@@ -295,13 +534,25 @@ describe('cli store commands', () => {
       query: 'Extract the term',
     })).resolves.toBe('mock extraction');
 
-    expect(createRuntimeMock).toHaveBeenNthCalledWith(1, {
+    expect(createRuntimeMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      model: 'meeting-model',
+      provider: 'mlx',
+      backend: 'auto',
+      cacheDir: expect.stringContaining('.meeting.rebuild-'),
+    }));
+    expect(createRuntimeMock).toHaveBeenNthCalledWith(2, {
       model: 'meeting-model',
       provider: 'mlx',
       backend: 'auto',
       cacheDir: join(tempDir, 'meeting'),
     });
-    expect(createRuntimeMock).toHaveBeenNthCalledWith(2, {
+    expect(createRuntimeMock).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      model: 'contract-model',
+      provider: 'mlx',
+      backend: 'auto',
+      cacheDir: expect.stringContaining('.contract.rebuild-'),
+    }));
+    expect(createRuntimeMock).toHaveBeenNthCalledWith(4, {
       model: 'contract-model',
       provider: 'mlx',
       backend: 'auto',
@@ -312,6 +563,14 @@ describe('cli store commands', () => {
       corpus: { materials: meetingManifest.materials },
     }));
     expect(createSessionMock.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      model: 'meeting-model',
+      corpus: { materials: meetingManifest.materials },
+    }));
+    expect(createSessionMock.mock.calls[2]?.[0]).toEqual(expect.objectContaining({
+      model: 'contract-model',
+      corpus: { materials: contractManifest.materials },
+    }));
+    expect(createSessionMock.mock.calls[3]?.[0]).toEqual(expect.objectContaining({
       model: 'contract-model',
       corpus: { materials: contractManifest.materials },
     }));

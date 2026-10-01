@@ -7,6 +7,7 @@ import { createMockCacheController } from './test-helpers.js';
 import { createExtractSession } from './create-extract-session.js';
 import {
   appendToExtractStore,
+  ensureStoreKvCache,
   mergeMaterials,
 } from './extract-store.js';
 import { readManifest, writeManifest } from './cli/manifest.js';
@@ -256,7 +257,7 @@ describe('appendToExtractStore', () => {
     await writeFile(`${baseCachePath}.meta.json`, JSON.stringify({ token_count: 10 }), 'utf-8');
     await writeFile(
       join(storeDir, 'cache-index.json'),
-      JSON.stringify({ version: 1, entries: [{ key: 'base' }] }),
+      JSON.stringify({ version: 1, entries: [{ key: 'base', path: baseCacheName }] }),
       'utf-8',
     );
     await writeManifest(storeDir, {
@@ -310,11 +311,13 @@ describe('appendToExtractStore', () => {
       storeDir,
       storename: 'meeting',
       incomingMaterials: [{ id: '/docs/two.txt', title: 'two.txt', content: 'two' }],
+      autoRebuildCache: false,
     });
 
     expect(prepare).toHaveBeenCalledOnce();
     expect(prepareCacheDir).toContain('.meeting.add-');
     expect(result.manifest.materials).toHaveLength(2);
+    expect(result.cacheRebuilt).toBe(false);
     expect(await readFile(join(storeDir, 'incremental-cache.safetensors.zip'), 'utf-8'))
       .toBe('incremental-cache');
     expect(await readFile(join(storeDir, baseCacheName), 'utf-8')).toBe('base-cache');
@@ -360,5 +363,80 @@ describe('appendToExtractStore', () => {
     await session.close({ releaseCache: false });
     await postCommitRuntime.close();
     expect(postCommitRuntimeClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ensureStoreKvCache', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'extract-store-rebuild-'));
+    createRuntimeMock.mockReset();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('rebuilds into a clean staging store and reuses the persisted cache', async () => {
+    const storeDir = join(tempDir, 'meeting');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(join(storeDir, 'cache-index.json'), '{"version":1,"entries":[]}', 'utf-8');
+    await writeManifest(storeDir, {
+      version: 1,
+      storename: 'meeting',
+      model: 'test-model',
+      materials: [{ id: '/docs/one.txt', title: 'one.txt', content: 'one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    let prepareCacheDir: string | undefined;
+    const prepare = vi.fn(async () => {
+      const cachePath = join(prepareCacheDir!, 'rebuilt.safetensors.zip');
+      await writeFile(cachePath, 'rebuilt-cache', 'utf-8');
+      await writeFile(`${cachePath}.meta.json`, JSON.stringify({ token_count: 12 }), 'utf-8');
+      await writeFile(
+        join(prepareCacheDir!, 'cache-index.json'),
+        JSON.stringify({ version: 1, entries: [{ key: 'rebuilt', path: 'rebuilt.safetensors.zip' }] }),
+        'utf-8',
+      );
+      return {
+        ref: cachePath,
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      };
+    });
+    const controller: PromptCacheController = {
+      prepare,
+      release: vi.fn(),
+      close: vi.fn(async () => {}),
+    };
+    const runtimeClose = vi.fn().mockResolvedValue(undefined);
+    createRuntimeMock.mockImplementationOnce(async ({ cacheDir }: { cacheDir: string }) => {
+      prepareCacheDir = cacheDir;
+      return {
+        driver: new TestDriver({ responses: ['prepared'] }),
+        cacheController: controller,
+        model: 'test-model',
+        provider: 'mlx',
+        close: runtimeClose,
+      };
+    });
+
+    await expect(ensureStoreKvCache({
+      storeDir,
+      storename: 'meeting',
+    })).resolves.toMatchObject({ rebuilt: true });
+    expect(prepareCacheDir).toContain('.meeting.rebuild-');
+    expect(await readFile(join(storeDir, 'rebuilt.safetensors.zip'), 'utf-8'))
+      .toBe('rebuilt-cache');
+    expect(await readFile(join(storeDir, 'cache-index.json'), 'utf-8'))
+      .toContain('rebuilt');
+    expect(runtimeClose).toHaveBeenCalledOnce();
+
+    await expect(ensureStoreKvCache({
+      storeDir,
+      storename: 'meeting',
+    })).resolves.toMatchObject({ rebuilt: false });
+    expect(createRuntimeMock).toHaveBeenCalledOnce();
   });
 });

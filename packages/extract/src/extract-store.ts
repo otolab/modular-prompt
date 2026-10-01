@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { cp, mkdtemp, rename, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { createExtractSession } from './create-extract-session.js';
@@ -15,7 +15,12 @@ import {
   writeManifest,
   type ExtractCacheManifest,
 } from './cli/manifest.js';
-import { storeExists } from './cli/store.js';
+import {
+  inspectStoreKvCache,
+  isKvCacheFile,
+  storeExists,
+  type StoreKvCacheStatus,
+} from './cli/store.js';
 
 export interface PrepareExtractCacheOptions {
   /** Directory containing the persistent cache files. */
@@ -176,6 +181,68 @@ export async function readExtractStoreManifest(
   return readManifest(resolvedStoreDir);
 }
 
+export interface EnsureStoreKvCacheOptions {
+  /** Existing named store directory. */
+  storeDir: string;
+  /** Store name used in actionable error messages. */
+  storename: string;
+  /** Manifest already read by the caller, when available. */
+  manifest?: ExtractCacheManifest;
+  /** Automatically recreate a missing/inconsistent cache. Defaults to true. */
+  autoRebuildCache?: boolean;
+}
+
+export interface EnsureStoreKvCacheResult {
+  status: StoreKvCacheStatus;
+  rebuilt: boolean;
+}
+
+/**
+ * Ensure that a named store has a usable persistent cache before extraction.
+ *
+ * The operation intentionally does not modify the manifest.  The manifest is
+ * the corpus source of truth and a successful prefill only restores its
+ * transparent cache layer.
+ */
+export async function ensureStoreKvCache(
+  options: EnsureStoreKvCacheOptions,
+): Promise<EnsureStoreKvCacheResult> {
+  const storeDir = resolve(options.storeDir);
+  const status = await inspectStoreKvCache(storeDir);
+  if (!status.needsRebuild || options.autoRebuildCache === false) {
+    return { status, rebuilt: false };
+  }
+
+  const manifest = options.manifest
+    ?? await readExtractStoreManifest(storeDir, options.storename);
+  const stagingDir = await mkdtemp(join(dirname(storeDir), `.${basename(storeDir)}.rebuild-`));
+  let committed = false;
+  try {
+    await cp(storeDir, stagingDir, { recursive: true, force: true });
+    const stagedEntries = await readdir(stagingDir, { withFileTypes: true });
+    await Promise.all(stagedEntries
+      .filter((entry) => entry.name === 'cache-index.json' || isKvCacheFile(entry.name))
+      .map((entry) => rm(join(stagingDir, entry.name), { recursive: true, force: true })));
+
+    const prepared = await prepareExtractCache({
+      cacheDir: stagingDir,
+      model: manifest.model,
+      provider: getManifestProvider(manifest),
+      ...(manifest.backend !== undefined ? { backend: manifest.backend } : {}),
+      ...(manifest.maxImageSize !== undefined ? { maxImageSize: manifest.maxImageSize } : {}),
+      materials: manifest.materials,
+    });
+    assertExtractRuntimeMatchesManifest(prepared, manifest);
+    await replaceStoreWithStaging(storeDir, stagingDir);
+    committed = true;
+    return { status: await inspectStoreKvCache(storeDir), rebuilt: true };
+  } finally {
+    if (!committed) {
+      await rm(stagingDir, { recursive: true, force: true });
+    }
+  }
+}
+
 export interface AppendToExtractStoreOptions {
   /** Existing named store directory. */
   storeDir: string;
@@ -187,6 +254,8 @@ export interface AppendToExtractStoreOptions {
   existingManifest?: ExtractCacheManifest;
   /** Injectable clock for deterministic callers and tests. */
   now?: () => string;
+  /** Automatically rebuild a missing incremental base. Defaults to true. */
+  autoRebuildCache?: boolean;
 }
 
 export interface AppendToExtractStoreResult {
@@ -195,6 +264,25 @@ export interface AppendToExtractStoreResult {
   provider: ExtractProvider;
   backend?: MlxBackendMode;
   addedMaterials: number;
+  /** Whether the append used a full prefill because no incremental base existed. */
+  cacheRebuilt: boolean;
+}
+
+function automaticRebuildDisabledError(
+  storename: string,
+  status: StoreKvCacheStatus,
+): Error {
+  const detail = status.hasKvCache && !status.hasIncrementalBase
+    ? 'the persisted cache does not provide an incremental base'
+    : status.issue === 'index-entry-missing'
+    ? 'the cache index does not reference a usable cache'
+    : status.issue === 'index-invalid'
+      ? 'the cache index is invalid'
+      : 'the persisted KV cache is missing or invalid';
+  return new Error(
+    `Automatic KV cache rebuild is disabled for store '${storename}': ${detail}. `
+    + 'Run create again or enable autoRebuildCache to add materials.',
+  );
 }
 
 export function assertExtractRuntimeMatchesManifest(
@@ -262,6 +350,11 @@ export async function appendToExtractStore(
 
   const previousManifest = options.existingManifest
     ?? await readExtractStoreManifest(storeDir, options.storename);
+  const cacheStatus = await inspectStoreKvCache(storeDir);
+  const cacheRebuilt = !cacheStatus.hasIncrementalBase;
+  if (cacheRebuilt && options.autoRebuildCache === false) {
+    throw automaticRebuildDisabledError(options.storename, cacheStatus);
+  }
   const materials = mergeMaterials(previousManifest.materials, options.incomingMaterials);
   const stagingDir = await mkdtemp(join(dirname(storeDir), `.${basename(storeDir)}.add-`));
   let committed = false;
@@ -305,6 +398,7 @@ export async function appendToExtractStore(
       provider: prepared.provider,
       backend: prepared.backend,
       addedMaterials: materials.length - previousManifest.materials.length,
+      cacheRebuilt,
     };
   } finally {
     if (!committed) {

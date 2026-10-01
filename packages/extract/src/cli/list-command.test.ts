@@ -38,8 +38,20 @@ describe('cli/list', () => {
       materials: [{ title: 'contract.pdf', content: 'contract' }],
       createdAt: '2026-09-07T04:00:00.000Z',
     });
-    await writeFile(join(meetingDir, 'cache-index.json'), '{}', 'utf-8');
+    await writeFile(
+      join(meetingDir, 'cache-index.json'),
+      JSON.stringify({
+        version: 1,
+        entries: [{ key: 'meeting-cache', backend: 'lm' }],
+      }),
+      'utf-8',
+    );
     await writeFile(join(meetingDir, 'meeting-cache.safetensors.zip'), 'cache', 'utf-8');
+    await writeFile(
+      join(meetingDir, 'meeting-cache.safetensors.zip.meta.json'),
+      JSON.stringify({ token_count: 1 }),
+      'utf-8',
+    );
 
     const output = await runListCommand({ cacheDir: tempDir });
 

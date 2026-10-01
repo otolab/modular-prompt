@@ -4,10 +4,10 @@ import {
   mergeMaterials,
   readExtractStoreManifest,
 } from '../extract-store.js';
-import { CACHE_PREPARE_CUE } from './constants.js';
+import { CACHE_PREPARE_CUE, resolveAutoRebuildCache } from './constants.js';
 import { loadMaterialsFromFiles } from './load-materials.js';
 import { renderExtractPrompt } from './render-prompt.js';
-import { resolveStoreDir } from './store.js';
+import { formatKvCacheRebuildWarning, resolveStoreDir } from './store.js';
 
 export interface AddCommandOptions {
   /** Container directory containing one subdirectory per store. */
@@ -15,6 +15,8 @@ export interface AddCommandOptions {
   storename: string;
   files: string[];
   dryRun?: boolean;
+  /** Automatically rebuild a missing incremental base. Defaults to true. */
+  autoRebuildCache?: boolean;
 }
 
 export async function runAddCommand(options: AddCommandOptions): Promise<string | void> {
@@ -29,13 +31,19 @@ export async function runAddCommand(options: AddCommandOptions): Promise<string 
     return renderExtractPrompt({ materials }, request);
   }
 
+  const autoRebuildCache = resolveAutoRebuildCache(options.autoRebuildCache);
+
   const result = await appendToExtractStore({
     storeDir,
     storename: options.storename,
     incomingMaterials,
     existingManifest: manifest,
+    autoRebuildCache,
   });
 
+  if (result.cacheRebuilt) {
+    console.error(formatKvCacheRebuildWarning(options.storename, result.manifest.materials.length));
+  }
   console.error(`Cache extended: ${storeDir}`);
   console.error(
     `Materials: ${result.manifest.materials.length} file(s), model: ${result.model}, provider: ${result.provider}`

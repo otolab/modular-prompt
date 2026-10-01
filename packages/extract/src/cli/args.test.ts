@@ -75,6 +75,31 @@ describe('cli argument parser', () => {
     });
   });
 
+  it('parses the cache rebuild opt-out for add and extract', () => {
+    expect(parseArgs([
+      'add',
+      'meeting',
+      '--no-auto-rebuild-cache',
+      'day2.txt',
+    ])).toEqual({
+      command: 'add',
+      autoRebuildCache: false,
+      storename: 'meeting',
+      positional: ['day2.txt'],
+    });
+    expect(parseArgs([
+      'extract',
+      'meeting',
+      '--auto-rebuild-cache',
+      'query',
+    ])).toEqual({
+      command: 'extract',
+      autoRebuildCache: true,
+      storename: 'meeting',
+      positional: ['query'],
+    });
+  });
+
   it('accepts the common cache container option for list', () => {
     expect(parseArgs(['list', '--cache-dir', '.extract-cache'])).toEqual({
       command: 'list',
@@ -129,6 +154,8 @@ describe('cli argument parser', () => {
       .toThrow(/only valid with extract/);
     expect(() => parseArgs(['extract', 'meeting', '--provider', 'pytorch', 'query']))
       .toThrow(/only valid with create/);
+    expect(() => parseArgs(['create', 'meeting', '--no-auto-rebuild-cache', 'notes.txt']))
+      .toThrow(/only valid with add or extract/);
   });
 
   it('rejects an unknown extract provider', () => {

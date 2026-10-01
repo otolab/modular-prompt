@@ -10,6 +10,7 @@ export interface ParsedArgs {
   provider?: ExtractProvider;
   maxTokens?: number;
   dryRun?: boolean;
+  autoRebuildCache?: boolean;
   all?: boolean;
   storename?: string;
   positional: string[];
@@ -50,6 +51,13 @@ function validateCommandOptions(result: ParsedArgs): void {
   }
   if (result.command !== 'create' && result.provider !== undefined) {
     throw new Error('--provider is only valid with create');
+  }
+  if (
+    result.autoRebuildCache !== undefined
+    && result.command !== 'add'
+    && result.command !== 'extract'
+  ) {
+    throw new Error('--auto-rebuild-cache/--no-auto-rebuild-cache is only valid with add or extract');
   }
   if (result.command === 'list') {
     if (result.model !== undefined || result.maxTokens !== undefined || result.dryRun) {
@@ -127,6 +135,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
     if (!optionsEnded && arg === '--dry-run') {
       result.dryRun = true;
+      index += 1;
+      continue;
+    }
+
+    if (!optionsEnded && arg === '--auto-rebuild-cache') {
+      result.autoRebuildCache = true;
+      index += 1;
+      continue;
+    }
+
+    if (!optionsEnded && arg === '--no-auto-rebuild-cache') {
+      result.autoRebuildCache = false;
       index += 1;
       continue;
     }

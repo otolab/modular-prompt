@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { isKvCacheFile } from './store.js';
+import { inspectStoreKvCache } from './store.js';
 import { getManifestProvider, manifestExists, readManifest } from './manifest.js';
 
 export interface ListCommandOptions {
@@ -33,11 +33,6 @@ async function listStoreDirectories(containerDir: string): Promise<string[]> {
   }
 }
 
-async function hasKvCache(storeDir: string): Promise<boolean> {
-  const entries = await readdir(storeDir, { withFileTypes: true });
-  return entries.some((entry) => entry.isFile() && isKvCacheFile(entry.name));
-}
-
 export async function listStores(cacheDir: string): Promise<StoreSummary[]> {
   const containerDir = resolve(cacheDir);
   const storeNames = await listStoreDirectories(containerDir);
@@ -50,6 +45,7 @@ export async function listStores(cacheDir: string): Promise<StoreSummary[]> {
     }
 
     const manifest = await readManifest(storeDir);
+    const cacheStatus = await inspectStoreKvCache(storeDir);
     summaries.push({
       storename: manifest.storename ?? storename,
       model: manifest.model,
@@ -57,7 +53,7 @@ export async function listStores(cacheDir: string): Promise<StoreSummary[]> {
       materialTitles: manifest.materials.map((material) => material.title),
       createdAt: manifest.createdAt,
       updatedAt: manifest.updatedAt,
-      hasKvCache: await hasKvCache(storeDir),
+      hasKvCache: cacheStatus.hasKvCache,
     });
   }
 
