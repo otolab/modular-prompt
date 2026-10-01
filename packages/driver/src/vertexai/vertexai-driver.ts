@@ -554,7 +554,11 @@ export class VertexAIDriver implements AIDriver {
   /**
    * Create a generative model client
    */
-  private createClient(model: string, config: GenerationConfig) {
+  private createClient(
+    model: string,
+    config: GenerationConfig,
+    cacheHandle: CacheHandle | null,
+  ) {
     const options = {
       model,
       safetySettings: [
@@ -568,6 +572,15 @@ export class VertexAIDriver implements AIDriver {
     
     // Use preview API for preview models
     if (model.includes('-preview-')) {
+      // GenerativeModelPreview overwrites request.cachedContent with the
+      // cachedContent attached to the model instance. Attach the handle at
+      // model creation time so the cache reference survives the SDK boundary.
+      if (cacheHandle?.ref) {
+        return this.vertexAI.preview.getGenerativeModelFromCachedContent(
+          { name: cacheHandle.ref, model },
+          options,
+        );
+      }
       return this.vertexAI.preview.getGenerativeModel(options);
     } else {
       return this.vertexAI.getGenerativeModel(options);
@@ -665,7 +678,7 @@ export class VertexAIDriver implements AIDriver {
       this.cacheController?.recordQuery?.();
 
       // Create client and generate
-      const client = this.createClient(model, generationConfig);
+      const client = this.createClient(model, generationConfig, cacheHandle);
       const result = await client.generateContent(request);
       
       // Extract response
@@ -771,7 +784,7 @@ export class VertexAIDriver implements AIDriver {
     this.cacheController?.recordQuery?.();
 
     // Create client and generate stream
-    const client = this.createClient(model, generationConfig);
+    const client = this.createClient(model, generationConfig, cacheHandle);
     const streamingResult = await client.generateContentStream(request);
 
     // Create stream generator

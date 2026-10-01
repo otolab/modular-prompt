@@ -5,9 +5,21 @@ import type { CacheHandle, PromptCacheController } from '../cache-controller.js'
 import type { ToolDefinition } from '../types.js';
 
 // Shared mock functions (hoisted for vi.mock factory)
-const { mockGenerateContent, mockGenerateContentStream, mockOpenAIQuery, mockOpenAIStreamQuery, mockOpenAIClose } = vi.hoisted(() => ({
+const {
+  mockGenerateContent,
+  mockGenerateContentStream,
+  mockGetGenerativeModel,
+  mockGetPreviewGenerativeModel,
+  mockGetPreviewGenerativeModelFromCachedContent,
+  mockOpenAIQuery,
+  mockOpenAIStreamQuery,
+  mockOpenAIClose,
+} = vi.hoisted(() => ({
   mockGenerateContent: vi.fn(),
   mockGenerateContentStream: vi.fn(),
+  mockGetGenerativeModel: vi.fn(),
+  mockGetPreviewGenerativeModel: vi.fn(),
+  mockGetPreviewGenerativeModelFromCachedContent: vi.fn(),
   mockOpenAIQuery: vi.fn(),
   mockOpenAIStreamQuery: vi.fn(),
   mockOpenAIClose: vi.fn(),
@@ -80,18 +92,37 @@ vi.mock('@google-cloud/vertexai', () => {
       }
     })
   });
+
+  const createModel = (
+    cachedContent?: { name?: string },
+    isPreview = false,
+  ) => ({
+    generateContent: (request: Record<string, unknown>) =>
+      mockGenerateContent(
+        isPreview
+          ? { ...request, cachedContent: cachedContent?.name }
+          : request,
+      ),
+    generateContentStream: (request: Record<string, unknown>) =>
+      mockGenerateContentStream(
+        isPreview
+          ? { ...request, cachedContent: cachedContent?.name }
+          : request,
+      ),
+  });
+
+  mockGetGenerativeModel.mockImplementation(() => createModel());
+  mockGetPreviewGenerativeModel.mockImplementation(() => createModel(undefined, true));
+  mockGetPreviewGenerativeModelFromCachedContent.mockImplementation(
+    (cachedContent: { name?: string }) => createModel(cachedContent, true),
+  );
   
   return {
     VertexAI: vi.fn().mockImplementation(() => ({
-      getGenerativeModel: vi.fn().mockReturnValue({
-        generateContent: (...args: unknown[]) => mockGenerateContent(...args),
-        generateContentStream: (...args: unknown[]) => mockGenerateContentStream(...args)
-      }),
+      getGenerativeModel: mockGetGenerativeModel,
       preview: {
-        getGenerativeModel: vi.fn().mockReturnValue({
-          generateContent: (...args: unknown[]) => mockGenerateContent(...args),
-          generateContentStream: (...args: unknown[]) => mockGenerateContentStream(...args)
-        })
+        getGenerativeModel: mockGetPreviewGenerativeModel,
+        getGenerativeModelFromCachedContent: mockGetPreviewGenerativeModelFromCachedContent,
       }
     })),
     HarmCategory: {
@@ -242,6 +273,98 @@ describe('VertexAIDriver', () => {
       expect(request.cachedContent).toBe(externalHandle.ref);
       expect(request.systemInstruction).toContain('Current time is 12:00');
       expect(request.contents).toHaveLength(2);
+    });
+
+    it('attaches the cache handle to the preview model for query', async () => {
+      const previewModel = 'gemini-2.5-flash-preview-09-2025';
+      const externalHandle: CacheHandle = {
+        ref: 'projects/test-project/locations/us-central1/cachedContents/preview-query',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      };
+      const prepare = vi.fn();
+      const cacheController = createCacheController(externalHandle, prepare);
+      const cachedDriver = new VertexAIDriver({
+        project: 'test-project',
+        location: 'us-central1',
+        model: previewModel,
+        cacheController,
+      });
+
+      await cachedDriver.query(prompt, {
+        model: previewModel,
+        cache: false,
+        cacheHandle: externalHandle,
+      });
+
+      expect(prepare).not.toHaveBeenCalled();
+      expect(mockGetPreviewGenerativeModel).not.toHaveBeenCalled();
+      expect(mockGetPreviewGenerativeModelFromCachedContent).toHaveBeenCalledWith(
+        { name: externalHandle.ref, model: previewModel },
+        expect.objectContaining({
+          model: previewModel,
+          generationConfig: expect.objectContaining({ maxOutputTokens: 1000 }),
+        }),
+      );
+      // The preview SDK overwrites request.cachedContent with the value on
+      // the model instance. This assertion therefore verifies the actual
+      // driver-to-SDK model wiring, not only the pre-SDK request object.
+      const request = mockGenerateContent.mock.calls.at(-1)![0];
+      expect(request.cachedContent).toBe(externalHandle.ref);
+    });
+
+    it('attaches the cache handle to the preview model for streamQuery', async () => {
+      const previewModel = 'gemini-2.5-flash-preview-09-2025';
+      const externalHandle: CacheHandle = {
+        ref: 'projects/test-project/locations/us-central1/cachedContents/preview-stream',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      };
+      const prepare = vi.fn();
+      const cacheController = createCacheController(externalHandle, prepare);
+      const cachedDriver = new VertexAIDriver({
+        project: 'test-project',
+        location: 'us-central1',
+        model: previewModel,
+        cacheController,
+      });
+      mockGenerateContentStream.mockResolvedValueOnce({
+        stream: (async function* () { yield { candidates: [] }; })(),
+        response: Promise.resolve({
+          candidates: [{
+            content: { parts: [{ text: 'preview streamed' }], role: 'model' },
+            finishReason: 'STOP',
+          }],
+          usageMetadata: {
+            promptTokenCount: 15,
+            candidatesTokenCount: 8,
+            totalTokenCount: 23,
+            cachedContentTokenCount: 10,
+          },
+        }),
+      });
+
+      const { stream, result } = await cachedDriver.streamQuery(prompt, {
+        model: previewModel,
+        cache: false,
+        cacheHandle: externalHandle,
+      });
+      for await (const chunk of stream) {
+        // Consume the stream before checking its aggregated result.
+        void chunk;
+      }
+      const queryResult = await result;
+
+      expect(prepare).not.toHaveBeenCalled();
+      expect(mockGetPreviewGenerativeModel).not.toHaveBeenCalled();
+      expect(mockGetPreviewGenerativeModelFromCachedContent).toHaveBeenCalledWith(
+        { name: externalHandle.ref, model: previewModel },
+        expect.objectContaining({
+          model: previewModel,
+          generationConfig: expect.objectContaining({ maxOutputTokens: 1000 }),
+        }),
+      );
+      const request = mockGenerateContentStream.mock.calls.at(-1)![0];
+      expect(request.cachedContent).toBe(externalHandle.ref);
+      expect(queryResult.usage?.cacheReadTokens).toBe(10);
     });
 
     it('uses the cache handle for streamQuery and maps cached usage', async () => {

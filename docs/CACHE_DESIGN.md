@@ -353,6 +353,9 @@ Caching の CRUD には、同じ REST リソース（`projects/{project}/locatio
 処理と Element → Content 変換を Vertex 専用 controller と重複して持たずに済むためです。ドライバーは
 controller が返した `CacheHandle.ref` を `GenerateContentRequest.cachedContent` に設定し、handle の
 `includes` に応じてキャッシュ済みの system instruction / contents をリクエストから取り除きます。
+`-preview-` model では `@google-cloud/vertexai` の SDK が request の値を model instance の値で
+上書きするため、`preview.getGenerativeModelFromCachedContent` にも同じ full resource name と model を渡します。
+通常 model は従来どおり request-level の `cachedContent` を使用します。
 Vertex の `usageMetadata.cachedContentTokenCount` は `QueryResult.usage.cacheReadTokens` に反映されます。
 
 `config-based-factory` はドライバーの生成を行いますが、セッションと共有する外部 controller の生成・終了
