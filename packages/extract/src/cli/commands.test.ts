@@ -33,6 +33,31 @@ vi.mock('./manifest.js', async () => {
   return { ...actual, writeManifest: writeManifestMock };
 });
 
+async function writeHealthyVlmCache(storeDir: string, namespace: string): Promise<{
+  cachePath: string;
+  indexPath: string;
+}> {
+  const namespaceDir = join(storeDir, namespace);
+  const cachePath = join(namespaceDir, 'exact_snapshot.safetensors');
+  const indexPath = join(storeDir, 'cache-index.json');
+  await mkdir(namespaceDir, { recursive: true });
+  await writeFile(cachePath, 'healthy-vlm-cache', 'utf-8');
+  await writeFile(`${cachePath}.meta.json`, JSON.stringify({ token_count: 12 }), 'utf-8');
+  await writeFile(
+    indexPath,
+    JSON.stringify({
+      version: 1,
+      entries: [{
+        key: 'vlm-cache',
+        backend: 'vlm',
+        path: `${namespace}/exact_snapshot.safetensors`,
+      }],
+    }),
+    'utf-8',
+  );
+  return { cachePath, indexPath };
+}
+
 describe('cli store commands', () => {
   let tempDir: string;
 
@@ -278,6 +303,88 @@ describe('cli store commands', () => {
     })).rejects.toThrow(/automatic KV cache rebuild is disabled/i);
     expect(createRuntimeMock).not.toHaveBeenCalled();
     expect(await readFile(join(storeDir, 'manifest.json'), 'utf-8')).toBe(originalManifest);
+  });
+
+  it.each([
+    ['text-only VLM', 'cache.vlm.safetensors'],
+    ['vision VLM', 'cache.vlm-vision.safetensors'],
+  ])('rebuilds a healthy %s cache on add and reports a warning', async (_label, namespace) => {
+    const storeDir = join(tempDir, 'vlm-store');
+    const filePath = join(tempDir, 'day2.txt');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(filePath, 'day two', 'utf-8');
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'vlm-store',
+      model: 'vlm-model',
+      provider: 'mlx',
+      backend: 'vlm',
+      materials: [{ title: 'day1.txt', content: 'day one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await writeHealthyVlmCache(storeDir, namespace);
+    createRuntimeMock.mockImplementationOnce(async () => ({
+      driver: {},
+      cacheController: {},
+      model: 'vlm-model',
+      provider: 'mlx',
+      backend: 'vlm',
+      close: vi.fn().mockResolvedValue(undefined),
+    }));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(runAddCommand({
+        cacheDir: tempDir,
+        storename: 'vlm-store',
+        files: [filePath],
+      })).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith(
+        "warning: KV cache missing for store 'vlm-store'; rebuilt cache from manifest (2 materials).",
+      );
+      await expect(readManifest(storeDir)).resolves.toMatchObject({
+        materials: expect.arrayContaining([
+          expect.objectContaining({ title: 'day1.txt', content: 'day one' }),
+          expect.objectContaining({ title: 'day2.txt', content: 'day two' }),
+        ]),
+      });
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['text-only VLM', 'cache.vlm.safetensors'],
+    ['vision VLM', 'cache.vlm-vision.safetensors'],
+  ])('rejects add without rebuilding a healthy %s cache when opt-out is enabled', async (_label, namespace) => {
+    const storeDir = join(tempDir, 'vlm-store');
+    const filePath = join(tempDir, 'day2.txt');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(filePath, 'day two', 'utf-8');
+    await writeManifestMock(storeDir, {
+      version: 1,
+      storename: 'vlm-store',
+      model: 'vlm-model',
+      provider: 'mlx',
+      backend: 'vlm',
+      materials: [{ title: 'day1.txt', content: 'day one' }],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const { cachePath, indexPath } = await writeHealthyVlmCache(storeDir, namespace);
+    const originalManifest = await readFile(join(storeDir, 'manifest.json'), 'utf-8');
+    const originalIndex = await readFile(indexPath, 'utf-8');
+    const originalCache = await readFile(cachePath, 'utf-8');
+
+    await expect(runAddCommand({
+      cacheDir: tempDir,
+      storename: 'vlm-store',
+      files: [filePath],
+      autoRebuildCache: false,
+    })).rejects.toThrow(/automatic KV cache rebuild is disabled.*incremental base/i);
+    expect(createRuntimeMock).not.toHaveBeenCalled();
+    expect(await readFile(join(storeDir, 'manifest.json'), 'utf-8')).toBe(originalManifest);
+    expect(await readFile(indexPath, 'utf-8')).toBe(originalIndex);
+    expect(await readFile(cachePath, 'utf-8')).toBe(originalCache);
   });
 
   it('reuses the manifest backend across create close, add staging, and extract restart', async () => {

@@ -272,7 +272,9 @@ function automaticRebuildDisabledError(
   storename: string,
   status: StoreKvCacheStatus,
 ): Error {
-  const detail = status.issue === 'index-entry-missing'
+  const detail = status.hasKvCache && !status.hasIncrementalBase
+    ? 'the persisted cache does not provide an incremental base'
+    : status.issue === 'index-entry-missing'
     ? 'the cache index does not reference a usable cache'
     : status.issue === 'index-invalid'
       ? 'the cache index is invalid'

@@ -73,6 +73,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isVlmCachePath(cachePath: string): boolean {
+  return cachePath.split(sep).some((segment) =>
+    segment.endsWith('.vlm.safetensors')
+    || segment.endsWith('.vlm-vision.safetensors'));
+}
+
 async function hasHealthyCacheFile(cachePath: string): Promise<boolean> {
   let cacheStat;
   try {
@@ -234,8 +240,8 @@ export async function inspectStoreKvCache(storeDir: string): Promise<StoreKvCach
     };
   }
 
-  const entriesAreHealthy = await Promise.all(activeEntries.map(async (entry) => {
-    const cachePath = resolveIndexedCachePath(storeDir, entry);
+  const indexedCachePaths = activeEntries.map((entry) => resolveIndexedCachePath(storeDir, entry));
+  const entriesAreHealthy = await Promise.all(indexedCachePaths.map(async (cachePath) => {
     return cachePath !== undefined && await hasHealthyCacheFile(cachePath);
   }));
   if (!entriesAreHealthy.every(Boolean)) {
@@ -247,10 +253,19 @@ export async function inspectStoreKvCache(storeDir: string): Promise<StoreKvCach
     };
   }
 
+  // VLM exact snapshots are valid exact-cache hits, but the VLM controllers
+  // intentionally do not search them as incremental bases.  `add` must
+  // therefore take the full-rebuild path even when the snapshot is healthy.
+  const hasVlmNamespace = activeEntries.some((entry, index) => {
+    const indexedPath = indexedCachePaths[index];
+    return entry.backend === 'vlm'
+      || (indexedPath !== undefined && isVlmCachePath(indexedPath));
+  });
+
   return {
     hasKvCache: true,
     needsRebuild: false,
-    hasIncrementalBase: true,
+    hasIncrementalBase: !hasVlmNamespace,
   };
 }
 
