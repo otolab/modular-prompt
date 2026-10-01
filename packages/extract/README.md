@@ -41,6 +41,11 @@ base (+ domain) + corpus (materials / messages) + request (inputs) ← cue
 
 ## クイックスタート（MLX / PyTorch）
 
+extract CLI の store は、永続 KV cache の形式が定義されている **MLX / PyTorch のみ**を対象にします。
+Vertex の明示 Context Caching は CLI store には接続せず、`docs/CACHE_DESIGN.md` の Vertex 向け手動配線例の
+ように `GoogleGenAICacheController`、`VertexAIDriver`、`createExtractSession` を library API で組み合わせて
+利用してください。
+
 ### CLI
 
 ビルド後、ワークスペース内では次のように実行できる。

@@ -4,6 +4,7 @@ import { PyTorchCacheController } from '../pytorch/pytorch-cache-controller.js';
 
 const mlxDriverCtor = vi.fn();
 const pytorchDriverCtor = vi.fn();
+const vertexDriverCtor = vi.fn();
 
 vi.mock('../mlx-ml/mlx-driver.js', () => ({
   MlxDriver: class MockMlxDriver {
@@ -17,6 +18,14 @@ vi.mock('../pytorch/pytorch-driver.js', () => ({
   PyTorchDriver: class MockPyTorchDriver {
     constructor(config: unknown) {
       pytorchDriverCtor(config);
+    }
+  },
+}));
+
+vi.mock('../vertexai/vertexai-driver.js', () => ({
+  VertexAIDriver: class MockVertexAIDriver {
+    constructor(config: unknown) {
+      vertexDriverCtor(config);
     }
   },
 }));
@@ -86,6 +95,37 @@ describe('AIService PyTorch factory', () => {
     expect(pytorchDriverCtor).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'test-model',
+        cacheController,
+      }),
+    );
+  });
+});
+
+describe('AIService VertexAI factory', () => {
+  it('passes project, location, and an externally managed cache controller', async () => {
+    const cacheController = {} as PromptCacheController;
+    const service = AIService.fromApplicationConfig({
+      models: [],
+      drivers: {
+        vertexai: {
+          project: 'test-project',
+          location: 'us-central1',
+          cacheController,
+        },
+      },
+    });
+
+    await service.createDriver({
+      model: 'gemini-2.5-flash',
+      provider: 'vertexai',
+      capabilities: [],
+    });
+
+    expect(vertexDriverCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: 'test-project',
+        location: 'us-central1',
+        model: 'gemini-2.5-flash',
         cacheController,
       }),
     );

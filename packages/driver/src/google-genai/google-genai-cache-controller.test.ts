@@ -74,6 +74,20 @@ describe('GoogleGenAICacheController', () => {
       });
     });
 
+    it('should preserve and delete a full Vertex cached-content resource name', async () => {
+      const vertexRef = 'projects/test-project/locations/us-central1/cachedContents/vertex-cache-123';
+      mockClient.caches.create.mockResolvedValueOnce({ name: vertexRef });
+
+      const handle = await controller.prepare({
+        model: 'gemini-2.5-flash',
+        instructions: [{ type: 'text', content: 'Vertex system prompt' }],
+      });
+
+      expect(handle.ref).toBe(vertexRef);
+      controller.release(handle.ref);
+      expect(mockClient.caches.delete).toHaveBeenCalledWith({ name: vertexRef });
+    });
+
     it('should include tools when provided', async () => {
       const handle = await controller.prepare({
         model: 'gemini-2.5-flash',

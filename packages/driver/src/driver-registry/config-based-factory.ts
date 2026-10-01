@@ -27,6 +27,7 @@ import { OllamaDriver } from '../ollama/ollama-driver.js';
 import { VllmDriver } from '../vllm/vllm-driver.js';
 import { EchoDriver } from '../echo-driver.js';
 import { TestDriver } from '../test-driver.js';
+import type { PromptCacheController } from '../cache-controller.js';
 
 function resolveMlxBackend(spec: ModelSpec): MlxBackendMode | undefined {
   const driverOpts = spec.driverOptions as MlxModelDriverOptions | undefined;
@@ -62,6 +63,8 @@ export interface ApplicationConfig {
       project?: string;
       location?: string;
       region?: string;
+      /** 外部で生成した controller（extract Session と共有する場合） */
+      cacheController?: PromptCacheController;
     };
     /** GoogleGenAI設定 */
     googlegenai?: {
@@ -177,7 +180,8 @@ export function registerFactories(
       project: vertexConfig?.project || process.env.VERTEX_AI_PROJECT,
       location: vertexConfig?.location || vertexConfig?.region || 'us-central1',
       model: spec.model,
-      defaultOptions: mergeDefaults(spec)
+      defaultOptions: mergeDefaults(spec),
+      cacheController: vertexConfig?.cacheController,
     });
   });
 

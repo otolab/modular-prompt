@@ -13,6 +13,7 @@
   - [MlxCacheController](#mlxcachecontroller)
   - [PyTorchCacheController](#pytorchcachecontroller)
   - [GoogleGenAICacheController](#googlegenaicachecontroller)
+  - [Vertex AI の明示キャッシュ](#vertex-ai-の明示キャッシュ)
 - [ファイルロック機構](#ファイルロック機構)
 - [Incremental Prefillとsupersedes](#incremental-prefillとsupersedes)
 - [QueryResult.usage との関係](#queryresultusage-との関係)
@@ -26,6 +27,7 @@ PromptCacheControllerは、プロンプトキャッシュのライフサイク�
 - **MlxCacheController** - KVキャッシュファイルを管理（Apple Silicon最適化）
 - **PyTorchCacheController** - cpu-minimal の KV キャッシュファイルと CUDA の process-local KV cache を管理
 - **GoogleGenAICacheController** - GoogleGenAI APIのキャッシュ機能を管理
+  - `@google/genai` の Vertex モードを使う場合は Vertex AI の明示キャッシュにも利用できます
 
 ## 対象読者
 
@@ -122,7 +124,8 @@ export interface CacheHandle {
 - MlxCacheController (VLM): `mlx-vlm` exact snapshot のファイルパス（text-only の例: `/tmp/mlx-prompt-cache-abc123/def456.vlm.safetensors/exact_<hash>.safetensors`、画像ありは `.vlm-vision.safetensors` namespace）
 - PyTorchCacheController (cpu-minimal LM): backend 固有のファイルパス（例: `/tmp/pytorch-prompt-cache-abc123/def456.pytorch-cache`）
 - PyTorchCacheController (CUDA LM): Python process-local の `memory://` ref
-- GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）
+- GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）。Vertex AI では
+  `projects/{project}/locations/{location}/cachedContents/{cached_content}` のフルリソース名を保持します
 
 #### mlx-vlm 0.7.0（Phase 2–3）
 
@@ -339,6 +342,62 @@ interface GoogleGenAICacheControllerConfig {
 - キャッシュ作成時にTTLを指定
 - ローカルで期限切れキャッシュを掃除（`sweepExpired()`）
 - サーバー側でも自動削除される
+
+### Vertex AI の明示キャッシュ
+
+`VertexAIDriver` の生成経路は引き続き `@google-cloud/vertexai` を使用します。明示 Context
+Caching の CRUD には、同じ REST リソース（`projects/{project}/locations/{location}/cachedContents/...`）
+を扱う `@google/genai` の Vertex モードと `GoogleGenAICacheController` を組み合わせます。
+
+この構成を選ぶ理由は、GenAI API 用に実装済みの TTL・hash 再利用・in-flight coalescing・release / close
+処理と Element → Content 変換を Vertex 専用 controller と重複して持たずに済むためです。ドライバーは
+controller が返した `CacheHandle.ref` を `GenerateContentRequest.cachedContent` に設定し、handle の
+`includes` に応じてキャッシュ済みの system instruction / contents をリクエストから取り除きます。
+Vertex の `usageMetadata.cachedContentTokenCount` は `QueryResult.usage.cacheReadTokens` に反映されます。
+
+`config-based-factory` はドライバーの生成を行いますが、セッションと共有する外部 controller の生成・終了
+責務までは推測しません。Vertex で extract Session に明示キャッシュを渡す場合は、次のように project / location
+を使って controller と driver を手動で配線します（CLI store の構成ではありません）。
+
+```typescript
+import { GoogleGenAI } from '@google/genai';
+import {
+  AIService,
+  GoogleGenAICacheController,
+} from '@modular-prompt/driver';
+import { createExtractSession } from '@modular-prompt/extract';
+
+const project = 'my-gcp-project';
+const location = 'us-central1';
+const model = 'gemini-2.5-flash';
+const cacheClient = new GoogleGenAI({ vertexai: true, project, location });
+const cacheController = new GoogleGenAICacheController(cacheClient);
+const ai = AIService.fromApplicationConfig({
+  drivers: { vertexai: { project, location, cacheController } },
+});
+const driver = await ai.createDriver({ model, provider: 'vertexai', capabilities: [] });
+
+const session = createExtractSession({
+  driver,
+  cacheController,
+  model,
+  corpus: { materials: [{ title: 'Notes', content: '...' }] },
+});
+
+try {
+  const result = await session.extract({ cue: 'List the key points' });
+  console.log(result.text, result.usage?.cacheReadTokens);
+} finally {
+  await session.close();
+  await driver.close(); // injected controller の cachedContents も cleanup
+}
+```
+
+Vertex の `CacheHandle.ref` は API が返すフルリソース名をそのまま保持します。セッションが用意した handle
+をクエリへ渡す場合は `cache: false` と `cacheHandle` を併用し、ドライバー側の二重 prepare を防ぎます。
+
+なお、extract の CLI store は永続 KV cache の形式が異なるため、現行仕様では **MLX / PyTorch のみ**を対象と
+します。Vertex の明示キャッシュは上記の library API による Session 配線で利用してください。
 
 ## ファイルロック機構
 

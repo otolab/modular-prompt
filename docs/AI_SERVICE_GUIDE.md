@@ -285,7 +285,12 @@ interface ApplicationConfig {
   drivers?: {
     openai?: { apiKey?: string; baseURL?: string; organization?: string };
     anthropic?: { apiKey?: string; baseURL?: string };
-    vertexai?: { project?: string; location?: string; region?: string };
+    vertexai?: {
+      project?: string;
+      location?: string;
+      region?: string;
+      cacheController?: PromptCacheController;
+    };
     mlx?: { baseURL?: string; pythonPath?: string };
     ollama?: { baseURL?: string };
     vllm?: { socketPath?: string };
@@ -305,12 +310,16 @@ interface ApplicationConfig {
 |------------|---------|--------------|
 | openai | apiKey | baseURL, organization |
 | anthropic | apiKey | baseURL |
-| vertexai | project, location | region |
+| vertexai | project, location | region, cacheController |
 | mlx | なし | baseURL, pythonPath, textOnly (metadata経由) |
 | ollama | なし | baseURL |
 | vllm | socketPath | なし |
 
 **注**: MLXドライバー固有のオプション（`textOnly`など）は、`ModelSpec.metadata`経由で指定します。詳細は[ドライバーAPI](./DRIVER_API.md)を参照してください。
+
+Vertex の `cacheController` は `@google/genai` の Vertex モードで手動生成した
+`GoogleGenAICacheController` を指定します。extract Session と共有する場合は、同じ controller を
+Session の `cacheController` にも渡してください。CLI store は MLX / PyTorch のみ対応します。
 
 ## まとめ
 

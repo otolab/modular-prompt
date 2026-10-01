@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VertexAIDriver } from './vertexai-driver.js';
 import type { CompiledPrompt } from '@modular-prompt/core';
+import type { CacheHandle, PromptCacheController } from '../cache-controller.js';
 import type { ToolDefinition } from '../types.js';
 
 // Shared mock functions (hoisted for vi.mock factory)
@@ -120,6 +121,7 @@ describe('VertexAIDriver', () => {
   let driver: VertexAIDriver;
   
   beforeEach(() => {
+    vi.clearAllMocks();
     // Set environment variable for project
     process.env.GOOGLE_CLOUD_PROJECT = 'test-project';
     
@@ -162,6 +164,142 @@ describe('VertexAIDriver', () => {
       promptTokens: 15,
       completionTokens: 8,
       totalTokens: 23
+    });
+  });
+
+  describe('PromptCacheController', () => {
+    const prompt: CompiledPrompt = {
+      instructions: [
+        { type: 'text', content: 'Static system rule' },
+        { type: 'text', content: 'Current time is 12:00', cacheHint: 'contextual' },
+      ],
+      data: [
+        { type: 'material', id: 'm1', title: 'Reference', content: 'Stable reference' },
+        { type: 'chunk', partOf: 'reference', content: 'Volatile chunk' },
+      ],
+      output: [{ type: 'text', content: 'Respond now' }],
+    };
+
+    function createCacheController(
+      handle: CacheHandle,
+      prepare = vi.fn().mockResolvedValue(handle),
+    ): PromptCacheController {
+      return {
+        prepare,
+        release: vi.fn(),
+        close: vi.fn(),
+        recordQuery: vi.fn(),
+      };
+    }
+
+    it('prepares an explicit cache and sends its full resource name', async () => {
+      const handle: CacheHandle = {
+        ref: 'projects/test-project/locations/us-central1/cachedContents/vertex-cache',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      };
+      const cacheController = createCacheController(handle);
+      const cachedDriver = new VertexAIDriver({
+        project: 'test-project',
+        location: 'us-central1',
+        model: 'gemini-2.5-flash',
+        cacheController,
+      });
+
+      await cachedDriver.query(prompt);
+
+      expect(cacheController.prepare).toHaveBeenCalledWith({
+        model: 'gemini-2.5-flash',
+        instructions: [prompt.instructions![0]],
+        data: [prompt.data![0]],
+        tools: undefined,
+        readOnly: false,
+      });
+      const request = mockGenerateContent.mock.calls.at(-1)![0];
+      expect(request.cachedContent).toBe(handle.ref);
+      expect(request.systemInstruction).toContain('Current time is 12:00');
+      expect(request.contents).toHaveLength(2);
+      expect(cacheController.recordQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('honors an external cacheHandle with cache false without preparing again', async () => {
+      const externalHandle: CacheHandle = {
+        ref: 'projects/test-project/locations/us-central1/cachedContents/external',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      };
+      const prepare = vi.fn();
+      const cacheController = createCacheController(externalHandle, prepare);
+      const cachedDriver = new VertexAIDriver({
+        project: 'test-project',
+        location: 'us-central1',
+        model: 'gemini-2.5-flash',
+        cacheController,
+      });
+
+      await cachedDriver.query(prompt, { cache: false, cacheHandle: externalHandle });
+
+      expect(prepare).not.toHaveBeenCalled();
+      const request = mockGenerateContent.mock.calls.at(-1)![0];
+      expect(request.cachedContent).toBe(externalHandle.ref);
+      expect(request.systemInstruction).toContain('Current time is 12:00');
+      expect(request.contents).toHaveLength(2);
+    });
+
+    it('uses the cache handle for streamQuery and maps cached usage', async () => {
+      const handle: CacheHandle = {
+        ref: 'projects/test-project/locations/us-central1/cachedContents/stream-cache',
+        includes: { instructions: true, dataElementCount: 1, tools: false },
+      };
+      const cacheController = createCacheController(handle);
+      const cachedDriver = new VertexAIDriver({
+        project: 'test-project',
+        location: 'us-central1',
+        model: 'gemini-2.5-flash',
+        cacheController,
+      });
+      mockGenerateContentStream.mockResolvedValueOnce({
+        stream: (async function* () { yield { candidates: [] }; })(),
+        response: Promise.resolve({
+          candidates: [{
+            content: { parts: [{ text: 'streamed' }], role: 'model' },
+            finishReason: 'STOP',
+          }],
+          usageMetadata: {
+            promptTokenCount: 15,
+            candidatesTokenCount: 8,
+            totalTokenCount: 23,
+            cachedContentTokenCount: 10,
+          },
+        }),
+      });
+
+      const { result } = await cachedDriver.streamQuery(prompt);
+      const queryResult = await result;
+
+      const request = mockGenerateContentStream.mock.calls.at(-1)![0];
+      expect(request.cachedContent).toBe(handle.ref);
+      expect(queryResult.usage).toEqual({
+        promptTokens: 15,
+        completionTokens: 8,
+        totalTokens: 23,
+        cacheReadTokens: 10,
+      });
+    });
+
+    it('closes the injected cache controller', async () => {
+      const handle: CacheHandle = {
+        ref: 'projects/test-project/locations/us-central1/cachedContents/close-cache',
+        includes: { instructions: true, dataElementCount: 0, tools: false },
+      };
+      const cacheController = createCacheController(handle);
+      const cachedDriver = new VertexAIDriver({
+        project: 'test-project',
+        location: 'us-central1',
+        cacheController,
+      });
+
+      await cachedDriver.close();
+
+      expect(cacheController.close).toHaveBeenCalledTimes(1);
     });
   });
   

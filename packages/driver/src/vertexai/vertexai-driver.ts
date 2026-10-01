@@ -18,6 +18,8 @@ import { contentToString } from '../content-utils.js';
 import { OpenAIDriver } from '../openai/openai-driver.js';
 import type { OpenAIQueryOptions } from '../openai/openai-driver.js';
 import { QueryLogger } from '../query-logger.js';
+import type { CacheHandle, PromptCacheController } from '../cache-controller.js';
+import { partitionPrompt } from '../cache-utils.js';
 
 /**
  * VertexAI driver configuration
@@ -28,6 +30,7 @@ export interface VertexAIDriverConfig {
   model?: string;
   temperature?: number;
   defaultOptions?: Partial<VertexAIQueryOptions>;
+  cacheController?: PromptCacheController;
 }
 
 /**
@@ -73,6 +76,7 @@ export class VertexAIDriver implements AIDriver {
   private openaiDriver?: OpenAIDriver;
   private lastToken?: string;
   private queryLogger = new QueryLogger('VertexAI');
+  private cacheController?: PromptCacheController;
 
   get defaultOptions(): Partial<VertexAIQueryOptions> {
     return this._defaultOptions;
@@ -97,12 +101,20 @@ export class VertexAIDriver implements AIDriver {
     this.defaultModel = config.model || 'gemini-2.0-flash-001';
     this.defaultTemperature = config.temperature ?? 0.05;
     this._defaultOptions = config.defaultOptions || {};
+    this.cacheController = config.cacheController;
   }
   
   /**
    * Convert CompiledPrompt to VertexAI's format
    */
-  private compiledPromptToVertexAI(prompt: CompiledPrompt): GenerateContentRequest {
+  private compiledPromptToVertexAI(
+    prompt: CompiledPrompt,
+    sections?: {
+      instructions?: Element[];
+      data?: Element[];
+      output?: Element[];
+    }
+  ): GenerateContentRequest {
     // Helper to extract message elements and convert others to text
     const processElements = (elements: Element[], defaultRole: 'system' | 'user' | 'assistant'): Array<{ role: 'user' | 'model'; parts: Part[] }> => {
       const result: Array<{ role: 'user' | 'model'; parts: Part[] }> = [];
@@ -185,8 +197,12 @@ export class VertexAIDriver implements AIDriver {
     const contents: Array<{ role: 'user' | 'model'; parts: Part[] }> = [];
 
     // Instructions → system instruction (text only, no message elements expected here)
-    if (prompt.instructions && prompt.instructions.length > 0) {
-      for (const el of prompt.instructions) {
+    const instructionElements = sections?.instructions ?? prompt.instructions ?? [];
+    const dataElements = sections?.data ?? prompt.data ?? [];
+    const outputElements = sections?.output ?? prompt.output ?? [];
+
+    if (instructionElements.length > 0) {
+      for (const el of instructionElements) {
         if (typeof el === 'string') {
           systemParts.push(el);
         } else if (typeof el === 'object' && el !== null && 'content' in el) {
@@ -198,11 +214,11 @@ export class VertexAIDriver implements AIDriver {
     }
 
     // Data + Output → contents (may contain message elements)
-    if (prompt.data && prompt.data.length > 0) {
-      contents.push(...processElements(prompt.data, 'user'));
+    if (dataElements.length > 0) {
+      contents.push(...processElements(dataElements, 'user'));
     }
-    if (prompt.output && prompt.output.length > 0) {
-      contents.push(...processElements(prompt.output, 'user'));
+    if (outputElements.length > 0) {
+      contents.push(...processElements(outputElements, 'user'));
     }
 
     // Ensure at least one user message
@@ -217,6 +233,90 @@ export class VertexAIDriver implements AIDriver {
       contents,
       systemInstruction: systemParts.length > 0 ? systemParts.join('\n\n') : undefined
     };
+  }
+
+  private async buildPromptPayload(
+    prompt: CompiledPrompt,
+    mergedOptions: VertexAIQueryOptions,
+    model: string,
+  ): Promise<{ request: GenerateContentRequest; cacheHandle: CacheHandle | null }> {
+    const partition = partitionPrompt(prompt);
+    const hasCacheableContent =
+      partition.cacheable.instructions.length > 0 ||
+      partition.cacheable.data.length > 0 ||
+      Boolean(mergedOptions.tools && mergedOptions.tools.length > 0);
+
+    // A caller-provided handle is authoritative. This is used by extract
+    // sessions, which prepare a cache themselves and pass cache: false to
+    // prevent a second driver-side prepare call.
+    if (mergedOptions.cacheHandle) {
+      if (mergedOptions.cacheHandle.ref) {
+        return {
+          request: this.buildCachedPromptPayload(prompt, partition, mergedOptions.cacheHandle),
+          cacheHandle: mergedOptions.cacheHandle,
+        };
+      }
+    } else if (this.cacheController && mergedOptions.cache !== false && hasCacheableContent) {
+      const handle = await this.cacheController.prepare({
+        model,
+        instructions: partition.cacheable.instructions,
+        data: partition.cacheable.data,
+        tools: mergedOptions.tools,
+        readOnly: mergedOptions.cache === 'read-only',
+      });
+
+      return {
+        request: this.buildCachedPromptPayload(prompt, partition, handle),
+        cacheHandle: handle,
+      };
+    }
+
+    return {
+      request: this.compiledPromptToVertexAI(prompt),
+      cacheHandle: null,
+    };
+  }
+
+  private buildCachedPromptPayload(
+    prompt: CompiledPrompt,
+    partition: ReturnType<typeof partitionPrompt>,
+    handle: CacheHandle,
+  ): GenerateContentRequest {
+    const instructionsForRequest = handle.includes.instructions
+      ? partition.volatile.instructions
+      : [...partition.cacheable.instructions, ...partition.volatile.instructions];
+    const dataForRequest = handle.includes.dataElementCount >= partition.cacheable.data.length
+      ? partition.volatile.data
+      : [...partition.cacheable.data, ...partition.volatile.data];
+
+    const request = this.compiledPromptToVertexAI(prompt, {
+      instructions: instructionsForRequest,
+      data: dataForRequest,
+      output: partition.volatile.output,
+    });
+
+    if (handle.ref) {
+      request.cachedContent = handle.ref;
+    }
+
+    return request;
+  }
+
+  private applyQueryOptions(
+    request: GenerateContentRequest,
+    mergedOptions: VertexAIQueryOptions,
+    cacheHandle: CacheHandle | null,
+  ): void {
+    if (
+      mergedOptions.tools &&
+      mergedOptions.tools.length > 0 &&
+      (!cacheHandle?.ref || !cacheHandle.includes.tools)
+    ) {
+      request.tools = this.convertTools(mergedOptions.tools);
+    }
+    if (mergedOptions.toolChoice) {
+      request.toolConfig = this.convertToolChoice(mergedOptions.toolChoice);
+    }
   }
 
   /**
@@ -542,8 +642,7 @@ export class VertexAIDriver implements AIDriver {
 
     this.queryLogger.mark(mergedOptions);
     try {
-      // Convert prompt to VertexAI format
-      const request = this.compiledPromptToVertexAI(prompt);
+      const { request, cacheHandle } = await this.buildPromptPayload(prompt, mergedOptions, model);
 
       // Create generation config
       const generationConfig: GenerationConfig = {
@@ -562,13 +661,8 @@ export class VertexAIDriver implements AIDriver {
         }
       });
       
-      // Add tools configuration
-      if (mergedOptions.tools && mergedOptions.tools.length > 0) {
-        request.tools = this.convertTools(mergedOptions.tools);
-      }
-      if (mergedOptions.toolChoice) {
-        request.toolConfig = this.convertToolChoice(mergedOptions.toolChoice);
-      }
+      this.applyQueryOptions(request, mergedOptions, cacheHandle);
+      this.cacheController?.recordQuery?.();
 
       // Create client and generate
       const client = this.createClient(model, generationConfig);
@@ -612,15 +706,19 @@ export class VertexAIDriver implements AIDriver {
         }
       }
 
+      const usageMetadata = response.usageMetadata;
       return {
         content,
         finishReason,
         structuredOutput,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        usage: response.usageMetadata ? {
-          promptTokens: response.usageMetadata.promptTokenCount || 0,
-          completionTokens: response.usageMetadata.candidatesTokenCount || 0,
-          totalTokens: response.usageMetadata.totalTokenCount || 0
+        usage: usageMetadata ? {
+          promptTokens: usageMetadata.promptTokenCount || 0,
+          completionTokens: usageMetadata.candidatesTokenCount || 0,
+          totalTokens: usageMetadata.totalTokenCount || 0,
+          ...(usageMetadata.cachedContentTokenCount !== undefined
+            ? { cacheReadTokens: usageMetadata.cachedContentTokenCount }
+            : {}),
         } : undefined,
         ...this.queryLogger.collect()
       };
@@ -652,8 +750,7 @@ export class VertexAIDriver implements AIDriver {
 
     this.queryLogger.mark(mergedOptions);
 
-    // Convert prompt to VertexAI format
-    const request = this.compiledPromptToVertexAI(prompt);
+    const { request, cacheHandle } = await this.buildPromptPayload(prompt, mergedOptions, model);
 
     // Create generation config
     const generationConfig: GenerationConfig = {
@@ -670,13 +767,8 @@ export class VertexAIDriver implements AIDriver {
       }
     });
 
-    // Add tools configuration
-    if (mergedOptions.tools && mergedOptions.tools.length > 0) {
-      request.tools = this.convertTools(mergedOptions.tools);
-    }
-    if (mergedOptions.toolChoice) {
-      request.toolConfig = this.convertToolChoice(mergedOptions.toolChoice);
-    }
+    this.applyQueryOptions(request, mergedOptions, cacheHandle);
+    this.cacheController?.recordQuery?.();
 
     // Create client and generate stream
     const client = this.createClient(model, generationConfig);
@@ -731,15 +823,19 @@ export class VertexAIDriver implements AIDriver {
         }
       }
 
+      const usageMetadata = response.usageMetadata;
       return {
         content,
         finishReason,
         structuredOutput,
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        usage: response.usageMetadata ? {
-          promptTokens: response.usageMetadata.promptTokenCount || 0,
-          completionTokens: response.usageMetadata.candidatesTokenCount || 0,
-          totalTokens: response.usageMetadata.totalTokenCount || 0
+        usage: usageMetadata ? {
+          promptTokens: usageMetadata.promptTokenCount || 0,
+          completionTokens: usageMetadata.candidatesTokenCount || 0,
+          totalTokens: usageMetadata.totalTokenCount || 0,
+          ...(usageMetadata.cachedContentTokenCount !== undefined
+            ? { cacheReadTokens: usageMetadata.cachedContentTokenCount }
+            : {}),
         } : undefined,
         ...this.queryLogger.collect()
       };
@@ -760,5 +856,6 @@ export class VertexAIDriver implements AIDriver {
       this.openaiDriver = undefined;
       this.lastToken = undefined;
     }
+    await this.cacheController?.close();
   }
 }
