@@ -184,6 +184,35 @@ const driver = new VertexAIDriver({
 
 Google Cloud認証（ADCまたはサービスアカウント）が必要。
 
+#### 明示 Context Caching
+
+Vertex の明示キャッシュを使う場合は、`@google/genai` を Vertex モードで初期化し、
+`GoogleGenAICacheController` と `VertexAIDriver` に同じ controller を注入します。
+`createExtractSession` の `cacheController` にも同じインスタンスを渡してください。
+
+```typescript
+import { GoogleGenAI } from '@google/genai';
+import {
+  GoogleGenAICacheController,
+  VertexAIDriver,
+} from '@modular-prompt/driver';
+
+const project = 'my-gcp-project';
+const location = 'us-central1';
+const cacheClient = new GoogleGenAI({ vertexai: true, project, location });
+const cacheController = new GoogleGenAICacheController(cacheClient);
+const driver = new VertexAIDriver({
+  project,
+  location,
+  model: 'gemini-2.5-flash',
+  cacheController,
+});
+```
+
+`cacheHandle` が指定されたクエリではその handle が優先され、extract Session が指定する
+`cache: false` と組み合わせた場合もドライバー側で重複 prepare は行いません。`driver.close()`
+で controller の managed cache を cleanup します。
+
 #### サポートモデル
 
 - **Googleモデル（Gemini）**: 標準の `generateContent` API経由

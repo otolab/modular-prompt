@@ -71,6 +71,11 @@ if (result.logEntries) {
 
 各ドライバーの詳細な設定・オプションは `skills/driver-usage/SKILL.md` を参照。
 
+`VertexAIDriver` の明示 Context Caching は、`@google/genai` を Vertex モードで初期化した
+`GoogleGenAICacheController` を `cacheController` として手動注入します。config-based factory で
+自動生成せず、extract Session と同じ controller を共有してください。最小配線例は
+[キャッシュ設計の Vertex AI 節](../docs/CACHE_DESIGN.md#vertex-ai-の明示キャッシュ)を参照してください。
+
 ### PyTorchProcess の KV キャッシュ
 
 `PyTorchProcess` の低レベル API では、Transformers の text-only LM に対して、KV キャッシュを prefill して suffix を生成できます。`memory://` ref は同一 Python プロセス内だけで有効です。`cpu-minimal` backend で通常のファイルパスを指定すると、PyTorch backend 固有の `pytorch_kv_v1` 形式で KV と `.meta.json` を永続化できます。CUDA backend は process-local cache のみを使用し、cache ファイルを作成しません。
