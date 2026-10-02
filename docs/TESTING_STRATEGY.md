@@ -68,6 +68,12 @@ cp packages/driver/test/integration/models.testing.yaml.example \
 
 `models.testing.yaml` の `models.default` または `mlx-native-tool` / `mlx-fallback-tool` などの convention alias は、driver 統合テストの設定へ変換されます。cache 統合テストを実行する `models.default` には cache 対応の text-only LM を指定し、`qwen3` や `lfm2` のように自動判定が VLM 扱いするモデルでは `driverOptions.backend: lm` を明示してください。MLX VLM は `driverOptions.backend: vlm`（または `auto`）で text-only exact cache と画像付き vision cache を別 namespace にディスク永続化できます。VLM incremental prefill と LM cache との相互利用は対象外です。testing ファイルが無い場合は `packages/driver/test/integration/test-drivers.yaml` を後方互換のために使用します。どちらも無い CI 環境では従来どおり skip されます。
 
+#### VertexAIDriver の統合テスト
+
+Vertex の Gemini 統合テストは、`@google-cloud/vertexai` 1.12.0 を使う `VertexAIDriver` の query / streamQuery を検証します。設定例では、Google の現行モデル例に合わせて `gemini-2.5-flash` と `us-central1` を使用します（利用するプロジェクトでモデルとロケーションが有効であること、ADC などの認証情報が必要です）。設定が無い環境ではテストを skip します。
+
+今回の #295 では `VertexAIDriver` と `@google-cloud/vertexai` を更新・維持し、`GoogleGenAIDriver` が使う `@google/genai` との統合や二重メンテナンス解消は行いません。Google Gen AI SDK への移行は将来の検討事項として扱います。
+
 ### 3. E2Eテスト (End-to-End Tests)
 
 **定義**: ユーザー視点でシステム全体の動作を検証

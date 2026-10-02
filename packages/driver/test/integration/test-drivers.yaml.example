@@ -31,7 +31,7 @@ anthropic:
 # vertexai:
 #   project: your-gcp-project
 #   location: us-central1
-#   model: gemini-2.0-flash
+#   model: gemini-2.5-flash
 
 # mlx:
 #   nativeModel: mlx-community/Josiefied-LFM2.5-1.2B-Instruct-abliterated-4bit
