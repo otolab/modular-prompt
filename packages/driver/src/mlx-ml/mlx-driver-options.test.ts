@@ -9,8 +9,11 @@ describe('MlxMlModelOptions Type Definition', () => {
       temperature: 0.7,
       topP: 0.9,
       topK: 50,
+      minP: 0.05,
       repetitionPenalty: 1.1,
-      repetitionContextSize: 30
+      repetitionContextSize: 30,
+      presencePenalty: 1.5,
+      presenceContextSize: 40
     };
 
     // Verify all properties are defined
@@ -18,8 +21,11 @@ describe('MlxMlModelOptions Type Definition', () => {
     expect(validOptions.temperature).toBe(0.7);
     expect(validOptions.topP).toBe(0.9);
     expect(validOptions.topK).toBe(50);
+    expect(validOptions.minP).toBe(0.05);
     expect(validOptions.repetitionPenalty).toBe(1.1);
     expect(validOptions.repetitionContextSize).toBe(30);
+    expect(validOptions.presencePenalty).toBe(1.5);
+    expect(validOptions.presenceContextSize).toBe(40);
   });
 
   it('should allow undefined values for all options', () => {
@@ -29,8 +35,11 @@ describe('MlxMlModelOptions Type Definition', () => {
     expect(emptyOptions.temperature).toBeUndefined();
     expect(emptyOptions.topP).toBeUndefined();
     expect(emptyOptions.topK).toBeUndefined();
+    expect(emptyOptions.minP).toBeUndefined();
     expect(emptyOptions.repetitionPenalty).toBeUndefined();
     expect(emptyOptions.repetitionContextSize).toBeUndefined();
+    expect(emptyOptions.presencePenalty).toBeUndefined();
+    expect(emptyOptions.presenceContextSize).toBeUndefined();
   });
 
   it('should allow partial options', () => {

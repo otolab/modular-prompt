@@ -42,8 +42,11 @@ const SUPPORTED_PARAMS = new Set([
   'temperature',      // -> temp (特殊ケース)
   'topP',            // -> top_p
   'topK',            // -> top_k
+  'minP',             // -> min_p
   'repetitionPenalty',     // -> repetition_penalty
   'repetitionContextSize', // -> repetition_context_size
+  'presencePenalty',       // -> presence_penalty
+  'presenceContextSize',   // -> presence_context_size
 ]);
 
 /**

@@ -51,6 +51,8 @@ interface QueryOptions {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  topK?: number;
+  mode?: 'default' | 'thinking' | 'instruct' | 'chat';
   stream?: boolean;
   tools?: ToolDefinition[];
   toolChoice?: ToolChoice;
@@ -278,9 +280,20 @@ const driver = new MlxDriver({
   defaultOptions: {
     temperature: 0.7,
     maxTokens: 500,
-    repetitionPenalty: 1.1,     // MLX固有
+    topP: 0.8,
+    topK: 20,
+    minP: 0.0,                   // MLX固有
+    presencePenalty: 1.5,       // MLX固有
+    presenceContextSize: 20,    // MLX固有
+    repetitionPenalty: 1.0,     // MLX固有
     repetitionContextSize: 20   // MLX固有
   }
+});
+
+// MlxDriver では per-query にも MLX 固有フィールドを指定できる
+const result = await driver.query(compiled, {
+  minP: 0.05,
+  presencePenalty: 1.5,
 });
 
 // 使用後は必ずclose()（Pythonサブプロセス終了）

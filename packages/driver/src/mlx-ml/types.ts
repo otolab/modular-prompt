@@ -25,8 +25,11 @@ export interface MlxMlModelOptions {
   temperature?: number;
   topP?: number;
   topK?: number;
+  minP?: number;
   repetitionPenalty?: number;
   repetitionContextSize?: number;
+  presencePenalty?: number;
+  presenceContextSize?: number;
   trustRemoteCode?: boolean;
 }
 

@@ -9,8 +9,11 @@ describe('MLX Parameter Validator', () => {
         temperature: 0.7,
         topP: 0.9,
         topK: 50,
+        minP: 0.05,
         repetitionPenalty: 1.1,
-        repetitionContextSize: 30
+        repetitionContextSize: 30,
+        presencePenalty: 1.5,
+        presenceContextSize: 40
       };
 
       const result = validateOptions(options);
@@ -61,6 +64,17 @@ describe('MLX Parameter Validator', () => {
       expect(result.validatedOptions?.maxTokens).toBe(100000);
       expect(result.validatedOptions?.temperature).toBe(0.0);
       expect(result.validatedOptions?.topP).toBe(1.0);
+    });
+
+    it('clamps minP and presencePenalty to their supported ranges', () => {
+      const result = validateOptions({
+        minP: 2.0,
+        presencePenalty: -3.0,
+      });
+
+      expect(result.valid).toBe(true);
+      expect(result.validatedOptions?.minP).toBe(1.0);
+      expect(result.validatedOptions?.presencePenalty).toBe(-2.0);
     });
 
     it('should convert string numbers to numbers with warning', () => {
@@ -163,8 +177,11 @@ describe('MLX Parameter Validator', () => {
       expect(help).toContain('temperature');
       expect(help).toContain('topP');
       expect(help).toContain('topK');
+      expect(help).toContain('minP');
       expect(help).toContain('repetitionPenalty');
       expect(help).toContain('repetitionContextSize');
+      expect(help).toContain('presencePenalty');
+      expect(help).toContain('presenceContextSize');
 
       // Should NOT contain snake_case versions
       expect(help).not.toContain('max_tokens');

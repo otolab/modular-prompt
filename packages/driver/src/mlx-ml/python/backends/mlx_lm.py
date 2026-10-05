@@ -13,7 +13,7 @@ from mlx_lm.models.cache import (
     load_prompt_cache as mlx_load_prompt_cache,
     trim_prompt_cache,
 )
-from mlx_lm.sample_utils import make_sampler
+from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
 from backends.base import ModelBackend
 from backends.cache_archive import load_prompt_cache_zip, save_prompt_cache_zip
@@ -57,10 +57,29 @@ class MlxLmBackend(ModelBackend):
         temperature = final_options.pop("temperature", 1.0)
         top_p = final_options.pop("top_p", 0.0)
         top_k = final_options.pop("top_k", 0)
+        min_p = final_options.pop("min_p", 0.0)
+        repetition_penalty = final_options.pop("repetition_penalty", None)
+        repetition_context_size = final_options.pop("repetition_context_size", None)
+        presence_penalty = final_options.pop("presence_penalty", None)
+        presence_context_size = final_options.pop("presence_context_size", None)
+
+        logits_processor_options = {
+            "repetition_penalty": repetition_penalty,
+            "presence_penalty": presence_penalty,
+        }
+        if repetition_context_size is not None:
+            logits_processor_options["repetition_context_size"] = repetition_context_size
+        if presence_context_size is not None:
+            logits_processor_options["presence_context_size"] = presence_context_size
+
         final_options["sampler"] = make_sampler(
             temp=temperature,
             top_p=top_p,
+            min_p=min_p,
             top_k=top_k,
+        )
+        final_options["logits_processors"] = make_logits_processors(
+            **logits_processor_options,
         )
 
         if prompt_cache is not None:

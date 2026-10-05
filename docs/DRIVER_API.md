@@ -185,12 +185,46 @@ interface QueryOptions {
   temperature?: number;         // 生成のランダム性 (0-2)
   maxTokens?: number;           // 最大トークン数
   topP?: number;                // トップPサンプリング
+  topK?: number;                // トップKサンプリング（対応ドライバーのみ）
+  mode?: 'default' | 'thinking' | 'instruct' | 'chat'; // API / テンプレート選択
   stream?: boolean;             // ストリーミング有効化
   reasoningEffort?: 'low' | 'medium' | 'high';  // 推論深度（thinking系モデル用）
   signal?: AbortSignal;         // 推論キャンセル（未対応ドライバーは無視）
   cache?: boolean | 'read-only'; // プロンプトキャッシュ（ドライバー依存）
 }
 ```
+
+MLX 固有のサンプリングは `MlxQueryOptions`（`MlxDriver` の具象 API と
+`defaultOptions`）で指定します。共通 `QueryOptions` には含めず、他ドライバーへ
+誤って送信されないようにしています。
+
+```typescript
+import { MlxDriver, type MlxQueryOptions } from '@modular-prompt/driver';
+
+const driver = new MlxDriver({
+  model: 'mlx-community/Llama-3.2-3B-Instruct-4bit',
+  defaultOptions: {
+    temperature: 0.7,
+    topP: 0.8,
+    topK: 20,
+    minP: 0.0,
+    presencePenalty: 1.5,
+    presenceContextSize: 20,
+    repetitionPenalty: 1.0,
+    repetitionContextSize: 20,
+  },
+});
+
+const perQuery: MlxQueryOptions = { presencePenalty: 1.5, minP: 0.05 };
+const result = await driver.query(prompt, perQuery);
+```
+
+MLX で利用できるフィールドは `temperature`, `topP`, `topK`, `minP`,
+`repetitionPenalty`, `repetitionContextSize`, `presencePenalty`,
+`presenceContextSize` です。`defaultOptions` と per-query の値はマージされ、
+Python の `mlx_lm` / `mlx_vlm` backend で sampler と logits processor に渡されます。
+`mode` は API 選択やテンプレート処理に使われますが、サンプリング値を自動切替しません。
+MLX 固有フィールドを指定しても、非 MLX ドライバーでは利用されません。
 
 **signal**: 進行中の推論をキャンセルするための `AbortSignal` です。
 - 呼び出し時点で `aborted` の場合、推論を開始せず `finishReason: 'error'` で `result` を resolve します

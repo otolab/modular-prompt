@@ -108,4 +108,29 @@ describe('MlxDriver defaultOptions.mode', () => {
     expect(mockProcess.generate).toHaveBeenCalled();
     expect(mockProcess.generate.mock.calls[0]?.[0]).toContain('<!-- begin of');
   });
+
+  it('merges MLX-specific sampling options for a per-query override', async () => {
+    const driver = new MlxDriver({
+      model: 'test-model',
+      defaultOptions: {
+        minP: 0.01,
+        repetitionPenalty: 1.1,
+        repetitionContextSize: 30,
+      },
+    });
+
+    await driver.query(prompt, {
+      minP: 0.05,
+      presencePenalty: 1.5,
+      presenceContextSize: 40,
+    });
+
+    expect(mockProcess.generate.mock.calls[0]?.[1]).toMatchObject({
+      minP: 0.05,
+      repetitionPenalty: 1.1,
+      repetitionContextSize: 30,
+      presencePenalty: 1.5,
+      presenceContextSize: 40,
+    });
+  });
 });
