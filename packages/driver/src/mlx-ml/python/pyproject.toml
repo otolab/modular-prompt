@@ -8,7 +8,7 @@ dependencies = [
     "hf-xet==1.2.0",
     "jinja2==3.1.6",
     "mlx>=0.32.2; sys_platform == 'darwin'",
-    "mlx-lm==0.31.3; sys_platform == 'darwin'",
+    "mlx-lm==0.32.0; sys_platform == 'darwin'",
     "mlx-optiq>=0.4.4; sys_platform == 'darwin'",
     "mlx-vlm==0.7.4; sys_platform == 'darwin'",
     "tokenizers==0.22.2",

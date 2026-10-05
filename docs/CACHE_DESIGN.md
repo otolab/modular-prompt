@@ -244,6 +244,24 @@ Apple Siliconに最適化されたMLXモデル用のKVキャッシュ管理。
 - VLM は text-only の `exact_cache_v1` と画像付きの `vision_cache_v1` を専用 namespace へ保存
 - VLM の画像 feature tensor は process-local、incremental prefill と LM cache との相互利用は対象外
 
+#### mlx-lm 0.31.3 → 0.32.0 の cache 互換性
+
+`mlx-lm` 0.32.0 では upstream の `save_prompt_cache` / `load_prompt_cache` が
+safetensors 内の metadata と cache state のシリアライズ形式を変更しました。0.31.3 は
+`[cache_info, metadata, classes]` を保存して各 cache の `meta_state` を復元しますが、
+0.32.0 は `[metadata, classes, scalars]` を保存し、scalar・string・`None` を配列として
+復元します。このため 0.31.3 で作成した LM の `.safetensors.zip`（zip 内の
+`prompt_cache.safetensors`）は 0.32.0 の loader と後方互換ではありません。
+
+`.meta.json` は modular-prompt が token 数や prefix 情報を管理する sidecar であり、
+upstream safetensors metadata の変換には使えません。0.31.3 以前の LM cache は
+0.32.0 への更新後、load 失敗時にそのリクエストだけ cold generation へ戻ります。
+この fallback では古い archive と `.meta.json` は残り、自動的な invalidate や
+`cache_prefill` による再生成は行いません。同じ cache key で再生成する場合は、利用者が
+該当する archive と sidecar（または cache ディレクトリ）を削除してから明示的に
+prefill を実行するか、新しい cache key を使用してください。手動変換はサポートしません。
+VLM の snapshot 形式にはこの判断を適用しません。
+
 **キャッシュディレクトリモード**:
 
 | モード | `managedDir` | `cacheDir` | 説明 |
