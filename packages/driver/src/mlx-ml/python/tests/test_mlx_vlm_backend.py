@@ -332,6 +332,10 @@ def test_image_cache_prefill_persists_extra_hash_and_rejects_another_image(monke
     assert meta["image_count"] == 1
     assert meta["image_refs"] == ["image-a.png"]
     assert meta["max_image_size"] == 512
+    assert (
+        meta["vision_feature_cache_version"]
+        == vlm_module.VLM_VISION_FEATURE_CACHE_VERSION
+    )
     assert calls[0][1]["image"] == [image_a]
     assert isinstance(
         calls[0][1]["vision_cache"],
@@ -342,6 +346,13 @@ def test_image_cache_prefill_persists_extra_hash_and_rejects_another_image(monke
     assert backend.load_cache_from_file(
         str(actual_path), images=["image-a.png"], max_image_size=512
     ) is not None
+    meta["vision_feature_cache_version"] = "mlx-vlm-0.7.0"
+    Path(str(actual_path) + ".meta.json").write_text(json.dumps(meta))
+    assert backend.load_cache_from_file(
+        str(actual_path), images=["image-a.png"], max_image_size=512
+    ) is None
+    meta["vision_feature_cache_version"] = vlm_module.VLM_VISION_FEATURE_CACHE_VERSION
+    Path(str(actual_path) + ".meta.json").write_text(json.dumps(meta))
     monkeypatch.setattr(
         vlm_module,
         "mlx_vlm_prepare_inputs",

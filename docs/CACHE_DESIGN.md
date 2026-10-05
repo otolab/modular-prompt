@@ -127,7 +127,7 @@ export interface CacheHandle {
 - GoogleGenAICacheController: API名（例: `cachedContents/xyz789`）。Vertex AI では
   `projects/{project}/locations/{location}/cachedContents/{cached_content}` のフルリソース名を保持します
 
-#### mlx-vlm 0.7.0（Phase 2–3）
+#### mlx-vlm 0.7.4（Phase 2–3）
 
 VLM の text-only ref はディスク上の `exact_cache_v1` snapshot です。作成元 Python process の終了・再起動後も、固定 `cacheDir` の `cache-index.json` に記録された実体（`cacheDir` 相対 path）からロードできます。相対 path にすることで、extract の staging directory を rename しても index を再利用できます。`mlx-vlm-memory://` は Phase 1 互換の明示 ref に限った process-local fallback であり、MlxCacheController や extract の主経路では使用しません。
 
@@ -135,7 +135,7 @@ VLM の text-only ref はディスク上の `exact_cache_v1` snapshot です。�
 - `stream_generate(..., prompt_cache=cache)` で prefill / cached suffix generation に cache を渡す
 - `apc_adapters.clone_cache_entry(entry, *, min_capacity_tokens, eval_targets)` で generation 前に cache entry を複製
 
-ディスク保存には 0.7.0 の `DiskBlockStore` を使います。論理 cache path を専用 namespace として `DiskBlockStore(root, namespace, num_workers=1)` を開き、prefill 後に次を呼びます。
+ディスク保存には 0.7.4 の `DiskBlockStore` を使います。論理 cache path を専用 namespace として `DiskBlockStore(root, namespace, num_workers=1)` を開き、prefill 後に次を呼びます。
 
 - `save_exact_cache(cache_hash, token_ids, extra_hash, prompt_cache)` — cache 全体を非同期 snapshot として保存
 - `close()` — writer queue を drain して保存完了を確定
@@ -143,28 +143,30 @@ VLM の text-only ref はディスク上の `exact_cache_v1` snapshot です。�
 
 `APCManager.store_exact_cache()` / `lookup_exact_cache()` も調査しましたが、これは APC のメモリ LRU・prefix lookup と連動する API です。Phase 2–3 は TypeScript controller が完全一致キーを管理し、VLM incremental prefill を行わないため、backend では直接 `DiskBlockStore.save_exact_cache` / `load_exact_cache` を採用しています。保存形式の metadata は `layout: exact_cache_v1`、`cache_hash`、`extra_hash`、`token_ids`、cache entry 数などです。
 
+0.7.1〜0.7.4 の upstream 差分を確認した結果、`exact_cache_v1` の full snapshot は既存のファイル命名、metadata、generic KV restore 契約を維持しています。0.7.2 の APC memory planning / prefix trim 拡張は backend が使う `load_exact_cache(cache_hash)` の full-load 経路を変更せず、0.7.4 の quantized KV packed width 修正も新規の空 cache allocation に限られます。そのため、0.7.0 で作成した VLM text-only snapshot は 0.7.4 でも load 互換です。既存の sidecar/path/token 検証に失敗した場合は従来どおり cold path へ戻ります。
+
 VLM の text-only 論理 path が `/cache/<key>.vlm.safetensors` の場合、実体は `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors`、sidecar は実体 path に `.meta.json` を付けた `/cache/<key>.vlm.safetensors/exact_<hash>.safetensors.meta.json` です。sidecar には LM と同じ `token_count`、`prefix_offsets`、`prefix_hashes` を保存し、さらに backend 固有の `layout: exact_cache_v1` / `cache_hash` を持ちます。load 時は sidecar の `cache_hash` から導出した exact snapshot path と実際の ref を照合し、mismatched sidecar、snapshot 不在、破損 snapshot は cache load failure として cold path に落とします。`.vlm.safetensors` は APC namespace directory の名前であり、実体の拡張子は `.safetensors` です。
 
 LM の `.safetensors.zip`（zip 内 `prompt_cache.safetensors`）と VLM の snapshot は別形式で、相互に読み込みません。
 
 ##### 画像あり VLM（Phase 3）
 
-画像を含む cacheable prefix は、text-only VLM とは別の `/cache/<key>.vlm-vision.safetensors/` namespace に保存します。実体の snapshot codec は mlx-vlm 0.7.0 の `DiskBlockStore.save_exact_cache()` ですが、modular-prompt の `vision_cache_v1` sidecar と namespace を含む保存契約は text-only の `exact_cache_v1` と非互換です。LM の `.safetensors.zip` とも非互換です。text-only ref を画像付き query に、画像付き ref を text-only query に渡した場合は load を拒否して cold path に戻します。
+画像を含む cacheable prefix は、text-only VLM とは別の `/cache/<key>.vlm-vision.safetensors/` namespace に保存します。実体の snapshot codec は mlx-vlm 0.7.4 の `DiskBlockStore.save_exact_cache()` ですが、modular-prompt の `vision_cache_v1` sidecar と namespace を含む保存契約は text-only の `exact_cache_v1` と非互換です。LM の `.safetensors.zip` とも非互換です。text-only ref を画像付き query に、画像付き ref を text-only query に渡した場合は load を拒否して cold path に戻します。
 
 画像付き snapshot の sidecar には次を保存します（token IDs 本体は DiskBlockStore の exact snapshot metadata に保存します）。
 
 - `layout: vision_cache_v1`、`backend: mlx-vlm`、`cache_hash`、`token_count`
 - APC exact snapshot に渡した `extra_hash` と表示用の `image_hash`
 - `image_count`、`image_refs`、`max_image_size`
-- `vision_feature_cache_version: mlx-vlm-0.7.0`
+- `vision_feature_cache_version: mlx-vlm-0.7.4`
 
-`MlxVlmBackend` は mlx-vlm 0.7.0 の `VisionFeatureCache` を process-local に保持し、`stream_generate(..., vision_cache=...)` を通じて upstream が `cached_image_features` をモデルへ渡す経路を使います。0.7.0 の upstream PIL key は `tobytes()` のみなので、backend は wrapper を挟み、mode・寸法・bytes と画像列 index を含む digest string を upstream cache に渡します。これにより同じ bytes 長でも mode / 寸法が異なる画像の feature が誤共有されません。永続化するのは prompt/KV exact snapshot と sidecar の同一性情報であり、opaque な MLX の projected feature tensor 自体は保存しません。プロセス再起動後は画像を再処理して feature cache を再構築します。
+`MlxVlmBackend` は mlx-vlm 0.7.4 の `VisionFeatureCache` を process-local に保持し、`stream_generate(..., vision_cache=...)` を通じて upstream が `cached_image_features` をモデルへ渡す経路を使います。0.7.4 の upstream PIL key も `tobytes()` のみですが、0.7.4 の shared prompt formatter は interleaved text/image の順序を保持するよう変わったため、sidecar version を `mlx-vlm-0.7.4` に更新します。これにより 0.7.0 で作成した vision sidecar は意図的に cache miss となり、cold prefill から再構築されます。backend の wrapper は引き続き mode・寸法・bytes と画像列 index を含む digest string を upstream cache に渡し、同じ bytes 長でも mode / 寸法が異なる画像の feature 誤共有を防ぎます。永続化するのは prompt/KV exact snapshot と sidecar の同一性情報であり、opaque な MLX の projected feature tensor 自体は保存しません。プロセス再起動後は画像を再処理して feature cache を再構築します。
 
 画像同一性は、`load_and_resize_images()` 後の正規化済み PIL payload（mode、幅・高さ、bytes）を hash して `extra_hash` にします。mlx-vlm dispatch 前の pixel tensor は backend から直接取得できないため、prefill と load が同じ modular-prompt 側の正規化入力を検証できる設計にしています。これにより、同一 token 列でも画像が異なる場合は別の `extra_hash` / controller key になり、resize 条件が異なる場合も cache miss になります。load 時は sidecar の layout、hash、画像数、resize 条件、feature cache version、exact snapshot の token 数と `extra_hash` を検証し、さらに保存済み token IDs が現行 prompt の prefix と一致することを確認します。失敗時は `cache_loaded: false` の cold path です。
 
 画像付き VLM は新規 prompt の fresh prefill と exact load に限定します。`base_cache_path`、`trim_to_tokens`、VLM incremental prefill / prefix reuse は本 Phase でも対象外です。
 
-依存関係では 0.7.0 が `mlx>=0.32.2`、`mlx-audio>=0.4.8`、`jinja2>=3.1.0` を要求するため、lock file は `mlx-audio==0.5.3` として解決しています。`mlx`、`mlx-lm`、`transformers` の既存 pin / override は維持しています。
+依存関係では 0.7.4 が `mlx>=0.32.2`、`mlx-audio>=0.5.2`、`jinja2>=3.1.0` を要求します。lock file の解決結果は `uv lock` 実行後の `mlx-audio` version に従います。`mlx`、`mlx-lm`、`transformers` の既存 pin / override は維持しています。
 
 **trimTokens**
 
