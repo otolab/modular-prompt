@@ -1,5 +1,24 @@
 # @modular-prompt/driver
 
+## 0.17.1
+
+### Patch Changes
+
+- 1469307: GoogleGenAI ドライバーが外部 `cacheHandle` を再利用し、`cache: false` 指定時にドライバー側の重複したキャッシュ準備をスキップするようにしました。
+- 9134250: Issue #404: MLX の `mlx-lm` を 0.31.3 から 0.32.0 に更新しました。
+
+  `mlx-lm` 0.32.0 で upstream の prompt-cache serializer が変更されたため、
+  0.31.3 以前に作成した LM KV cache（`.safetensors.zip`）は後方互換ではありません。
+  既存 cache は load 失敗時にそのリクエストだけ cold generation へ戻りますが、
+  古い archive と `.meta.json` は残り、自動 invalidate や次回 prefill による再生成は行いません。
+  同じ cache key で再生成する場合は、利用者が該当 cache（または cache ディレクトリ）を
+  削除してから明示的に prefill を実行するか、新しい cache key を使用してください。
+  `.meta.json` からの手動変換はサポートしません。
+
+- 2b5c205: mlx-vlm を 0.7.4 に更新しました。既存の text-only VLM exact cache は互換性を維持しますが、0.7.4 の interleaved image formatting 変更に伴い、0.7.0 で作成した vision cache は version mismatch として miss し、cold prefill から再構築されます。
+- 61f0ebf: VertexAIDriver が PromptCacheController と明示 Context Caching の cacheHandle / cache: false 契約、cached usage をサポートしました。
+- f02f457: Issue #295: `@google-cloud/vertexai` を 1.12.0 に更新し、現行 Gemini モデル設定と Vertex 統合テストを再有効化しました。
+
 ## 0.17.0
 
 ### Minor Changes
