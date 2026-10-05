@@ -1,5 +1,20 @@
 # @modular-prompt/extract
 
+## 1.2.0
+
+### Minor Changes
+
+- 44ac7a6: Issue #397: KV キャッシュ欠損時に store manifest から再生成して warning を出し、`add` の full rebuild fallback、`autoRebuildCache` / CLI / 環境変数による opt-out、`list` と整合したキャッシュ検査に対応しました。
+
+### Patch Changes
+
+- Updated dependencies [1469307]
+- Updated dependencies [9134250]
+- Updated dependencies [2b5c205]
+- Updated dependencies [61f0ebf]
+- Updated dependencies [f02f457]
+  - @modular-prompt/driver@0.17.1
+
 ## 1.1.0
 
 ### Minor Changes
