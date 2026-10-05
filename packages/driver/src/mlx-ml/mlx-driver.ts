@@ -1,3 +1,4 @@
+import type { CompiledPrompt } from '@modular-prompt/core';
 import type { MlxBackendMode } from '../driver-registry/types.js';
 import { LocalInferenceDriver } from '../local-inference/driver.js';
 import { hasMessageElement } from '../local-inference/prompt-utils.js';
@@ -5,6 +6,7 @@ import type { PromptCacheController } from '../cache-controller.js';
 import type { MlxModelCapabilities } from './types.js';
 import type { MlxQueryOptions } from './mlx-options.js';
 import type { FormatterOptions } from '../formatter/types.js';
+import type { QueryResult, StreamResult } from '../types.js';
 import { MlxProcess } from './process/index.js';
 import { mlxLocalInferenceAdapters } from './mlx-local-inference-adapters.js';
 import {
@@ -92,6 +94,25 @@ export class MlxDriver extends LocalInferenceDriver {
 
   set defaultOptions(value: Partial<MlxQueryOptions>) {
     super.defaultOptions = value ?? {};
+  }
+
+  /**
+   * MLX 固有サンプリングを per-query でも型付きで指定できるようにする。
+   * 実行処理は LocalInferenceDriver に委譲する。
+   */
+  override async query(
+    prompt: CompiledPrompt,
+    options?: MlxQueryOptions,
+  ): Promise<QueryResult> {
+    return super.query(prompt, options);
+  }
+
+  /** MLX 固有サンプリングをストリーミングクエリでも型付きで指定する。 */
+  override async streamQuery(
+    prompt: CompiledPrompt,
+    options?: MlxQueryOptions,
+  ): Promise<StreamResult> {
+    return super.streamQuery(prompt, options);
   }
 
   /**

@@ -296,12 +296,33 @@ interface ApplicationConfig {
     vllm?: { socketPath?: string };
   };
   defaultOptions?: {
+    mode?: 'default' | 'thinking' | 'instruct' | 'chat';
     temperature?: number;
     maxTokens?: number;
     topP?: number;
     topK?: number;
   };
 }
+```
+
+`ApplicationConfig.defaultOptions` は全ドライバー共通の既定値です。MLX 固有の
+`minP`, `presencePenalty`, `presenceContextSize`, `repetitionPenalty`,
+`repetitionContextSize` は、MLX の `MlxDriver` 設定または MLX モデルの
+`defaultOptions`（`models.yaml`）に置いてください。MLX 以外のドライバーや
+`QueryOptions.mode` はこれらのサンプリング値を解釈・自動切替しません。
+
+`models.yaml` では、MLX モデルエントリの `defaultOptions` に指定します。ルートの
+`defaultOptions` は共通フィールド用です。
+
+```yaml
+models:
+  local:
+    provider: mlx
+    model: mlx-community/example-4bit
+    defaultOptions:
+      minP: 0.0
+      presencePenalty: 0.0
+      repetitionPenalty: 1.0
 ```
 
 ### ドライバー設定の詳細

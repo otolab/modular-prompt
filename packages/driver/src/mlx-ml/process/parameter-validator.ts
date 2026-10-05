@@ -82,6 +82,13 @@ const PARAMETER_CONSTRAINTS: Record<string, ParameterConstraint> = {
     default: 40,
     description: 'Top-kサンプリングのk値'
   },
+  minP: {
+    type: 'number',
+    min: 0.0,
+    max: 1.0,
+    default: 0.0,
+    description: 'Min-pサンプリングの確率しきい値'
+  },
   repetitionPenalty: {
     type: 'number',
     min: 0.0,
@@ -95,6 +102,20 @@ const PARAMETER_CONSTRAINTS: Record<string, ParameterConstraint> = {
     max: 10000,
     default: 20,
     description: '繰り返し検出のコンテキストサイズ'
+  },
+  presencePenalty: {
+    type: 'number',
+    min: -2.0,
+    max: 2.0,
+    default: 0.0,
+    description: '出現済みトークンへの加算ペナルティ'
+  },
+  presenceContextSize: {
+    type: 'number',
+    min: 1,
+    max: 10000,
+    default: 20,
+    description: '出現ペナルティのコンテキストサイズ'
   },
   trustRemoteCode: {
     type: 'boolean',

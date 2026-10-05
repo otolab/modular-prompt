@@ -89,6 +89,10 @@ models:
   default:
     provider: mlx
     model: mlx-community/gemma-3-270m-it-4bit
+    defaultOptions:
+      minP: 0.0
+      presencePenalty: 0.0
+      repetitionPenalty: 1.0
 YAML
 ```
 
@@ -635,12 +639,19 @@ import { MlxDriver } from '@modular-prompt/driver';
 const driver = new MlxDriver({
   model: 'mlx-community/gemma-2-2b-it-4bit',
   defaultOptions: {
-    max_tokens: 500,
-    temperature: 0.7
+    maxTokens: 500,
+    temperature: 0.7,
+    topP: 0.8,
+    topK: 20,
+    minP: 0.0,
+    presencePenalty: 1.5,
+    presenceContextSize: 20,
+    repetitionPenalty: 1.0,
+    repetitionContextSize: 20,
   }
 });
 
-const result = await driver.query(prompt);
+const result = await driver.query(prompt, { presencePenalty: 1.5 });
 console.log(result.content);
 
 await driver.close();
@@ -655,8 +666,13 @@ const driver = new MlxDriver({
   model: 'mlx-community/Qwen2-VL-2B-Instruct-4bit',
   textOnly: true,  // VLMモデルをtext-onlyモードで起動
   defaultOptions: {
-    max_tokens: 500,
-    temperature: 0.7
+    maxTokens: 500,
+    temperature: 0.7,
+    minP: 0.0,
+    presencePenalty: 1.5,
+    presenceContextSize: 20,
+    repetitionPenalty: 1.0,
+    repetitionContextSize: 20,
   }
 });
 

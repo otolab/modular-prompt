@@ -70,10 +70,81 @@ def test_stream_generate_passes_text_cache_to_mlx_vlm(monkeypatch):
     assert calls["kwargs"]["image"] is None
 
 
+def test_stream_generate_builds_sampler_and_logits_processors(monkeypatch):
+    backend = _backend()
+    calls = {}
+    sampler = object()
+    logits_processors = [object()]
+
+    def fake_make_sampler(**kwargs):
+        calls["sampler"] = kwargs
+        return sampler
+
+    def fake_make_logits_processors(**kwargs):
+        calls["logits_processors"] = kwargs
+        return logits_processors
+
+    def fake_stream_generate(*args, **kwargs):
+        calls["generate"] = kwargs
+        yield SimpleNamespace(text="ok")
+
+    monkeypatch.setattr(vlm_module, "make_sampler", fake_make_sampler)
+    monkeypatch.setattr(vlm_module, "make_logits_processors", fake_make_logits_processors)
+    monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
+
+    result = list(
+        backend.stream_generate(
+            "prompt",
+            {
+                "max_tokens": 3,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 20,
+                "min_p": 0.05,
+                "repetition_penalty": 1.1,
+                "repetition_context_size": 30,
+                "presence_penalty": 1.5,
+                "presence_context_size": 40,
+            },
+        )
+    )
+
+    assert result[0].text == "ok"
+    assert calls["sampler"] == {
+        "temp": 0.7,
+        "top_p": 0.9,
+        "min_p": 0.05,
+        "top_k": 20,
+    }
+    assert calls["logits_processors"] == {
+        "repetition_penalty": 1.1,
+        "presence_penalty": 1.5,
+        "repetition_context_size": 30,
+        "presence_context_size": 40,
+    }
+    assert calls["generate"]["sampler"] is sampler
+    assert calls["generate"]["logits_processors"] is logits_processors
+    assert calls["generate"]["max_tokens"] == 3
+    for key in (
+        "temperature",
+        "top_p",
+        "top_k",
+        "min_p",
+        "repetition_penalty",
+        "repetition_context_size",
+        "presence_penalty",
+        "presence_context_size",
+    ):
+        assert key not in calls["generate"]
+
+
 def test_stream_generate_passes_prompt_and_vision_caches_with_images(monkeypatch):
     backend = _backend()
     prompt_cache = [_Cache()]
     calls = {}
+    sampling_calls = {}
+    sampler = object()
+    logits_processors = [object()]
 
     class _VisionCache:
         pass
@@ -83,6 +154,17 @@ def test_stream_generate_passes_prompt_and_vision_caches_with_images(monkeypatch
         yield SimpleNamespace(text="ok")
 
     monkeypatch.setattr(vlm_module, "mlx_vlm_stream_generate", fake_stream_generate)
+
+    def fake_make_sampler(**kwargs):
+        sampling_calls["sampler"] = kwargs
+        return sampler
+
+    def fake_make_logits_processors(**kwargs):
+        sampling_calls["logits_processors"] = kwargs
+        return logits_processors
+
+    monkeypatch.setattr(vlm_module, "make_sampler", fake_make_sampler)
+    monkeypatch.setattr(vlm_module, "make_logits_processors", fake_make_logits_processors)
     monkeypatch.setattr(vlm_module, "load_and_resize_images", lambda images, size: images)
     monkeypatch.setattr(vlm_module, "VisionFeatureCache", _VisionCache)
     monkeypatch.setattr(
@@ -95,7 +177,14 @@ def test_stream_generate_passes_prompt_and_vision_caches_with_images(monkeypatch
     list(
         backend.stream_generate(
             "prompt",
-            {"max_tokens": 2},
+            {
+                "max_tokens": 2,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 20,
+                "min_p": 0.05,
+                "presence_penalty": 1.5,
+            },
             images=["image.png"],
             prompt_cache=prompt_cache,
         )
@@ -109,6 +198,18 @@ def test_stream_generate_passes_prompt_and_vision_caches_with_images(monkeypatch
     )
     assert isinstance(vision_cache._cache, _VisionCache)
     assert calls["kwargs"]["image"] == ["image.png"]
+    assert sampling_calls["sampler"] == {
+        "temp": 0.7,
+        "top_p": 0.9,
+        "min_p": 0.05,
+        "top_k": 20,
+    }
+    assert sampling_calls["logits_processors"] == {
+        "repetition_penalty": None,
+        "presence_penalty": 1.5,
+    }
+    assert calls["kwargs"]["sampler"] is sampler
+    assert calls["kwargs"]["logits_processors"] is logits_processors
 
 
 def test_process_local_vision_cache_does_not_reuse_features_for_same_bytes_with_different_layout(

@@ -10,6 +10,7 @@ from typing import Any, Iterator
 
 from mlx_vlm import load as mlx_vlm_load
 from mlx_vlm import stream_generate as mlx_vlm_stream_generate
+from mlx_vlm.sample_utils import make_logits_processors, make_sampler
 
 try:
     from mlx_vlm.utils import prepare_inputs as mlx_vlm_prepare_inputs
@@ -454,6 +455,28 @@ class MlxVlmBackend(ModelBackend):
         max_tokens = final_options.pop("max_tokens", 1000)
         top_p = final_options.pop("top_p", 0.0)
         top_k = final_options.pop("top_k", 0)
+        min_p = final_options.pop("min_p", 0.0)
+        repetition_penalty = final_options.pop("repetition_penalty", None)
+        repetition_context_size = final_options.pop("repetition_context_size", None)
+        presence_penalty = final_options.pop("presence_penalty", None)
+        presence_context_size = final_options.pop("presence_context_size", None)
+
+        logits_processor_options = {
+            "repetition_penalty": repetition_penalty,
+            "presence_penalty": presence_penalty,
+        }
+        if repetition_context_size is not None:
+            logits_processor_options["repetition_context_size"] = repetition_context_size
+        if presence_context_size is not None:
+            logits_processor_options["presence_context_size"] = presence_context_size
+
+        sampler = make_sampler(
+            temp=temperature,
+            top_p=top_p,
+            min_p=min_p,
+            top_k=top_k,
+        )
+        logits_processors = make_logits_processors(**logits_processor_options)
 
         processed_images = None
         max_image_size = 768
@@ -493,9 +516,8 @@ class MlxVlmBackend(ModelBackend):
             prompt,
             image=processed_images,
             max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
+            sampler=sampler,
+            logits_processors=logits_processors,
             **draft_kwargs,
         ):
             token_count += 1

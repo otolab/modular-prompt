@@ -8,8 +8,11 @@ describe('MLX Parameter Mapper', () => {
         maxTokens: 500,
         topP: 0.9,
         topK: 50,
+        minP: 0.05,
         repetitionPenalty: 1.1,
-        repetitionContextSize: 30
+        repetitionContextSize: 30,
+        presencePenalty: 1.5,
+        presenceContextSize: 40,
       };
 
       const result = mapOptionsToPython(options);
@@ -18,8 +21,11 @@ describe('MLX Parameter Mapper', () => {
         max_tokens: 500,
         top_p: 0.9,
         top_k: 50,
+        min_p: 0.05,
         repetition_penalty: 1.1,
-        repetition_context_size: 30
+        repetition_context_size: 30,
+        presence_penalty: 1.5,
+        presence_context_size: 40,
       });
     });
 
@@ -122,8 +128,11 @@ describe('MLX Parameter Mapper', () => {
         temperature: 0.7,
         topP: 0.9,
         topK: 50,
+        minP: 0.05,
         repetitionPenalty: 1.1,
         repetitionContextSize: 30,
+        presencePenalty: 1.5,
+        presenceContextSize: 40,
         unsupportedParam: 'should be filtered'
       } as any;
 
@@ -134,8 +143,11 @@ describe('MLX Parameter Mapper', () => {
         temperature: 0.7,
         top_p: 0.9,
         top_k: 50,
+        min_p: 0.05,
         repetition_penalty: 1.1,
-        repetition_context_size: 30
+        repetition_context_size: 30,
+        presence_penalty: 1.5,
+        presence_context_size: 40
       });
       expect(result).not.toHaveProperty('unsupportedParam');
     });

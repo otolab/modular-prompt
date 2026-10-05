@@ -71,8 +71,11 @@ export interface InferenceSamplingOptions {
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  min_p?: number;
   repetition_penalty?: number;
   repetition_context_size?: number;
+  presence_penalty?: number;
+  presence_context_size?: number;
   trust_remote_code?: boolean;
 }
 

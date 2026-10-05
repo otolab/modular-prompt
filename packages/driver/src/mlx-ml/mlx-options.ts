@@ -4,7 +4,12 @@ import type { MlxMlModelOptions } from './types.js';
 /** MLX 固有のサンプリングパラメータ（QueryOptions に無いもの） */
 export type MlxSamplingExtras = Pick<
   MlxMlModelOptions,
-  'repetitionPenalty' | 'repetitionContextSize' | 'trustRemoteCode'
+  | 'minP'
+  | 'repetitionPenalty'
+  | 'repetitionContextSize'
+  | 'presencePenalty'
+  | 'presenceContextSize'
+  | 'trustRemoteCode'
 >;
 
 /**
@@ -18,8 +23,11 @@ const MLX_SAMPLING_KEYS = [
   'temperature',
   'topP',
   'topK',
+  'minP',
   'repetitionPenalty',
   'repetitionContextSize',
+  'presencePenalty',
+  'presenceContextSize',
   'trustRemoteCode',
 ] as const satisfies readonly (keyof MlxMlModelOptions)[];
 
@@ -28,7 +36,7 @@ const MLX_SAMPLING_KEYS = [
  */
 export function mergeMlxQueryOptions(
   defaults?: Partial<MlxQueryOptions>,
-  overrides?: QueryOptions,
+  overrides?: Partial<MlxQueryOptions>,
 ): MlxQueryOptions {
   return { ...defaults, ...overrides };
 }

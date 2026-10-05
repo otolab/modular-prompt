@@ -25,7 +25,10 @@ describe('toMlxSamplingOptions', () => {
         mode: 'instruct',
         maxTokens: 128,
         temperature: 0.2,
+        minP: 0.05,
         repetitionPenalty: 1.1,
+        presencePenalty: 1.5,
+        presenceContextSize: 40,
         tools: [{ name: 'fn' }],
         signal: undefined,
         cache: true,
@@ -37,7 +40,10 @@ describe('toMlxSamplingOptions', () => {
     expect(toMlxSamplingOptions(merged)).toEqual({
       maxTokens: 128,
       temperature: 0.2,
+      minP: 0.05,
       repetitionPenalty: 1.1,
+      presencePenalty: 1.5,
+      presenceContextSize: 40,
     });
     expect(toMlxSamplingOptions(merged)).not.toHaveProperty('mode');
   });
