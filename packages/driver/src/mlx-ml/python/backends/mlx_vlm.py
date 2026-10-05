@@ -29,7 +29,7 @@ from utils.vlm_utils import load_and_resize_images
 
 VLM_EXACT_CACHE_LAYOUT = "exact_cache_v1"
 VLM_IMAGE_CACHE_LAYOUT = "vision_cache_v1"
-VLM_VISION_FEATURE_CACHE_VERSION = "mlx-vlm-0.7.0"
+VLM_VISION_FEATURE_CACHE_VERSION = "mlx-vlm-0.7.4"
 
 
 def _vlm_cache_hash(cache_path: str) -> int:
@@ -45,7 +45,7 @@ def _vlm_cache_hash(cache_path: str) -> int:
 
 
 def _new_vlm_disk_store(cache_path: str, *, logical_path: bool) -> Any:
-    """Open the mlx-vlm 0.7.0 DiskBlockStore for a VLM cache.
+    """Open the mlx-vlm 0.7.4 DiskBlockStore for a VLM cache.
 
     A logical cache path is used as the store namespace.  Once the APC writer
     has produced ``exact_*.safetensors``, the returned path is inside that
@@ -65,10 +65,10 @@ def _new_vlm_disk_store(cache_path: str, *, logical_path: bool) -> Any:
 
 
 def _vlm_exact_cache_path(store: Any, cache_hash: int) -> Path:
-    """Return the exact snapshot path used by DiskBlockStore 0.7.0.
+    """Return the exact snapshot path used by DiskBlockStore 0.7.4.
 
     ``_exact_id_for`` is intentionally private in mlx-vlm.  Its layout is
-    stable in the pinned 0.7.0 API: SHA-256 of the unsigned little-endian
+    stable in the pinned 0.7.4 API: SHA-256 of the unsigned little-endian
     64-bit cache hash, truncated to 32 hex characters.
     """
     unsigned_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
@@ -77,7 +77,7 @@ def _vlm_exact_cache_path(store: Any, cache_hash: int) -> Path:
 
 
 def _vlm_exact_cache_filename(cache_hash: int) -> str:
-    """Return the pinned 0.7.0 exact snapshot filename for ``cache_hash``."""
+    """Return the pinned 0.7.4 exact snapshot filename for ``cache_hash``."""
     unsigned_hash = int(cache_hash & ((1 << 64) - 1)).to_bytes(8, "little")
     exact_id = hashlib.sha256(unsigned_hash).hexdigest()[:32]
     return f"exact_{exact_id}.safetensors"
@@ -170,7 +170,7 @@ def _image_extra_hash(images: list[Any]) -> int:
 class _CollisionResistantVisionFeatureCache:
     """Wrap mlx-vlm's process-local cache with a complete image identity.
 
-    mlx-vlm 0.7.0 hashes only ``PIL.Image.tobytes()`` for PIL inputs.  That
+    mlx-vlm 0.7.4 hashes only ``PIL.Image.tobytes()`` for PIL inputs.  That
     allows images with the same byte payload but different mode or dimensions
     to share an entry.  The dispatch API only requires ``get``/``put`` (plus
     the usual cache housekeeping methods), so pass a digest string to the
@@ -323,7 +323,7 @@ class MlxVlmBackend(ModelBackend):
         """Match mlx-vlm's image-aware input preparation for cache offsets.
 
         Dynamic-resolution processors expand one image marker into a model-
-        dependent number of image tokens.  Calling the same 0.7.0
+        dependent number of image tokens.  Calling the same 0.7.4
         ``prepare_inputs`` helper as ``stream_generate`` keeps the persisted
         token count and the generation suffix boundary aligned.
         """
@@ -416,7 +416,7 @@ class MlxVlmBackend(ModelBackend):
         """Detach a cache before generation mutates it.
 
         mlx-vlm's APC adapters provide a model-cache-aware clone for the cache
-        classes shipped in 0.7.0.  The deepcopy fallback keeps this backend
+        classes shipped in 0.7.4.  The deepcopy fallback keeps this backend
         usable with compatible custom cache objects.
         """
         try:
@@ -473,7 +473,7 @@ class MlxVlmBackend(ModelBackend):
         if processed_images is not None:
             vision_cache = self._get_vision_cache(max_image_size)
             if vision_cache is not None:
-                # mlx-vlm 0.7.0 resolves this cache before model dispatch and
+                # mlx-vlm 0.7.4 resolves this cache before model dispatch and
                 # supplies cached_image_features to supported VLM models.
                 draft_kwargs["vision_cache"] = vision_cache
         if isinstance(prompt, list):
@@ -529,7 +529,7 @@ class MlxVlmBackend(ModelBackend):
     ) -> dict:
         """Prefill a VLM cache in the current backend process.
 
-        mlx-vlm owns a cache module separate from mlx-lm.  Its 0.7.0
+        mlx-vlm owns a cache module separate from mlx-lm.  Its 0.7.4
         ``DiskBlockStore.save_exact_cache`` API stores the whole prompt cache
         as an ``exact_cache_v1`` snapshot.  Image-bearing snapshots use a
         separate ``vision_cache_v1`` sidecar and namespace, and carry the
